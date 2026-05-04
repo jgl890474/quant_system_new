@@ -1,7 +1,18 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
-import random
-import time
+import sys
+import os
+
+# 添加路径
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# 尝试导入数据模块
+try:
+    from 数据.market_data import get_1min_kline, get_historical_klines
+    data_ok = True
+except Exception as e:
+    data_ok = False
+    st.error(f"数据模块加载失败: {e}")
 
 st.set_page_config(page_title="量化交易系统", layout="wide")
 
@@ -17,14 +28,23 @@ st.markdown("""
 st.title("📊 量化交易系统 v5.0")
 st.caption("多类目 · 多策略 · AI自动交易")
 
+# 获取真实价格
+if data_ok:
+    try:
+        kline = get_1min_kline("EURUSD")
+        price = kline.get('close', 1.085) if kline else 1.085
+    except:
+        price = 1.085
+else:
+    price = 1.085
+
 col1, col2, col3 = st.columns(3)
-price = random.uniform(1.08, 1.12)
 col1.metric("💰 总资产", "$100,000")
 col2.metric("💹 最新价格", f"{price:.5f}")
-col3.metric("🕒 更新时间", time.strftime("%Y-%m-%d %H:%M:%S"))
+col3.metric("🕒 更新时间", __import__('time').strftime("%Y-%m-%d %H:%M:%S"))
 
 st.subheader("📈 策略运行状态")
-st.success("✅ 系统已就绪，等待调度")
+st.success(f"✅ 系统已就绪 | 当前价格: {price}")
 
 tab1, tab2 = st.tabs(["📋 策略列表", "⚙️ 配置"])
 with tab1:
