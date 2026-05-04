@@ -5,7 +5,6 @@ import os
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 
 def ai_decision(signals, current_price, symbol="EURUSD"):
-    """调用 DeepSeek API 做出最终交易决策"""
     if not DEEPSEEK_API_KEY:
         return "hold"
     

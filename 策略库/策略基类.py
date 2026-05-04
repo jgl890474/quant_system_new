@@ -1,13 +1,38 @@
-"""
-策略基类
-"""
-from abc import ABC, abstractmethod
-
-class 策略基类(ABC):
-    def __init__(self, 参数=None):
-        self.参数 = 参数 or {}
-        self.名称 = self.__class__.__name__
+# -*- coding: utf-8 -*-
+class BaseStrategy:
+    """所有策略的基类"""
     
-    @abstractmethod
-    async def 决策(self, 行情数据, 历史数据, 引擎):
-        pass
+    def __init__(self, name, symbol, initial_capital):
+        self.name = name
+        self.symbol = symbol
+        self.initial_capital = initial_capital
+        self.capital = initial_capital
+        self.position = 0
+        self.trades = []
+        
+    def on_data(self, kline):
+        """
+        接收K线数据，返回信号
+        kline: {'close': float, 'high': float, 'low': float, 'open': float}
+        return: 'buy' / 'sell' / 'hold'
+        """
+        return 'hold'
+    
+    def execute_signal(self, signal, price):
+        if signal == 'buy' and self.capital >= price:
+            self.position += 1
+            self.capital -= price
+            self.trades.append(('BUY', price))
+        elif signal == 'sell' and self.position > 0:
+            self.position -= 1
+            self.capital += price
+            self.trades.append(('SELL', price))
+    
+    def get_status(self):
+        return {
+            'name': self.name,
+            'symbol': self.symbol,
+            'capital': round(self.capital, 2),
+            'position': self.position,
+            'total_trades': len(self.trades)
+        }

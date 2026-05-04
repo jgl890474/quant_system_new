@@ -80,7 +80,7 @@ def get_futures_quote_yf(symbol="GC=F"):
         "source": "simulated"
     }
 
-# ================== 加密货币数据（保持原有）==================
+# ================== 加密货币数据 ==================
 def get_crypto_price(symbol="BTC-USD"):
     """
     使用 yfinance 获取加密货币价格
@@ -194,12 +194,3 @@ def get_historical_klines(symbol="BTC-USD", count=50):
             "close": price
         })
     return result
-
-# ================== 测试入口 ==================
-if __name__ == "__main__":
-    print("测试外汇 EURUSD:")
-    print(get_1min_kline("EURUSD"))
-    print("\n测试期货 GC=F:")
-    print(get_1min_kline("GC=F"))
-    print("\n测试加密货币 BTC-USD:")
-    print(get_1min_kline("BTC-USD"))
