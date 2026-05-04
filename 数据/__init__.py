@@ -1,4 +1,2 @@
-cd D:\quant_hub
-git add æ•°æ®/__init__.py
-git commit -m "æ·»åŠ æ•°æ®æ¨¡å—__init__"
-git push
+# -*- coding: utf-8 -*- 
+# Êı¾İÄ£¿é 
