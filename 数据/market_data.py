@@ -2,11 +2,7 @@
 import random
 
 def get_1min_kline(symbol="BTC-USD"):
-    """
-    获取1分钟K线数据（云函数简化版）
-    使用模拟数据，避免依赖 yfinance 等外部库
-    """
-    # 基础价格范围
+    """获取1分钟K线数据（模拟数据）"""
     price_ranges = {
         "BTC-USD": (50000, 60000),
         "ETH-USD": (3000, 3500),
@@ -16,10 +12,8 @@ def get_1min_kline(symbol="BTC-USD"):
         "GC=F": (1900, 2100),
         "CL=F": (70, 90),
     }
-    
     low, high = price_ranges.get(symbol, (90, 110))
     close = random.uniform(low, high)
-    
     return {
         "symbol": symbol,
         "close": close,
