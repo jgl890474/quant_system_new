@@ -1,56 +1,39 @@
-from 数据接入模块 import 获取数据
-from 风控模块.止损止盈 import 止损止盈
+# -*- coding: utf-8 -*-
+import requests
+import os
 
-class AI交易引擎:
-    """AI自动交易引擎"""
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
+
+def ai_decision(signals, current_price, symbol="EURUSD"):
+    """调用 DeepSeek API 做出最终交易决策"""
+    if not DEEPSEEK_API_KEY:
+        return "hold"
     
-    def __init__(self):
-        self.持仓 = {}
-        self.现金 = 100000
-        self.交易记录 = []
-        self.当前类目 = "股票"
-        self.风控 = None
+    prompt = f"""你是一个量化交易AI仲裁者。
+当前标的: {symbol}
+当前价格: {current_price}
+各策略信号:
+{signals}
+请综合判断后只输出一个词：buy 或 sell 或 hold。"""
     
-    def 注册策略(self, 策略, 策略名称):
-        self.策略名称 = 策略名称
-        if "加密" in 策略名称:
-            self.当前类目 = "加密货币"
-            self.风控 = 止损止盈(止盈=0.08, 止损=0.05)
-        else:
-            self.当前类目 = "股票"
-            self.风控 = 止损止盈(止盈=0.05, 止损=0.03)
+    url = "https://api.deepseek.com/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "deepseek-chat",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0,
+        "max_tokens": 10
+    }
     
-    def 执行一轮(self):
-        """执行一轮AI分析+交易"""
-        df = 获取数据(self.当前类目)
-        if df.empty:
-            return {"action": "hold", "reason": "无数据"}
-        
-        # 风控检查
-        for code in list(self.持仓.keys()):
-            row = df[df['代码'] == code]
-            if not row.empty:
-                平仓, 原因, 价格 = self.风控.检查平仓(self.持仓[code], row.iloc[0]['最新价'])
-                if 平仓:
-                    self._执行卖出(code, 价格, 原因)
-                    return {"action": "sell", "reason": 原因}
-        
-        # AI选股
-        df['评分'] = df['涨跌幅'] * 2 + df['量比'] * 1.5
-        best = df.sort_values('评分', ascending=False).iloc[0]
-        
-        if best['代码'] in self.持仓:
-            return {"action": "hold", "reason": "已持有"}
-        
-        self._执行买入(best['代码'], best['名称'], best['最新价'])
-        return {"action": "buy", "name": best['名称'], "reason": "AI推荐"}
-    
-    def _执行买入(self, 代码, 名称, 价格):
-        数量 = int(self.现金 * 0.8 / 价格)
-        self.持仓[代码] = {"名称": 名称, "买入价": 价格, "数量": 数量}
-        self.现金 -= 数量 * 价格
-    
-    def _执行卖出(self, 代码, 价格, 原因):
-        p = self.持仓[代码]
-        self.现金 += p['数量'] * 价格
-        del self.持仓[代码]
+    try:
+        resp = requests.post(url, headers=headers, json=payload, timeout=15)
+        if resp.status_code == 200:
+            decision = resp.json()["choices"][0]["message"]["content"].strip().lower()
+            if decision in ["buy", "sell", "hold"]:
+                return decision
+    except Exception as e:
+        print(f"DeepSeek调用失败: {e}")
+    return "hold"
