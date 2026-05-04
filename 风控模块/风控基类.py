@@ -1,13 +1,11 @@
-from abc import ABC, abstractmethod
+# -*- coding: utf-8 -*-
 
-class 风控基类(ABC):
+class RiskBase:
+    """风控基类"""
     
-    @abstractmethod
-    def 检查开仓(self, 代码, 价格, 账户) -> tuple:
-        """返回 (是否允许, 原因)"""
+    def __init__(self):
         pass
     
-    @abstractmethod
-    def 检查平仓(self, 持仓, 当前价) -> tuple:
-        """返回 (是否平仓, 原因, 价格)"""
-        pass
+    def check(self, strategy, signal, price):
+        """检查风控"""
+        return True, "通过"

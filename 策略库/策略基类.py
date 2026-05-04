@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
+
 class BaseStrategy:
-    """所有策略的基类"""
+    """策略基类"""
     
     def __init__(self, name, symbol, initial_capital):
         self.name = name
@@ -11,14 +12,11 @@ class BaseStrategy:
         self.trades = []
         
     def on_data(self, kline):
-        """
-        接收K线数据，返回信号
-        kline: {'close': float, 'high': float, 'low': float, 'open': float}
-        return: 'buy' / 'sell' / 'hold'
-        """
+        """接收K线数据，返回信号"""
         return 'hold'
     
     def execute_signal(self, signal, price):
+        """执行交易信号"""
         if signal == 'buy' and self.capital >= price:
             self.position += 1
             self.capital -= price

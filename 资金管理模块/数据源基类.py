@@ -1,15 +1,13 @@
-from abc import ABC, abstractmethod
-import pandas as pd
+# -*- coding: utf-8 -*-
+"""数据源基类"""
 
-class 数据源基类(ABC):
-    """数据源抽象基类"""
+class DataSourceBase:
+    """数据源基类"""
     
-    @abstractmethod
-    def 获取行情(self) -> pd.DataFrame:
-        """获取实时行情"""
-        pass
+    def get_price(self, symbol):
+        """获取价格"""
+        raise NotImplementedError
     
-    @abstractmethod
-    def 获取历史(self, 代码: str, 开始: str, 结束: str) -> pd.DataFrame:
-        """获取历史数据"""
-        pass
+    def get_kline(self, symbol, period):
+        """获取K线"""
+        raise NotImplementedError
