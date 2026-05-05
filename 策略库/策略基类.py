@@ -12,7 +12,7 @@ class BaseStrategy:
         self.trades = []
         
     def on_data(self, kline):
-        """接收K线数据，返回信号"""
+        """接收K线数据，返回信号: buy/sell/hold"""
         return 'hold'
     
     def execute_signal(self, signal, price):
