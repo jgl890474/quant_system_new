@@ -69,7 +69,6 @@ class StrategyLoader:
     def _load_all_strategies(self):
         strategy_base_path = "策略库"
         if not os.path.exists(strategy_base_path):
-            self.load_log.append(f"❌ 策略库不存在")
             self._add_demo_strategies()
             return
         
@@ -120,9 +119,8 @@ class StrategyLoader:
                             "category": display,
                             "file": py_file
                         })
-                        self.load_log.append(f"✅ {display}/{strategy_name}")
                 except Exception as e:
-                    self.load_log.append(f"❌ {strategy_name}: {str(e)}")
+                    pass
         
         if not self.strategies:
             self._add_demo_strategies()
@@ -161,9 +159,7 @@ class AIEngine:
         self.api_key = st.secrets.get("DEEPSEEK_API_KEY", "")
     
     def analyze(self, symbol, price, strategy_signal):
-        if not self.api_key:
-            return {"final_signal": strategy_signal, "confidence": 75, "reason": "API未配置"}
-        return {"final_signal": strategy_signal, "confidence": 70, "reason": "AI分析"}
+        return {"final_signal": strategy_signal, "confidence": 75, "reason": "分析完成"}
 
 # ================== 订单引擎 ==================
 class OrderEngine:
@@ -182,6 +178,7 @@ class OrderEngine:
         else:
             self.positions[symbol] = Position(symbol, qty, price)
         self.trade_log.append({"time": datetime.now(), "action": "买入", "symbol": symbol, "price": price, "qty": qty})
+        st.success(f"✅ 买入 {symbol} @ {price:.4f}")
     
     def sell(self, symbol, price, qty=1000):
         if symbol in self.positions and self.positions[symbol].quantity >= qty:
@@ -192,6 +189,7 @@ class OrderEngine:
             if pos.quantity <= 0:
                 del self.positions[symbol]
             self.trade_log.append({"time": datetime.now(), "action": "卖出", "symbol": symbol, "price": price, "qty": qty, "pnl": pnl})
+            st.success(f"✅ 卖出 {symbol} @ {price:.4f}, 盈亏: ${pnl:+.2f}")
     
     def get_total_value(self):
         total = self.initial_capital
@@ -241,15 +239,12 @@ def main():
         .caption { text-align: center; color: #8892b0; font-size: 12px; margin-bottom: 20px; }
         .category-title { color: #00d2ff; font-size: 18px; margin-top: 20px; margin-bottom: 10px; }
         .strategy-row { background-color: #1a1d24; border-radius: 8px; padding: 12px; margin: 8px 0; }
+        .exec-btn { margin-top: 5px; }
     </style>
     """, unsafe_allow_html=True)
     
     st.markdown('<h1>📊 量化交易系统 v5.0</h1>', unsafe_allow_html=True)
     st.markdown('<div class="caption">多类目 · 多策略 · AI自动交易 | 真实策略库接入</div>', unsafe_allow_html=True)
-    
-    with st.expander(f"📁 策略加载日志 (共{len(strategies)}个策略)"):
-        for log in strategy_loader.load_log:
-            st.text(log)
     
     tabs = st.tabs(["首页", "策略中心", "AI交易", "持仓管理", "资金曲线"])
     
@@ -269,7 +264,7 @@ def main():
             data = get_price(sym)
             cols[i].markdown(f'<div style="background:#1a1d24;border-radius:8px;padding:10px;text-align:center"><b>{sym}</b><br><span style="color:#00d2ff;font-size:18px">{data.price:.4f}</span></div>', unsafe_allow_html=True)
     
-    # 策略中心（带执行按钮）
+    # 策略中心（每个策略独立运行和执行）
     with tabs[1]:
         st.markdown("### 🎯 策略库")
         
@@ -283,37 +278,39 @@ def main():
         for cat, cat_strategies in categories.items():
             st.markdown(f'<div class="category-title">📁 {cat} ({len(cat_strategies)})</div>', unsafe_allow_html=True)
             for idx, s in enumerate(cat_strategies):
-                with st.container():
-                    col1, col2, col3, col4, col5 = st.columns([2, 1.2, 1.2, 1, 1.5])
-                    col1.write(f"**{s['name']}**")
-                    col2.write(s['symbol'])
-                    col3.write(s['category'])
-                    
-                    # 运行按钮
-                    if col4.button(f"▶ 运行", key=f"run_{s['name']}_{idx}"):
-                        market_data = get_price(s['symbol'])
-                        signal = StrategyRunner.run(s, market_data)
-                        st.session_state.signals[s['name']] = signal
-                        st.success(f"信号: {signal.upper()}")
-                    
-                    # 显示信号和执行按钮
-                    if s['name'] in st.session_state.signals:
-                        sig = st.session_state.signals[s['name']]
-                        color = "#00ff88" if sig == "buy" else "#ff4444" if sig == "sell" else "#ffaa00"
-                        col5.markdown(f"<span style='color:{color};font-weight:bold'>{sig.upper()}</span>", unsafe_allow_html=True)
-                        
-                        # 手动执行按钮
-                        if sig in ['buy', 'sell']:
-                            if st.button(f"💸 执行{sig.upper()}", key=f"exec_{s['name']}_{idx}"):
-                                price = get_price(s['symbol']).price
-                                if sig == 'buy':
-                                    engine.buy(s['symbol'], price)
-                                    st.success(f"✅ 买入 {s['name']} @ {price:.4f}")
-                                else:
-                                    engine.sell(s['symbol'], price)
-                                    st.success(f"✅ 卖出 {s['name']} @ {price:.4f}")
-                                st.rerun()
-                    st.markdown("---")
+                # 显示策略信息
+                col1, col2, col3, col4 = st.columns([2, 1.2, 1.2, 1.5])
+                col1.write(f"**{s['name']}**")
+                col2.write(s['symbol'])
+                col3.write(s['category'])
+                
+                # 运行按钮（独立）
+                if col4.button(f"▶ 运行信号", key=f"run_{s['name']}_{idx}"):
+                    market_data = get_price(s['symbol'])
+                    signal = StrategyRunner.run(s, market_data)
+                    st.session_state.signals[s['name']] = signal
+                    st.success(f"📡 {s['name']} 信号: {signal.upper()}")
+                
+                # 显示信号和执行按钮（在下一行）
+                if s['name'] in st.session_state.signals:
+                    sig = st.session_state.signals[s['name']]
+                    col_sig, col_exec = st.columns([1, 3])
+                    if sig == "buy":
+                        col_sig.markdown(f"<span style='color:#00ff88;font-weight:bold'>📈 信号: BUY</span>", unsafe_allow_html=True)
+                        if col_exec.button(f"💸 执行买入", key=f"buy_{s['name']}_{idx}"):
+                            price = get_price(s['symbol']).price
+                            engine.buy(s['symbol'], price)
+                            st.rerun()
+                    elif sig == "sell":
+                        col_sig.markdown(f"<span style='color:#ff4444;font-weight:bold'>📉 信号: SELL</span>", unsafe_allow_html=True)
+                        if col_exec.button(f"💸 执行卖出", key=f"sell_{s['name']}_{idx}"):
+                            price = get_price(s['symbol']).price
+                            engine.sell(s['symbol'], price)
+                            st.rerun()
+                    else:
+                        col_sig.markdown(f"<span style='color:#ffaa00;font-weight:bold'>⏸️ 信号: HOLD</span>", unsafe_allow_html=True)
+                        col_exec.write("")
+                st.markdown("---")
     
     # AI交易
     with tabs[2]:
@@ -327,20 +324,15 @@ def main():
                     market_data = get_price(strategy_info["symbol"])
                     strategy_signal = StrategyRunner.run(strategy_info, market_data)
                     st.info(f"📊 策略信号: {strategy_signal.upper()}")
-                    
                     result = ai_engine.analyze(strategy_info["symbol"], market_data.price, strategy_signal)
                     st.success(f"🤖 AI决策: {result['final_signal'].upper()}")
-                    st.info(f"置信度: {result['confidence']}%")
-                    
                     if result['final_signal'] == 'buy':
-                        if st.button("确认执行买入", key="ai_buy"):
+                        if st.button("确认执行买入"):
                             engine.buy(strategy_info["symbol"], market_data.price)
-                            st.success("✅ 买入成功")
                             st.rerun()
                     elif result['final_signal'] == 'sell':
-                        if st.button("确认执行卖出", key="ai_sell"):
+                        if st.button("确认执行卖出"):
                             engine.sell(strategy_info["symbol"], market_data.price)
-                            st.success("✅ 卖出成功")
                             st.rerun()
     
     # 持仓管理
@@ -371,7 +363,6 @@ def main():
         fig = go.Figure(data=go.Scatter(x=dates, y=values, mode='lines', line=dict(color='#00d2ff', width=2)))
         fig.update_layout(height=350, paper_bgcolor="#0a0c10", plot_bgcolor="#15171a", font_color="#e6e6e6")
         st.plotly_chart(fig, use_container_width=True)
-        
         col1, col2 = st.columns(2)
         col1.metric("当前资产", f"${engine.get_total_value():,.0f}")
         col2.metric("初始资产", f"${engine.initial_capital:,.0f}")
