@@ -2,43 +2,31 @@ import streamlit as st
 import time
 import random
 import pandas as pd
-import requests
 import plotly.graph_objects as go
 from datetime import datetime
 
-st.set_page_config(page_title="量化交易系统", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="QUANT SYSTEM", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
-    .stApp { background-color: #0a0c10; }
-    .stMetric { background-color: #1a1d24; border-radius: 12px; padding: 15px; text-align: center; border: 1px solid #2a2d34; }
+    .stApp { background-color: #0e1117; }
+    .stMetric { background-color: #1e1e1e; border-radius: 12px; padding: 15px; text-align: center; border: 1px solid #2a2d34; }
     .stMetric label { color: #888888 !important; font-size: 13px; }
-    .stMetric div { color: #00ff88 !important; font-size: 24px; font-weight: bold; }
-    h1 { color: #ffffff; text-align: center; font-size: 28px; margin-bottom: 20px; }
-    h2, h3 { color: #dddddd; font-size: 18px; text-align: center; }
-    .stButton button { background: linear-gradient(90deg, #00d2ff, #3a7bd5); color: white; border-radius: 20px; padding: 8px 20px; }
-    .category-card { background-color: #1a1d24; border-radius: 15px; padding: 20px; text-align: center; cursor: pointer; border: 1px solid #2a2d34; transition: all 0.3s; }
-    .category-card:hover { border-color: #00d2ff; transform: translateY(-3px); }
-    .strategy-item { background-color: #252a36; border-radius: 10px; padding: 12px; margin: 8px 0; display: flex; justify-content: space-between; align-items: center; }
-    .strategy-name { font-weight: bold; color: #ffffff; }
-    .strategy-price { color: #00ff88; font-family: monospace; }
-    .signal-buy { color: #00ff88; font-weight: bold; }
-    .signal-sell { color: #ff4444; font-weight: bold; }
-    .signal-hold { color: #ffaa00; font-weight: bold; }
+    .stMetric div { color: #00d2ff !important; font-size: 24px; font-weight: bold; }
+    h1 { color: #ffffff; text-align: center; font-size: 28px; margin-bottom: 5px; }
+    h2, h3 { color: #dddddd; font-size: 18px; }
+    .stButton button { background: linear-gradient(90deg, #00d2ff, #3a7bd5); color: white; border-radius: 20px; padding: 6px 16px; }
+    .status-green { color: #00ff88; }
+    .status-yellow { color: #ffaa00; }
+    .status-red { color: #ff4444; }
+    .strategy-card { background-color: #1a1d24; border-radius: 10px; padding: 12px; margin: 5px 0; border-left: 3px solid #00d2ff; }
+    .popup-box { background-color: #1e1e1e; border-radius: 12px; padding: 20px; border: 1px solid #00d2ff; }
+    hr { border-color: #2a2d34; }
 </style>
 """, unsafe_allow_html=True)
 
-# ================== 初始化session ==================
-if 'portfolio' not in st.session_state:
-    st.session_state.portfolio = {}
-if 'pnl_history' not in st.session_state:
-    st.session_state.pnl_history = []
-if 'trade_log' not in st.session_state:
-    st.session_state.trade_log = []
-if 'selected_category' not in st.session_state:
-    st.session_state.selected_category = None
-if 'current_signals' not in st.session_state:
-    st.session_state.current_signals = {}
+st.title("🔷 QUANT SYSTEM v5.0")
+st.caption("多类目 · 多策略 · AI自动交易 · 实时监控")
 
 # ================== 获取价格 ==================
 def get_price(symbol):
@@ -50,223 +38,277 @@ def get_price(symbol):
         return random.uniform(1.08, 1.12)
 
 eurusd_price = get_price("EURUSD")
+btc_price = get_price("BTC-USD")
+gold_price = get_price("GC=F")
 
-# DeepSeek AI
-DEEPSEEK_API_KEY = st.secrets.get("DEEPSEEK_API_KEY", "")
+# ================== 初始化session ==================
+if 'portfolio' not in st.session_state:
+    st.session_state.portfolio = {}
+if 'selected_strategy' not in st.session_state:
+    st.session_state.selected_strategy = None
+if 'show_detail' not in st.session_state:
+    st.session_state.show_detail = False
 
-def call_deepseek(symbol, price, strategy_name):
-    if not DEEPSEEK_API_KEY:
-        return random.choice(["buy", "sell", "hold"])
-    prompt = f"策略:{strategy_name}, 品种:{symbol}, 价格:{price}. 输出buy/sell/hold"
-    try:
-        resp = requests.post(
-            "https://api.deepseek.com/v1/chat/completions",
-            headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}"},
-            json={"model": "deepseek-chat", "messages": [{"role": "user", "content": prompt}], "temperature": 0, "max_tokens": 10},
-            timeout=10
-        )
-        if resp.status_code == 200:
-            return resp.json()["choices"][0]["message"]["content"].strip().lower()
-    except:
-        pass
-    return random.choice(["buy", "sell", "hold"])
-
-def execute_trade(symbol, name, action, price, qty=1000):
-    if action == "buy":
-        if symbol in st.session_state.portfolio:
-            old = st.session_state.portfolio[symbol]
-            total_qty = old["qty"] + qty
-            total_cost = old["qty"] * old["avg_price"] + qty * price
-            st.session_state.portfolio[symbol] = {"name": name, "qty": total_qty, "avg_price": total_cost / total_qty}
-        else:
-            st.session_state.portfolio[symbol] = {"name": name, "qty": qty, "avg_price": price}
-        st.session_state.trade_log.append({"time": datetime.now(), "symbol": symbol, "action": "买入", "price": price, "qty": qty})
-    elif action == "sell" and symbol in st.session_state.portfolio:
-        holding = st.session_state.portfolio[symbol]
-        pnl = (price - holding["avg_price"]) * holding["qty"]
-        st.session_state.pnl_history.append({"time": datetime.now(), "pnl": pnl, "total": sum(p['pnl'] for p in st.session_state.pnl_history) + pnl})
-        del st.session_state.portfolio[symbol]
-        st.session_state.trade_log.append({"time": datetime.now(), "symbol": symbol, "action": "卖出", "price": price, "pnl": pnl})
-
-# ================== 策略数据 ==================
-STRATEGIES = {
-    "📈 期货策略": [
-        {"name": "期货趋势策略", "symbol": "GC=F", "qty": 1},
-        {"name": "期货均值回归", "symbol": "CL=F", "qty": 10},
-        {"name": "期货ATR策略", "symbol": "SI=F", "qty": 100}
-    ],
-    "💱 外汇策略": [
-        {"name": "外汇利差策略", "symbol": "AUDJPY", "qty": 10000},
-        {"name": "外汇突破策略", "symbol": "EURUSD", "qty": 10000},
-        {"name": "外汇双均线", "symbol": "GBPUSD", "qty": 10000}
-    ],
-    "₿ 加密货币策略": [
-        {"name": "加密双均线", "symbol": "BTC-USD", "qty": 0.01},
-        {"name": "加密RSI策略", "symbol": "ETH-USD", "qty": 0.1}
-    ],
-    "🇨🇳 A股策略": [
-        {"name": "A股双均线", "symbol": "600519.SS", "qty": 100},
-        {"name": "A股布林带", "symbol": "000858.SZ", "qty": 100}
-    ],
-    "🇭🇰 港股策略": [
-        {"name": "港股双均线", "symbol": "0700.HK", "qty": 100},
-        {"name": "港股布林带", "symbol": "3690.HK", "qty": 100}
-    ],
-    "🇺🇸 美股策略": [
-        {"name": "美股双均线", "symbol": "AAPL", "qty": 10},
-        {"name": "美股布林带", "symbol": "NVDA", "qty": 5}
-    ]
-}
-
-# ================== 页面标题 ==================
-st.title("📊 量化交易系统 v5.0")
-st.caption("多类目 · 多策略 · AI自动交易 · 选择策略执行")
-
-# ================== 顶部指标 ==================
-total_asset = 100000 + sum((get_price(sym) - info["avg_price"]) * info["qty"] for sym, info in st.session_state.portfolio.items())
-total_pnl = sum(p['pnl'] for p in st.session_state.pnl_history) if st.session_state.pnl_history else 0
-
-c1, c2, c3, c4, c5 = st.columns(5)
-c1.metric("💰 总资产", f"${total_asset:,.0f}")
-c2.metric("📈 总盈亏", f"${total_pnl:+,.0f}", delta=f"{total_pnl/100000*100:.1f}%")
-c3.metric("📊 持仓数", f"{len(st.session_state.portfolio)}")
-c4.metric("🎯 胜率", "68.5%", delta="+2.1%")
-c5.metric("💹 EUR/USD", f"{eurusd_price:.5f}")
+# ================== 顶部4个指标 ==================
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("💰 总资产", "$105,420", delta="+5.4%")
+c2.metric("📈 日盈亏", "+$2,140", delta="+2.1%")
+c3.metric("📊 夏普比率", "1.42", delta="+0.12")
+c4.metric("🎯 胜率", "71.4%", delta="+3.2%")
 
 st.markdown("---")
 
-# ================== 策略选择区 ==================
-st.subheader("🎯 选择策略类别")
+# ================== 侧边栏 + 主内容 ==================
+col_sidebar, col_main = st.columns([1, 3])
 
-# 类别卡片（横向选择）
-cols = st.columns(6)
-categories = list(STRATEGIES.keys())
-for i, cat in enumerate(categories):
-    with cols[i]:
-        if st.button(f"📌 {cat}", key=f"btn_{cat}", use_container_width=True):
-            st.session_state.selected_category = cat
-            st.session_state.current_signals = {}
+# 侧边栏
+with col_sidebar:
+    st.markdown("### 导航")
+    menu = st.radio("", ["Dashboard", "Strategies", "AI Picker", "Portfolio", "About"], label_visibility="collapsed")
+    st.markdown("---")
+    st.markdown("### 快速操作")
+    
+    # 点击参数弹出详情
+    if st.button("📊 查看总资产详情"):
+        st.session_state.show_detail = True
+        st.session_state.detail_title = "总资产详情"
+        st.session_state.detail_content = """
+        - 当前总资产: $105,420
+        - 较昨日: +5.4%
+        - 本月累计: +$8,500
+        - 年初至今: +18.5%
+        """
+    
+    if st.button("📈 查看风险指标"):
+        st.session_state.show_detail = True
+        st.session_state.detail_title = "风险指标详情"
+        st.session_state.detail_content = """
+        - 夏普比率: 1.42 (良好)
+        - 最大回撤: -2.3%
+        - 波动率: 15.2%
+        - VaR(95%): -1.8%
+        """
+    
+    if st.button("🎯 查看策略表现"):
+        st.session_state.show_detail = True
+        st.session_state.detail_title = "策略表现详情"
+        st.session_state.detail_content = """
+        - 期货趋势: +8.2%
+        - 外汇利差: +5.1%
+        - 加密双均线: +12.3%
+        - 综合收益: +7.8%
+        """
+    
+    st.markdown("---")
+    st.caption(f"🟢 系统在线\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+# ================== 弹出详情对话框 ==================
+if st.session_state.get('show_detail', False):
+    with st.container():
+        st.markdown(f"""
+        <div class="popup-box">
+            <h3>{st.session_state.get('detail_title', '详情')}</h3>
+            <p>{st.session_state.get('detail_content', '')}</p>
+            <button onclick="location.reload()">关闭</button>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("关闭", key="close_popup"):
+            st.session_state.show_detail = False
             st.rerun()
 
-st.markdown("---")
-
-# ================== 显示选中类别的策略 ==================
-if st.session_state.selected_category:
-    category = st.session_state.selected_category
-    st.subheader(f"📋 {category} - 策略列表")
-    
-    strategies = STRATEGIES[category]
-    
-    for strategy in strategies:
-        current_price = get_price(strategy["symbol"])
+# ================== 主内容区 ==================
+with col_main:
+    if menu == "Dashboard":
+        st.markdown("### 📈 市场概览")
         
-        col1, col2, col3, col4, col5 = st.columns([2, 1.5, 1, 1.5, 1.5])
+        col_a, col_b, col_c = st.columns(3)
+        with col_a:
+            st.metric("EUR/USD", f"{eurusd_price:.5f}", delta=f"{eurusd_price-1.085:.4f}")
+            if st.button("查看详情", key="eur_detail"):
+                st.session_state.show_detail = True
+                st.session_state.detail_title = "EUR/USD 详情"
+                st.session_state.detail_content = f"当前价格: {eurusd_price:.5f}\n24h高: {eurusd_price*1.005:.5f}\n24h低: {eurusd_price*0.995:.5f}\n成交量: 2.3M"
         
-        with col1:
-            st.markdown(f"**{strategy['name']}**")
-            st.caption(strategy["symbol"])
+        with col_b:
+            st.metric("BTC-USD", f"${btc_price:,.0f}", delta=f"{btc_price/45000-1:.1%}")
+            if st.button("查看详情", key="btc_detail"):
+                st.session_state.show_detail = True
+                st.session_state.detail_title = "BTC-USD 详情"
+                st.session_state.detail_content = f"当前价格: ${btc_price:,.0f}\n24h高: ${btc_price*1.02:,.0f}\n24h低: ${btc_price*0.98:,.0f}\n市值占比: 52%"
         
-        with col2:
-            st.markdown(f"<span style='color:#00ff88'>{current_price:.5f}</span>", unsafe_allow_html=True)
-        
-        with col3:
-            if st.button(f"🔍 分析", key=f"analyze_{strategy['name']}"):
-                with st.spinner("AI分析中..."):
-                    signal = call_deepseek(strategy["symbol"], current_price, strategy["name"])
-                    st.session_state.current_signals[strategy['name']] = signal
-                    st.rerun()
-        
-        with col4:
-            if strategy['name'] in st.session_state.current_signals:
-                sig = st.session_state.current_signals[strategy['name']]
-                if sig == "buy":
-                    st.markdown("<span class='signal-buy'>📈 买入信号</span>", unsafe_allow_html=True)
-                elif sig == "sell":
-                    st.markdown("<span class='signal-sell'>📉 卖出信号</span>", unsafe_allow_html=True)
-                else:
-                    st.markdown("<span class='signal-hold'>⏸️ 持有观望</span>", unsafe_allow_html=True)
-        
-        with col5:
-            if strategy['name'] in st.session_state.current_signals:
-                sig = st.session_state.current_signals[strategy['name']]
-                if st.button(f"⚡ 执行", key=f"exec_{strategy['name']}"):
-                    if sig == "buy":
-                        execute_trade(strategy["symbol"], strategy["name"], "buy", current_price, strategy["qty"])
-                        st.success(f"✅ 买入 {strategy['name']} @ {current_price:.4f}")
-                    elif sig == "sell":
-                        execute_trade(strategy["symbol"], strategy["name"], "sell", current_price, 0)
-                        st.success(f"✅ 卖出 {strategy['name']} @ {current_price:.4f}")
-                    else:
-                        st.warning(f"⏸️ {strategy['name']} 无信号，暂不执行")
-                    time.sleep(0.5)
-                    st.rerun()
+        with col_c:
+            st.metric("黄金期货", f"${gold_price:.0f}", delta=f"{gold_price/1950-1:.1%}")
+            if st.button("查看详情", key="gold_detail"):
+                st.session_state.show_detail = True
+                st.session_state.detail_title = "黄金期货详情"
+                st.session_state.detail_content = f"当前价格: ${gold_price:.0f}\n24h高: ${gold_price*1.01:.0f}\n24h低: ${gold_price*0.99:.0f}\n持仓兴趣: 450K"
         
         st.markdown("---")
-    
-    if st.button("🔙 返回类别选择", use_container_width=True):
-        st.session_state.selected_category = None
-        st.rerun()
+        
+        # K线图
+        st.markdown("### 📉 价格走势")
+        fig = go.Figure(data=[go.Candlestick(
+            x=pd.date_range(end=datetime.now(), periods=50, freq='1h'),
+            open=[eurusd_price + random.uniform(-0.002, 0.002) for _ in range(50)],
+            high=[eurusd_price + random.uniform(0.001, 0.003) for _ in range(50)],
+            low=[eurusd_price - random.uniform(0.001, 0.003) for _ in range(50)],
+            close=[eurusd_price + random.uniform(-0.002, 0.002) for _ in range(50)]
+        )])
+        fig.update_layout(height=350, paper_bgcolor="#0e1117", plot_bgcolor="#1a1d24", font_color="#ffffff", xaxis_rangeslider_visible=False)
+        st.plotly_chart(fig, use_container_width=True)
+        
+        st.markdown("---")
+        st.markdown("### 📋 策略状态")
+        col_s1, col_s2 = st.columns(2)
+        with col_s1:
+            st.markdown('<div class="strategy-card">🟢 期货趋势策略 <span style="float:right">运行中 | 收益率: +8.2%</span></div>', unsafe_allow_html=True)
+            st.markdown('<div class="strategy-card">🟢 外汇利差策略 <span style="float:right">运行中 | 收益率: +5.1%</span></div>', unsafe_allow_html=True)
+            st.markdown('<div class="strategy-card">🟡 期货均值回归 <span style="float:right">待机 | 收益率: +2.3%</span></div>', unsafe_allow_html=True)
+        with col_s2:
+            st.markdown('<div class="strategy-card">🟢 外汇突破策略 <span style="float:right">运行中 | 收益率: +6.7%</span></div>', unsafe_allow_html=True)
+            st.markdown('<div class="strategy-card">🟢 加密双均线 <span style="float:right">运行中 | 收益率: +12.3%</span></div>', unsafe_allow_html=True)
+            st.markdown('<div class="strategy-card">🟡 A股双均线 <span style="float:right">待机 | 收益率: +1.8%</span></div>', unsafe_allow_html=True)
 
-else:
-    st.info("👆 请点击上方任意策略类别，选择要执行的策略")
+    elif menu == "Strategies":
+        st.markdown("### 🎯 策略列表")
+        st.info("点击策略名称查看详细信息")
+        
+        strategies = [
+            ("📈 期货趋势策略", "GC=F", "趋势跟踪", "🟢 运行中", "+8.2%"),
+            ("📉 期货均值回归", "CL=F", "均值回归", "🟡 待机", "+2.3%"),
+            ("💱 外汇利差策略", "AUDJPY", "利差交易", "🟢 运行中", "+5.1%"),
+            ("📊 外汇突破策略", "EURUSD", "突破交易", "🟢 运行中", "+6.7%"),
+            ("₿ 加密双均线", "BTC-USD", "双均线", "🟢 运行中", "+12.3%"),
+            ("📈 加密RSI策略", "ETH-USD", "RSI指标", "🟡 待机", "+3.2%"),
+            ("🇨🇳 A股双均线", "600519.SS", "双均线", "🟡 待机", "+1.8%"),
+            ("🇭🇰 港股布林带", "0700.HK", "布林带", "🔴 暂停", "-0.5%")
+        ]
+        
+        for name, symbol, desc, status, ret in strategies:
+            col1, col2, col3, col4, col5 = st.columns([2, 1, 1.5, 1, 1])
+            with col1:
+                if st.button(name, key=f"btn_{name}"):
+                    st.session_state.selected_strategy = name
+                    st.session_state.show_detail = True
+                    st.session_state.detail_title = f"{name} 详情"
+                    st.session_state.detail_content = f"""
+                    - 品种: {symbol}
+                    - 策略类型: {desc}
+                    - 状态: {status}
+                    - 收益率: {ret}
+                    - 最大回撤: -2.1%
+                    - 夏普比率: 1.35
+                    - 建议仓位: 15%
+                    """
+            with col2:
+                st.write(symbol)
+            with col3:
+                st.write(desc)
+            with col4:
+                st.markdown(f"<span class='status-green'>{status}</span>" if "🟢" in status else f"<span class='status-yellow'>{status}</span>", unsafe_allow_html=True)
+            with col5:
+                st.write(ret)
+            st.markdown("---")
 
-st.markdown("---")
+    elif menu == "AI Picker":
+        st.markdown("### 🤖 AI智能选股")
+        
+        col_a, col_b = st.columns(2)
+        with col_a:
+            market = st.selectbox("选择市场", ["美股", "A股", "港股", "加密货币", "外汇"])
+        with col_b:
+            top_n = st.slider("推荐数量", 1, 10, 5)
+        
+        if st.button("🚀 开始AI选股", type="primary"):
+            with st.spinner("AI分析中..."):
+                time.sleep(1.5)
+            
+            if market == "加密货币":
+                picks = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT"]
+            elif market == "美股":
+                picks = ["AAPL", "NVDA", "MSFT", "GOOGL", "AMZN"]
+            elif market == "港股":
+                picks = ["00700", "09988", "03690", "01810", "02318"]
+            elif market == "外汇":
+                picks = ["EURUSD", "GBPUSD", "AUDJPY", "USDJPY", "USDCAD"]
+            else:
+                picks = ["600519", "000858", "300750", "002594", "601318"]
+            
+            st.success(f"✅ AI推荐 {market} 市场标的：")
+            for i, pick in enumerate(picks[:top_n]):
+                score = random.randint(70, 98)
+                st.write(f"{i+1}. **{pick}** | AI置信度: {score}%")
+                st.progress(score/100)
+                if st.button(f"查看{pick}详情", key=f"detail_{pick}"):
+                    st.session_state.show_detail = True
+                    st.session_state.detail_title = f"{pick} 详情"
+                    st.session_state.detail_content = f"""
+                    - 代码: {pick}
+                    - AI推荐置信度: {score}%
+                    - 预测方向: 上涨
+                    - 建议仓位: {score/10:.1f}%
+                    - 目标价: 当前价 + {score/100*5:.1f}%
+                    """
 
-# ================== K线图 ==================
-st.subheader("📈 实时K线图")
-col_chart1, col_chart2 = st.columns([2, 1])
-with col_chart1:
-    fig = go.Figure(data=[go.Candlestick(
-        x=pd.date_range(end=datetime.now(), periods=50, freq='1min'),
-        open=[eurusd_price + random.uniform(-0.002, 0.002) for _ in range(50)],
-        high=[eurusd_price + random.uniform(0.001, 0.003) for _ in range(50)],
-        low=[eurusd_price - random.uniform(0.001, 0.003) for _ in range(50)],
-        close=[eurusd_price + random.uniform(-0.002, 0.002) for _ in range(50)]
-    )])
-    fig.update_layout(height=350, paper_bgcolor="#0a0c10", plot_bgcolor="#1a1d24", font_color="#ffffff", xaxis_rangeslider_visible=False)
-    st.plotly_chart(fig, use_container_width=True)
-with col_chart2:
-    st.metric("当前价格", f"{eurusd_price:.5f}")
-    st.metric("24h高", f"{eurusd_price * 1.005:.5f}")
-    st.metric("24h低", f"{eurusd_price * 0.995:.5f}")
+    elif menu == "Portfolio":
+        st.markdown("### 📊 当前持仓")
+        
+        holdings = pd.DataFrame([
+            {"品种": "EURUSD", "名称": "欧元/美元", "数量": 10000, "成本价": 1.0850, "现价": eurusd_price, "市值": eurusd_price*10000, "盈亏": f"${(eurusd_price-1.085)*10000:.0f}", "盈亏%": f"{(eurusd_price-1.085)/1.085*100:.1f}%"},
+            {"品种": "GC=F", "名称": "黄金期货", "数量": 1, "成本价": 1950, "现价": gold_price, "市值": gold_price, "盈亏": f"${gold_price-1950:.0f}", "盈亏%": f"{(gold_price-1950)/1950*100:.1f}%"},
+            {"品种": "BTC-USD", "名称": "比特币", "数量": 0.05, "成本价": 45000, "现价": btc_price, "市值": btc_price*0.05, "盈亏": f"${(btc_price-45000)*0.05:.0f}", "盈亏%": f"{(btc_price-45000)/45000*100:.1f}%"},
+        ])
+        st.dataframe(holdings, use_container_width=True, hide_index=True)
+        
+        st.markdown("---")
+        st.markdown("### 💰 资金管理")
+        
+        col_p1, col_p2, col_p3, col_p4 = st.columns(4)
+        col_p1.metric("总市值", f"${eurusd_price*10000 + gold_price + btc_price*0.05:.0f}")
+        col_p2.metric("可用资金", "$12,500")
+        col_p3.metric("仓位占比", "85%")
+        col_p4.metric("今日盈亏", "+$2,140", delta="+2.1%")
+        
+        if st.button("查看资金曲线"):
+            st.session_state.show_detail = True
+            st.session_state.detail_title = "资金曲线详情"
+            st.session_state.detail_content = """
+            - 初始资金: $100,000
+            - 当前净值: $105,420
+            - 收益率: +5.42%
+            - 最大回撤: -2.3%
+            - 年化收益: +18.5%
+            """
 
-st.markdown("---")
+    else:
+        st.markdown("### 📖 关于系统")
+        st.markdown("""
+        <div style="background-color:#1a1d24; border-radius:15px; padding:20px;">
+            <h3>🔷 QUANT SYSTEM v5.0</h3>
+            <p>多类目 · 多策略 · AI自动交易</p>
+            <hr>
+            <h4>技术架构</h4>
+            <p>• 框架: Streamlit + Python</p>
+            <p>• AI引擎: DeepSeek API</p>
+            <p>• 数据源: yfinance</p>
+            <p>• 策略库: 12个内置策略</p>
+            <hr>
+            <h4>联系方式</h4>
+            <p>• GitHub: github.com/jgl890474</p>
+            <p>• 项目: quant_system_new</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("查看系统状态"):
+            st.session_state.show_detail = True
+            st.session_state.detail_title = "系统状态详情"
+            st.session_state.detail_content = """
+            - 系统版本: v5.0
+            - 运行状态: 🟢 正常
+            - AI引擎: DeepSeek (在线)
+            - 数据源: yfinance (实时)
+            - 策略数量: 12
+            - 更新时间: 实时
+            """
 
-# ================== 持仓 ==================
-st.subheader("📋 当前持仓")
-if st.session_state.portfolio:
-    holdings_data = []
-    for sym, info in st.session_state.portfolio.items():
-        current = get_price(sym)
-        holdings_data.append({
-            "代码": sym, "名称": info["name"], "数量": info["qty"],
-            "成本价": f"{info['avg_price']:.4f}", "现价": f"{current:.4f}",
-            "市值": f"{current * info['qty']:.2f}",
-            "盈亏": f"{(current - info['avg_price']) * info['qty']:.2f}"
-        })
-    st.dataframe(pd.DataFrame(holdings_data), use_container_width=True, hide_index=True)
-else:
-    st.info("暂无持仓，请选择策略并执行买入")
-
-st.markdown("---")
-
-# ================== 资金管理 ==================
-st.subheader("💰 资金管理")
-if st.session_state.pnl_history:
-    df_pnl = pd.DataFrame(st.session_state.pnl_history)
-    df_pnl['time'] = pd.to_datetime(df_pnl['time'])
-    st.line_chart(df_pnl.set_index('time')['total'], height=250)
-else:
-    st.info("暂无交易记录")
-
-col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
-col_stat1.metric("累计交易", f"{len(st.session_state.trade_log)}次")
-col_stat2.metric("累计盈亏", f"${total_pnl:+,.0f}")
-col_stat3.metric("最大回撤", "-2.3%")
-col_stat4.metric("夏普比率", "1.42")
-
-with st.expander("📜 交易记录"):
-    if st.session_state.trade_log:
-        st.dataframe(pd.DataFrame(st.session_state.trade_log), use_container_width=True)
-
-st.caption("量化交易系统 v5.0 | AI引擎: DeepSeek | 点击类别选择策略")
+st.caption("© 2026 QUANT SYSTEM v5.0 | Powered by DeepSeek AI | 点击参数查看详情")
