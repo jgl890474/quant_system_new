@@ -1,47 +1,66 @@
 # -*- coding: utf-8 -*-
+import yfinance as yf
 import random
 
-def get_1min_kline(symbol="BTC-USD"):
-    """
-    获取1分钟K线数据（云函数简化版）
-    使用模拟数据，避免依赖 yfinance 等外部库
-    """
-    # 基础价格范围
-    price_ranges = {
-        "BTC-USD": (50000, 60000),
-        "ETH-USD": (3000, 3500),
-        "EURUSD": (1.08, 1.12),
-        "GBPUSD": (1.25, 1.30),
-        "AUDJPY": (90, 110),
-        "GC=F": (1900, 2100),
-        "CL=F": (70, 90),
-    }
-    
-    low, high = price_ranges.get(symbol, (90, 110))
-    close = random.uniform(low, high)
-    
+def get_1min_kline(symbol="EURUSD"):
+    try:
+        if symbol == "EURUSD":
+            ticker = "EURUSD=X"
+        elif symbol == "BTC-USD":
+            ticker = "BTC-USD"
+        elif symbol == "GC=F":
+            ticker = "GC=F"
+        else:
+            ticker = symbol
+        data = yf.Ticker(ticker).history(period="1d", interval="1m")
+        if data is not None and len(data) > 0:
+            latest = data.iloc[-1]
+            return {
+                "symbol": symbol,
+                "close": float(latest['Close']),
+                "high": float(latest['High']),
+                "low": float(latest['Low']),
+                "open": float(latest['Open']),
+                "timestamp": latest.name.strftime('%Y-%m-%d %H:%M:%S'),
+                "volume": int(latest['Volume']) if latest['Volume'] else 0,
+                "source": "yfinance"
+            }
+    except Exception as e:
+        print(f"获取行情失败: {e}")
+    price = random.uniform(1.08, 1.12)
     return {
         "symbol": symbol,
-        "close": close,
-        "high": close * (1 + random.uniform(0.001, 0.005)),
-        "low": close * (1 - random.uniform(0.001, 0.005)),
-        "open": close,
+        "close": price,
+        "high": price * 1.002,
+        "low": price * 0.998,
+        "open": price,
         "timestamp": None,
         "volume": 0,
         "source": "simulated"
     }
 
-def get_historical_klines(symbol="BTC-USD", count=50):
-    """获取历史K线数据（用于前端画图）"""
-    result = []
-    base_price = 50000 if "BTC" in symbol else 1.08
-    for i in range(count):
-        price = base_price + (i * 0.01)
-        result.append({
-            "timestamp": i,
-            "open": price,
-            "high": price * 1.002,
-            "low": price * 0.998,
-            "close": price
-        })
-    return result
+def get_historical_klines(symbol="EURUSD", count=50):
+    try:
+        if symbol == "EURUSD":
+            ticker = "EURUSD=X"
+        elif symbol == "BTC-USD":
+            ticker = "BTC-USD"
+        elif symbol == "GC=F":
+            ticker = "GC=F"
+        else:
+            ticker = symbol
+        data = yf.Ticker(ticker).history(period="5d", interval="1m")
+        if data is not None and len(data) > 0:
+            result = []
+            for idx, row in data.tail(count).iterrows():
+                result.append({
+                    "timestamp": int(idx.timestamp()),
+                    "open": float(row['Open']),
+                    "high": float(row['High']),
+                    "low": float(row['Low']),
+                    "close": float(row['Close'])
+                })
+            return result
+    except Exception as e:
+        print(f"获取历史K线失败: {e}")
+    return []
