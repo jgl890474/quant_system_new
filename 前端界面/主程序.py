@@ -3,7 +3,6 @@ import time
 import random
 import pandas as pd
 import plotly.graph_objects as go
-import plotly.express as px
 from datetime import datetime, timedelta
 import logging
 import requests
@@ -18,7 +17,6 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("QuantSystem")
 
-# ================== 配置 ==================
 INITIAL_CAPITAL = 100000.0
 
 # ================== 数据模型 ==================
@@ -69,15 +67,12 @@ class StrategyLoader:
         self._load_all_strategies()
     
     def _load_all_strategies(self):
-        """加载策略库下所有策略"""
         strategy_base_path = "策略库"
-        
         if not os.path.exists(strategy_base_path):
-            self.load_log.append(f"❌ 策略库不存在: {strategy_base_path}")
+            self.load_log.append(f"❌ 策略库不存在")
             self._add_demo_strategies()
             return
         
-        # 类别与默认交易对的映射
         category_config = {
             "外汇策略": {"symbol": "EURUSD", "display": "外汇"},
             "期货策略": {"symbol": "GC=F", "display": "期货"},
@@ -90,36 +85,25 @@ class StrategyLoader:
         for folder_name, config in category_config.items():
             folder_path = os.path.join(strategy_base_path, folder_name)
             if not os.path.isdir(folder_path):
-                self.load_log.append(f"⚠️ 文件夹不存在: {folder_name}")
                 continue
             
             symbol = config["symbol"]
             display = config["display"]
-            
-            # 扫描文件夹下所有.py文件
             py_files = glob.glob(os.path.join(folder_path, "*.py"))
-            self.load_log.append(f"📁 扫描 {folder_name}: 找到 {len(py_files)} 个py文件")
             
             for py_file in py_files:
                 file_name = os.path.basename(py_file)
-                if file_name in ["__init__.py", "__pycache__"]:
-                    continue
-                if file_name.endswith(".txt"):
+                if file_name in ["__init__.py", "__pycache__"] or file_name.endswith(".txt"):
                     continue
                 
                 strategy_name = file_name.replace(".py", "")
                 
                 try:
-                    # 动态加载模块
                     spec = importlib.util.spec_from_file_location(strategy_name, py_file)
                     module = importlib.util.module_from_spec(spec)
-                    
-                    # 注入基类
                     module.BaseStrategy = BaseStrategy
-                    
                     spec.loader.exec_module(module)
                     
-                    # 查找策略类
                     strategy_class = None
                     for attr_name in dir(module):
                         attr = getattr(module, attr_name)
@@ -136,23 +120,17 @@ class StrategyLoader:
                             "category": display,
                             "file": py_file
                         })
-                        self.load_log.append(f"✅ 加载成功: {display}/{strategy_name}")
-                    else:
-                        self.load_log.append(f"⚠️ 未找到策略类: {strategy_name}")
-                        
+                        self.load_log.append(f"✅ {display}/{strategy_name}")
                 except Exception as e:
-                    self.load_log.append(f"❌ 加载失败 {strategy_name}: {str(e)}")
+                    self.load_log.append(f"❌ {strategy_name}: {str(e)}")
         
         if not self.strategies:
-            self.load_log.append("❌ 未找到任何策略，使用演示策略")
             self._add_demo_strategies()
     
     def _add_demo_strategies(self):
-        """演示策略"""
         self.strategies = [
             {"name": "趋势跟踪策略", "class": None, "symbol": "EURUSD", "category": "演示", "demo": True},
             {"name": "均值回归策略", "class": None, "symbol": "GC=F", "category": "演示", "demo": True},
-            {"name": "双均线策略", "class": None, "symbol": "BTC-USD", "category": "演示", "demo": True},
         ]
     
     def get_strategies(self):
@@ -163,9 +141,6 @@ class StrategyLoader:
             if s["name"] == name:
                 return s
         return None
-    
-    def get_load_log(self):
-        return self.load_log
 
 # ================== 策略运行器 ==================
 class StrategyRunner:
@@ -178,7 +153,6 @@ class StrategyRunner:
             kline = {"close": market_data.price, "high": market_data.high, "low": market_data.low, "open": market_data.open}
             return instance.on_data(kline)
         except Exception as e:
-            logger.error(f"策略运行失败: {e}")
             return "hold"
 
 # ================== AI引擎 ==================
@@ -245,7 +219,6 @@ def get_price(symbol):
 def main():
     st.set_page_config(page_title="量化交易系统", layout="wide")
     
-    # 初始化
     if 'engine' not in st.session_state:
         st.session_state.engine = OrderEngine()
     if 'strategy_loader' not in st.session_state:
@@ -258,34 +231,29 @@ def main():
     engine = st.session_state.engine
     strategy_loader = st.session_state.strategy_loader
     ai_engine = st.session_state.ai_engine
-    
     strategies = strategy_loader.get_strategies()
-    load_log = strategy_loader.get_load_log()
     
-    # 样式
     st.markdown("""
     <style>
         .stApp { background-color: #0a0c10; }
         .stMetric { background-color: #1a1d24; border-radius: 8px; padding: 10px; text-align: center; }
-        h1 { color: white; text-align: center; font-size: 24px; margin-bottom: 5px; }
+        h1 { color: white; text-align: center; font-size: 24px; }
         .caption { text-align: center; color: #8892b0; font-size: 12px; margin-bottom: 20px; }
         .category-title { color: #00d2ff; font-size: 18px; margin-top: 20px; margin-bottom: 10px; }
-        .log-area { background-color: #1a1d24; border-radius: 8px; padding: 10px; font-family: monospace; font-size: 11px; max-height: 300px; overflow-y: auto; }
+        .strategy-row { background-color: #1a1d24; border-radius: 8px; padding: 12px; margin: 8px 0; }
     </style>
     """, unsafe_allow_html=True)
     
     st.markdown('<h1>📊 量化交易系统 v5.0</h1>', unsafe_allow_html=True)
     st.markdown('<div class="caption">多类目 · 多策略 · AI自动交易 | 真实策略库接入</div>', unsafe_allow_html=True)
     
-    # 加载日志
     with st.expander(f"📁 策略加载日志 (共{len(strategies)}个策略)"):
-        for log in load_log:
+        for log in strategy_loader.load_log:
             st.text(log)
     
-    # 导航
     tabs = st.tabs(["首页", "策略中心", "AI交易", "持仓管理", "资金曲线"])
     
-    # ================== 首页 ==================
+    # 首页
     with tabs[0]:
         col1, col2, col3, col4 = st.columns(4)
         total_val = engine.get_total_value()
@@ -301,12 +269,10 @@ def main():
             data = get_price(sym)
             cols[i].markdown(f'<div style="background:#1a1d24;border-radius:8px;padding:10px;text-align:center"><b>{sym}</b><br><span style="color:#00d2ff;font-size:18px">{data.price:.4f}</span></div>', unsafe_allow_html=True)
     
-    # ================== 策略中心 ==================
+    # 策略中心（带执行按钮）
     with tabs[1]:
         st.markdown("### 🎯 策略库")
-        st.caption(f"共加载 {len(strategies)} 个策略，点击「运行」获取信号")
         
-        # 按类别分组
         categories = {}
         for s in strategies:
             cat = s.get("category", "其他")
@@ -316,64 +282,78 @@ def main():
         
         for cat, cat_strategies in categories.items():
             st.markdown(f'<div class="category-title">📁 {cat} ({len(cat_strategies)})</div>', unsafe_allow_html=True)
-            for s in cat_strategies:
-                col1, col2, col3, col4, col5 = st.columns([2, 1.5, 1, 1, 1.5])
-                col1.write(f"**{s['name']}**")
-                col2.write(s['symbol'])
-                col3.write(s['category'])
-                if col4.button(f"▶ 运行", key=f"run_{s['name']}"):
-                    market_data = get_price(s['symbol'])
-                    signal = StrategyRunner.run(s, market_data)
-                    st.session_state.signals[s['name']] = signal
-                    st.success(f"信号: {signal.upper()}")
-                if s['name'] in st.session_state.signals:
-                    sig = st.session_state.signals[s['name']]
-                    color = "#00ff88" if sig == "buy" else "#ff4444" if sig == "sell" else "#ffaa00"
-                    col5.markdown(f"<span style='color:{color};font-weight:bold'>{sig.upper()}</span>", unsafe_allow_html=True)
-                st.markdown("---")
+            for idx, s in enumerate(cat_strategies):
+                with st.container():
+                    col1, col2, col3, col4, col5 = st.columns([2, 1.2, 1.2, 1, 1.5])
+                    col1.write(f"**{s['name']}**")
+                    col2.write(s['symbol'])
+                    col3.write(s['category'])
+                    
+                    # 运行按钮
+                    if col4.button(f"▶ 运行", key=f"run_{s['name']}_{idx}"):
+                        market_data = get_price(s['symbol'])
+                        signal = StrategyRunner.run(s, market_data)
+                        st.session_state.signals[s['name']] = signal
+                        st.success(f"信号: {signal.upper()}")
+                    
+                    # 显示信号和执行按钮
+                    if s['name'] in st.session_state.signals:
+                        sig = st.session_state.signals[s['name']]
+                        color = "#00ff88" if sig == "buy" else "#ff4444" if sig == "sell" else "#ffaa00"
+                        col5.markdown(f"<span style='color:{color};font-weight:bold'>{sig.upper()}</span>", unsafe_allow_html=True)
+                        
+                        # 手动执行按钮
+                        if sig in ['buy', 'sell']:
+                            if st.button(f"💸 执行{sig.upper()}", key=f"exec_{s['name']}_{idx}"):
+                                price = get_price(s['symbol']).price
+                                if sig == 'buy':
+                                    engine.buy(s['symbol'], price)
+                                    st.success(f"✅ 买入 {s['name']} @ {price:.4f}")
+                                else:
+                                    engine.sell(s['symbol'], price)
+                                    st.success(f"✅ 卖出 {s['name']} @ {price:.4f}")
+                                st.rerun()
+                    st.markdown("---")
     
-    # ================== AI交易 ==================
+    # AI交易
     with tabs[2]:
         st.markdown("### 🤖 AI智能交易")
         strategy_names = [s["name"] for s in strategies]
         if strategy_names:
             selected = st.selectbox("选择策略", strategy_names)
-            if st.button("🚀 执行AI分析", type="primary", use_container_width=True):
+            if st.button("🚀 AI分析并执行", type="primary", use_container_width=True):
                 strategy_info = strategy_loader.get_strategy_by_name(selected)
                 if strategy_info:
                     market_data = get_price(strategy_info["symbol"])
                     strategy_signal = StrategyRunner.run(strategy_info, market_data)
                     st.info(f"📊 策略信号: {strategy_signal.upper()}")
+                    
                     result = ai_engine.analyze(strategy_info["symbol"], market_data.price, strategy_signal)
-                    st.success(f"🤖 AI最终决策: {result['final_signal'].upper()}")
-                    st.info(f"置信度: {result['confidence']}% | {result['reason']}")
+                    st.success(f"🤖 AI决策: {result['final_signal'].upper()}")
+                    st.info(f"置信度: {result['confidence']}%")
                     
                     if result['final_signal'] == 'buy':
-                        if st.button("执行买入"):
+                        if st.button("确认执行买入", key="ai_buy"):
                             engine.buy(strategy_info["symbol"], market_data.price)
                             st.success("✅ 买入成功")
                             st.rerun()
                     elif result['final_signal'] == 'sell':
-                        if st.button("执行卖出"):
+                        if st.button("确认执行卖出", key="ai_sell"):
                             engine.sell(strategy_info["symbol"], market_data.price)
                             st.success("✅ 卖出成功")
                             st.rerun()
     
-    # ================== 持仓管理 ==================
+    # 持仓管理
     with tabs[3]:
         st.markdown("### 💼 当前持仓")
         if engine.positions:
+            data = []
             for sym, pos in engine.positions.items():
                 price = get_price(sym).price
                 pos.current_price = price
                 pnl = pos.quantity * (price - pos.avg_price)
-                col1, col2, col3, col4, col5 = st.columns([1.5, 1, 1, 1, 1])
-                col1.write(sym)
-                col2.write(f"{pos.quantity:.4f}")
-                col3.write(f"{pos.avg_price:.4f}")
-                col4.write(f"{price:.4f}")
-                col5.write(f"${pnl:+,.2f}")
-                st.markdown("---")
+                data.append({"品种": sym, "数量": f"{pos.quantity:.4f}", "成本": f"{pos.avg_price:.4f}", "现价": f"{price:.4f}", "盈亏": f"${pnl:+,.2f}"})
+            st.dataframe(pd.DataFrame(data), use_container_width=True, hide_index=True)
         else:
             st.info("暂无持仓")
         
@@ -383,13 +363,13 @@ def main():
             df['time'] = df['time'].dt.strftime('%H:%M:%S')
             st.dataframe(df, use_container_width=True)
     
-    # ================== 资金曲线 ==================
+    # 资金曲线
     with tabs[4]:
         st.markdown("### 📈 资金曲线")
         dates = [datetime.now() - timedelta(days=i) for i in range(30, 0, -1)]
         values = [engine.initial_capital + i * (engine.get_total_value() - engine.initial_capital) / 30 for i in range(30)]
         fig = go.Figure(data=go.Scatter(x=dates, y=values, mode='lines', line=dict(color='#00d2ff', width=2)))
-        fig.update_layout(height=350, paper_bgcolor="#0a0c10", plot_bgcolor="#15171a", font_color="#e6e6e6", title="资产曲线")
+        fig.update_layout(height=350, paper_bgcolor="#0a0c10", plot_bgcolor="#15171a", font_color="#e6e6e6")
         st.plotly_chart(fig, use_container_width=True)
         
         col1, col2 = st.columns(2)
