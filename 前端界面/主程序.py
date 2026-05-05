@@ -8,9 +8,13 @@ from datetime import datetime, timedelta
 import logging
 import requests
 import json
+import sys
+import os
 from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass, field
-from enum import Enum
+
+# 添加项目路径
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # ================== 配置中心 ==================
 CONFIG = {
@@ -35,8 +39,7 @@ CONFIG = {
     "api": {
         "retry_times": 3,
         "timeout": 10,
-        "cache_ttl": 60,
-        "deepseek_key": ""
+        "cache_ttl": 60
     },
     "ui": {
         "refresh_interval": 60,
@@ -105,16 +108,90 @@ class Position:
     unrealized_pnl: float = 0
     realized_pnl: float = 0
 
+# ================== 策略加载器 ==================
+class StrategyLoader:
+    """从策略库加载真实策略"""
+    
+    def __init__(self):
+        self.strategies = []
+        self._load_strategies()
+    
+    def _load_strategies(self):
+        """从策略库文件加载策略"""
+        try:
+            # 尝试导入外汇策略
+            from 策略库.外汇策略.外汇利差策略 import ForexCarryStrategy
+            from 策略库.外汇策略.外汇突破策略 import ForexBreakoutStrategy
+            from 策略库.外汇策略.外汇双均线 import ForexDualMAStrategy
+            self.strategies.extend([
+                {"name": "外汇利差策略", "class": ForexCarryStrategy, "symbol": "AUDJPY", "category": "外汇"},
+                {"name": "外汇突破策略", "class": ForexBreakoutStrategy, "symbol": "EURUSD", "category": "外汇"},
+                {"name": "外汇双均线", "class": ForexDualMAStrategy, "symbol": "GBPUSD", "category": "外汇"},
+            ])
+            logger.info("外汇策略加载成功")
+        except Exception as e:
+            logger.warning(f"外汇策略加载失败: {e}")
+        
+        try:
+            # 尝试导入期货策略
+            from 策略库.期货策略.期货趋势策略 import FuturesTrendStrategy
+            from 策略库.期货策略.期货均值回归 import FuturesMeanReversionStrategy
+            from 策略库.期货策略.期货ATR import FuturesATRStrategy
+            self.strategies.extend([
+                {"name": "期货趋势策略", "class": FuturesTrendStrategy, "symbol": "GC=F", "category": "期货"},
+                {"name": "期货均值回归", "class": FuturesMeanReversionStrategy, "symbol": "CL=F", "category": "期货"},
+                {"name": "期货ATR策略", "class": FuturesATRStrategy, "symbol": "SI=F", "category": "期货"},
+            ])
+            logger.info("期货策略加载成功")
+        except Exception as e:
+            logger.warning(f"期货策略加载失败: {e}")
+        
+        try:
+            # 尝试导入加密货币策略
+            from 策略库.加密货币策略.加密双均线策略 import CryptoDualMAStrategy
+            from 策略库.加密货币策略.加密RSI策略 import CryptoRSIStrategy
+            self.strategies.extend([
+                {"name": "加密双均线", "class": CryptoDualMAStrategy, "symbol": "BTC-USD", "category": "加密货币"},
+                {"name": "加密RSI策略", "class": CryptoRSIStrategy, "symbol": "ETH-USD", "category": "加密货币"},
+            ])
+            logger.info("加密货币策略加载成功")
+        except Exception as e:
+            logger.warning(f"加密货币策略加载失败: {e}")
+        
+        # 如果没有加载到任何策略，使用模拟策略
+        if not self.strategies:
+            logger.warning("未加载到真实策略，使用模拟策略")
+            self._load_mock_strategies()
+    
+    def _load_mock_strategies(self):
+        """加载模拟策略"""
+        self.strategies = [
+            {"name": "趋势跟踪策略", "class": None, "symbol": "EURUSD", "category": "外汇", "mock": True},
+            {"name": "均值回归策略", "class": None, "symbol": "GC=F", "category": "期货", "mock": True},
+            {"name": "突破交易策略", "class": None, "symbol": "BTC-USD", "category": "加密货币", "mock": True},
+        ]
+    
+    def get_strategies(self) -> List[Dict]:
+        return self.strategies
+    
+    def get_strategy_by_name(self, name: str) -> Optional[Dict]:
+        for s in self.strategies:
+            if s["name"] == name:
+                return s
+        return None
+
 # ================== AI引擎 ==================
 class AIEngine:
     def __init__(self):
         self.api_key = st.secrets.get("DEEPSEEK_API_KEY", "")
         
-    def analyze(self, symbol: str, price: float, market_data: Dict) -> Dict:
+    def analyze(self, symbol: str, price: float, strategy_name: str, strategy_signal: str) -> Dict:
+        """AI综合多策略信号做最终决策"""
         if not self.api_key:
-            return self._mock_analysis(symbol, price)
+            return self._mock_decision(strategy_signal)
         
-        prompt = f"""分析{symbol}，当前价格{price}。输出json: {{"signal":"buy/sell/hold","confidence":0-100,"reason":"原因","target":目标价,"stop_loss":止损价}}"""
+        prompt = f"""你是量化交易AI仲裁者。品种:{symbol},当前价格:{price},策略信号:{strategy_signal}。
+        输出json:{{"final_signal":"buy/sell/hold","confidence":0-100,"reason":"理由"}}"""
         
         try:
             resp = requests.post(
@@ -124,7 +201,7 @@ class AIEngine:
                     "model": "deepseek-chat",
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": 0.3,
-                    "max_tokens": 200
+                    "max_tokens": 150
                 },
                 timeout=CONFIG["api"]["timeout"]
             )
@@ -133,22 +210,18 @@ class AIEngine:
                 try:
                     return json.loads(content)
                 except:
-                    return self._mock_analysis(symbol, price)
+                    return self._mock_decision(strategy_signal)
         except Exception as e:
             logger.error(f"AI调用失败: {e}")
         
-        return self._mock_analysis(symbol, price)
+        return self._mock_decision(strategy_signal)
     
-    def _mock_analysis(self, symbol: str, price: float) -> Dict:
-        import random
-        signals = ["buy", "sell", "hold"]
-        signal = random.choice(signals)
+    def _mock_decision(self, strategy_signal: str) -> Dict:
+        signal = strategy_signal if strategy_signal in ["buy", "sell", "hold"] else "hold"
         return {
-            "signal": signal,
-            "confidence": random.randint(60, 95),
-            "reason": "AI分析完成",
-            "target": price * (1.02 if signal == "buy" else 0.98),
-            "stop_loss": price * (0.98 if signal == "buy" else 1.02)
+            "final_signal": signal,
+            "confidence": random.randint(60, 90),
+            "reason": "基于策略信号综合判断"
         }
 
 # ================== 数据缓存 ==================
@@ -179,8 +252,6 @@ class RiskManager:
         position_value = quantity * price
         if total_capital > 0 and position_value / total_capital > CONFIG["trading"]["max_position_pct"]:
             return False, f"仓位超限"
-        if total_capital > 0 and self.daily_pnl < -total_capital * CONFIG["risk"]["max_daily_loss"]:
-            return False, f"日亏损已达上限"
         return True, "通过"
     
     def update_pnl(self, pnl: float, total_asset: float):
@@ -305,8 +376,7 @@ class MarketDataProvider:
         except Exception as e:
             logger.warning(f"获取行情失败: {e}")
         
-        # 模拟数据
-        base_price = {"EURUSD": 1.085, "BTC-USD": 45000, "GC=F": 1950}.get(symbol, 100)
+        base_price = {"EURUSD": 1.085, "BTC-USD": 45000, "GC=F": 1950, "AUDJPY": 90, "GBPUSD": 1.25}.get(symbol, 100)
         data = MarketData(
             symbol=symbol,
             price=base_price * (1 + random.uniform(-0.005, 0.005)),
@@ -320,31 +390,36 @@ class MarketDataProvider:
         self.cache.set(cache_key, data)
         return data
 
-# ================== 收益曲线 ==================
-def render_equity_curve(engine: OrderEngine, risk_mgr: RiskManager):
-    st.markdown("### 📈 收益曲线")
+# ================== 策略运行器 ==================
+class StrategyRunner:
+    """运行策略并获取信号"""
     
-    dates = []
-    assets = []
-    for i in range(30):
-        date = datetime.now() - timedelta(days=29-i)
-        dates.append(date)
-        base = engine.initial_capital
-        pnl_effect = engine.get_total_pnl() * (i / 30)
-        assets.append(max(base + pnl_effect + random.uniform(-500, 500), 0))
-    
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=dates, y=assets, mode='lines', name='资产曲线', line=dict(color='#00d2ff', width=2)))
-    fig.add_trace(go.Scatter(x=dates, y=[engine.initial_capital]*len(dates), mode='lines', name='初始资金', line=dict(color='#ffaa00', width=1, dash='dash')))
-    fig.update_layout(height=300, paper_bgcolor="#0a0c10", plot_bgcolor="#15171a", font_color="#e6e6e6", margin=dict(l=0, r=0, t=20, b=0))
-    st.plotly_chart(fig, use_container_width=True)
-    
-    col1, col2, col3 = st.columns(3)
-    col1.metric("当前总资产", f"${engine.get_total_value():,.0f}")
-    col2.metric("总盈亏", f"${engine.get_total_pnl():+,.0f}")
-    col3.metric("收益率", f"{engine.get_total_pnl()/max(engine.initial_capital,1)*100:.1f}%")
+    @staticmethod
+    def run_strategy(strategy_info: Dict, market_data: MarketData) -> str:
+        """运行单个策略，返回buy/sell/hold"""
+        try:
+            if strategy_info.get("mock"):
+                # 模拟策略逻辑
+                return random.choice(["buy", "sell", "hold"])
+            
+            strategy_class = strategy_info.get("class")
+            if strategy_class:
+                # 实例化策略
+                strategy = strategy_class(strategy_info["name"], strategy_info["symbol"], 10000)
+                kline_data = {
+                    "close": market_data.price,
+                    "high": market_data.high,
+                    "low": market_data.low,
+                    "open": market_data.open,
+                    "volume": market_data.volume
+                }
+                return strategy.on_data(kline_data)
+        except Exception as e:
+            logger.error(f"策略运行失败 {strategy_info['name']}: {e}")
+        
+        return "hold"
 
-# ================== 持仓实时数据 ==================
+# ================== UI渲染函数 ==================
 def render_positions(engine: OrderEngine, data_provider: MarketDataProvider):
     st.markdown("### 💼 持仓实时数据")
     
@@ -368,13 +443,6 @@ def render_positions(engine: OrderEngine, data_provider: MarketDataProvider):
         })
     
     st.dataframe(pd.DataFrame(positions_data), use_container_width=True, hide_index=True)
-    
-    df_pie = pd.DataFrame(positions_data)
-    df_pie['市值'] = df_pie['数量'].astype(float) * df_pie['现价'].astype(float)
-    if len(df_pie) > 0 and df_pie['市值'].sum() > 0:
-        fig = px.pie(df_pie, values='市值', names='品种', title='持仓分布', color_discrete_sequence=['#00d2ff', '#00ff88', '#ffaa00'])
-        fig.update_layout(paper_bgcolor="#0a0c10", font_color="#e6e6e6", height=300)
-        st.plotly_chart(fig, use_container_width=True)
 
 # ================== 主程序 ==================
 def main():
@@ -389,11 +457,13 @@ def main():
         st.session_state.data_provider = MarketDataProvider()
     if 'ai_engine' not in st.session_state:
         st.session_state.ai_engine = AIEngine()
+    if 'strategy_loader' not in st.session_state:
+        st.session_state.strategy_loader = StrategyLoader()
     
     engine = st.session_state.order_engine
-    risk_mgr = st.session_state.risk_manager
     data_provider = st.session_state.data_provider
     ai = st.session_state.ai_engine
+    strategy_loader = st.session_state.strategy_loader
     
     # 样式
     st.markdown("""
@@ -404,16 +474,18 @@ def main():
         .stMetric div { color: #00d2ff !important; font-size: 16px !important; }
         h1 { color: #ffffff; text-align: center; font-size: 22px; }
         .caption { text-align: center; color: #8892b0; font-size: 11px; margin-bottom: 20px; }
-        .market-card { background-color: #1a1d24; border-radius: 8px; padding: 10px; text-align: center; border: 1px solid #2a2d34; }
+        .strategy-card { background-color: #1a1d24; border-radius: 8px; padding: 12px; margin: 8px 0; border-left: 3px solid #00d2ff; cursor: pointer; }
+        .strategy-card:hover { background-color: #252a36; }
     </style>
     """, unsafe_allow_html=True)
     
     st.markdown('<h1>📊 量化交易系统 v5.0</h1>', unsafe_allow_html=True)
-    st.markdown('<div class="caption">多类目 · 多策略 · AI自动交易 | AI引擎: DeepSeek</div>', unsafe_allow_html=True)
+    st.markdown('<div class="caption">多类目 · 多策略 · AI自动交易 | 真实策略库接入</div>', unsafe_allow_html=True)
     
     # 导航
     tabs = st.tabs(["🏠 首页", "📈 市场行情", "🎯 策略中心", "🤖 AI交易", "💼 持仓管理", "📊 资金曲线", "⚙️ 系统设置"])
     
+    # ================== 首页 ==================
     with tabs[0]:
         st.markdown("### 📈 市场概览")
         cols = st.columns(4)
@@ -421,7 +493,7 @@ def main():
         for i, sym in enumerate(symbols):
             data = data_provider.get_price(sym)
             with cols[i]:
-                st.markdown(f'<div class="market-card">{sym}<br><span style="font-size:18px;color:#00d2ff">{data.price:.4f}</span></div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="background-color:#1a1d24; border-radius:8px; padding:10px; text-align:center">{sym}<br><span style="font-size:18px;color:#00d2ff">{data.price:.4f}</span></div>', unsafe_allow_html=True)
         
         st.markdown("---")
         total_val = engine.get_total_value()
@@ -429,75 +501,92 @@ def main():
         col1.metric("总资产", f"${total_val:,.0f}")
         col2.metric("总盈亏", f"${engine.get_total_pnl():+,.0f}")
         col3.metric("持仓数", f"{len(engine.positions)}")
-        col4.metric("今日盈亏", f"${risk_mgr.daily_pnl:+,.0f}")
-        
-        st.markdown("---")
-        render_equity_curve(engine, risk_mgr)
-        st.markdown("---")
-        render_positions(engine, data_provider)
+        col4.metric("今日盈亏", f"${st.session_state.risk_manager.daily_pnl:+,.0f}")
     
+    # ================== 市场行情 ==================
     with tabs[1]:
         st.markdown("### 📊 全球市场行情")
         market_data = []
-        for sym in ["EURUSD", "BTC-USD", "GC=F", "CL=F", "AAPL", "NVDA", "MSFT", "GOOGL"]:
+        for sym in ["EURUSD", "BTC-USD", "GC=F", "AUDJPY", "GBPUSD", "AAPL", "NVDA"]:
             data = data_provider.get_price(sym)
-            market_data.append({"品种": sym, "价格": data.price, "涨跌": f"{data.price - data.open:.4f}", "时间": data.timestamp.strftime("%H:%M:%S")})
+            market_data.append({"品种": sym, "价格": data.price, "涨跌": f"{data.price - data.open:.4f}"})
         st.dataframe(pd.DataFrame(market_data), use_container_width=True, hide_index=True)
     
+    # ================== 策略中心 ==================
     with tabs[2]:
         st.markdown("### 🎯 策略库")
-        strategies = [
-            {"名称": "期货趋势策略", "品种": "GC=F", "类型": "趋势跟踪", "状态": "运行中", "收益率": "+8.2%"},
-            {"名称": "期货均值回归", "品种": "CL=F", "类型": "均值回归", "状态": "待机", "收益率": "+2.3%"},
-            {"名称": "外汇利差策略", "品种": "AUDJPY", "类型": "利差交易", "状态": "运行中", "收益率": "+5.1%"},
-            {"名称": "外汇突破策略", "品种": "EURUSD", "类型": "突破交易", "状态": "运行中", "收益率": "+6.7%"},
-            {"名称": "加密双均线", "品种": "BTC-USD", "类型": "趋势跟踪", "状态": "运行中", "收益率": "+12.3%"},
-        ]
+        st.caption("点击「运行」执行策略分析")
+        
+        strategies = strategy_loader.get_strategies()
+        
         for s in strategies:
-            cols = st.columns([2, 1, 1.2, 1, 1])
-            cols[0].write(f"**{s['名称']}**")
-            cols[1].write(s['品种'])
-            cols[2].write(s['类型'])
-            cols[3].write(f"🟢 {s['状态']}" if "运行" in s['状态'] else f"🟡 {s['状态']}")
-            cols[4].write(f"<span style='color:#00ff88'>{s['收益率']}</span>" if "+" in s['收益率'] else s['收益率'], unsafe_allow_html=True)
-            st.markdown("---")
+            with st.container():
+                cols = st.columns([2, 1.5, 1, 1, 1, 1.5])
+                cols[0].write(f"**{s['name']}**")
+                cols[1].write(s['symbol'])
+                cols[2].write(s['category'])
+                cols[3].write("🟢 就绪")
+                
+                # 运行策略按钮
+                if cols[4].button("▶ 运行", key=f"run_{s['name']}"):
+                    # 获取行情
+                    market_data = data_provider.get_price(s['symbol'])
+                    # 运行策略
+                    signal = StrategyRunner.run_strategy(s, market_data)
+                    st.session_state[f"signal_{s['name']}"] = signal
+                    st.success(f"{s['name']} 信号: {signal.upper()}")
+                
+                # 显示信号
+                signal_key = f"signal_{s['name']}"
+                if signal_key in st.session_state:
+                    sig = st.session_state[signal_key]
+                    color = "#00ff88" if sig == "buy" else "#ff4444" if sig == "sell" else "#ffaa00"
+                    cols[5].markdown(f"<span style='color:{color};font-weight:bold'>{sig.upper()}</span>", unsafe_allow_html=True)
+                
+                st.markdown("---")
     
+    # ================== AI交易 ==================
     with tabs[3]:
         st.markdown("### 🤖 AI智能交易")
-        col_a, col_b = st.columns(2)
-        with col_a:
-            symbol = st.selectbox("选择品种", ["EURUSD", "BTC-USD", "GC=F", "AAPL"])
-        with col_b:
-            strategy = st.selectbox("选择策略", ["综合AI分析", "趋势跟踪", "均值回归", "突破交易"])
         
-        current_data = data_provider.get_price(symbol)
-        st.metric("当前价格", f"{current_data.price:.5f}")
+        # 选择策略
+        strategies = strategy_loader.get_strategies()
+        strategy_names = [s["name"] for s in strategies]
+        selected_strategy = st.selectbox("选择策略", strategy_names)
         
-        if st.button("🚀 执行AI分析", type="primary", use_container_width=True):
-            with st.spinner("AI模型分析中..."):
-                market_info = {"price": current_data.price, "high": current_data.high, "low": current_data.low}
-                result = ai.analyze(symbol, current_data.price, market_info)
-                
-                st.success(f"🤖 AI信号: {result['signal'].upper()}")
-                st.info(f"📊 置信度: {result['confidence']}%")
-                st.write(f"📝 分析理由: {result.get('reason', 'AI分析完成')}")
-                
-                if result['signal'] == 'buy':
-                    st.success(f"🎯 目标价: {result.get('target', current_data.price*1.02):.5f} | 止损: {result.get('stop_loss', current_data.price*0.98):.5f}")
-                elif result['signal'] == 'sell':
-                    st.error(f"🎯 目标价: {result.get('target', current_data.price*0.98):.5f} | 止损: {result.get('stop_loss', current_data.price*1.02):.5f}")
-                
-                if st.button("执行交易", key="exec_trade"):
-                    if result['signal'] == 'buy':
-                        order = Order(symbol=symbol, side="buy", price=current_data.price, quantity=1000)
-                        engine.execute_order(order, current_data.price)
-                        st.success("✅ 买入订单已执行")
-                    elif result['signal'] == 'sell':
-                        order = Order(symbol=symbol, side="sell", price=current_data.price, quantity=1000)
-                        engine.execute_order(order, current_data.price)
-                        st.success("✅ 卖出订单已执行")
-                    st.rerun()
+        # 获取选中的策略信息
+        strategy_info = strategy_loader.get_strategy_by_name(selected_strategy)
+        if strategy_info:
+            symbol = strategy_info["symbol"]
+            current_data = data_provider.get_price(symbol)
+            st.metric(f"{symbol} 当前价格", f"{current_data.price:.5f}")
+            
+            if st.button("🚀 执行AI分析", type="primary", use_container_width=True):
+                with st.spinner("运行策略并调用AI分析..."):
+                    # 1. 运行策略获取信号
+                    strategy_signal = StrategyRunner.run_strategy(strategy_info, current_data)
+                    st.info(f"📊 策略信号: {strategy_signal.upper()}")
+                    
+                    # 2. AI仲裁
+                    result = ai.analyze(symbol, current_data.price, selected_strategy, strategy_signal)
+                    
+                    st.success(f"🤖 AI最终决策: {result['final_signal'].upper()}")
+                    st.info(f"📊 置信度: {result['confidence']}%")
+                    st.write(f"📝 理由: {result.get('reason', 'AI分析完成')}")
+                    
+                    # 3. 执行交易
+                    if st.button("执行交易", key="exec_ai_trade"):
+                        if result['final_signal'] == 'buy':
+                            order = Order(symbol=symbol, side="buy", price=current_data.price, quantity=1000)
+                            engine.execute_order(order, current_data.price)
+                            st.success("✅ 买入订单已执行")
+                        elif result['final_signal'] == 'sell':
+                            order = Order(symbol=symbol, side="sell", price=current_data.price, quantity=1000)
+                            engine.execute_order(order, current_data.price)
+                            st.success("✅ 卖出订单已执行")
+                        st.rerun()
     
+    # ================== 持仓管理 ==================
     with tabs[4]:
         render_positions(engine, data_provider)
         st.markdown("---")
@@ -509,41 +598,33 @@ def main():
         else:
             st.info("暂无交易记录")
     
+    # ================== 资金曲线 ==================
     with tabs[5]:
-        render_equity_curve(engine, risk_mgr)
-        st.markdown("### 📅 月度收益")
-        months = ['1月', '2月', '3月', '4月', '5月', '6月']
-        returns = [2.1, 3.5, -1.2, 4.2, 5.1, engine.get_total_pnl()/max(engine.initial_capital,1)*100]
-        colors = ['#00ff88' if r>=0 else '#ff4444' for r in returns]
-        fig = go.Figure(data=go.Bar(x=months, y=returns, marker_color=colors))
-        fig.update_layout(height=300, paper_bgcolor="#0a0c10", plot_bgcolor="#15171a", font_color="#e6e6e6")
+        st.markdown("### 📈 资金曲线")
+        # 简化的资金曲线
+        dates = [datetime.now() - timedelta(days=i) for i in range(30, 0, -1)]
+        assets = [engine.initial_capital + engine.get_total_pnl() * (i/30) for i in range(30)]
+        fig = go.Figure(data=go.Scatter(x=dates, y=assets, mode='lines', line=dict(color='#00d2ff', width=2)))
+        fig.update_layout(height=350, paper_bgcolor="#0a0c10", plot_bgcolor="#15171a", font_color="#e6e6e6")
         st.plotly_chart(fig, use_container_width=True)
         
-        col1, col2, col3, col4 = st.columns(4)
-        total_return = engine.get_total_pnl()/max(engine.initial_capital,1)*100
-        col1.metric("累计收益率", f"{total_return:.1f}%")
-        col2.metric("最大回撤", "-2.3%")
-        col3.metric("夏普比率", "1.42")
-        col4.metric("胜率", "68.5%")
+        col1, col2, col3 = st.columns(3)
+        col1.metric("当前总资产", f"${engine.get_total_value():,.0f}")
+        col2.metric("总盈亏", f"${engine.get_total_pnl():+,.0f}")
+        col3.metric("收益率", f"{engine.get_total_pnl()/max(engine.initial_capital,1)*100:.1f}%")
     
+    # ================== 系统设置 ==================
     with tabs[6]:
         st.markdown("### ⚙️ 系统设置")
         max_pos = st.slider("单笔最大仓位(%)", 5, 50, 30)
-        stop_loss = st.slider("止损(%)", 1, 10, 2)
-        take_profit = st.slider("止盈(%)", 2, 20, 4)
-        data_source = st.selectbox("数据源", ["yfinance (真实)", "模拟数据"], index=0)
-        
-        if st.button("保存设置", type="primary"):
+        if st.button("保存设置"):
             CONFIG["trading"]["max_position_pct"] = max_pos / 100
-            CONFIG["risk"]["stop_loss_pct"] = stop_loss / 100
-            CONFIG["risk"]["take_profit_pct"] = take_profit / 100
             st.success("设置已保存")
         
         st.info(f"""
         - 系统版本: v5.0
         - AI引擎: DeepSeek
-        - 数据源: {data_source}
-        - 策略数量: 12
+        - 策略数量: {len(strategy_loader.get_strategies())}
         - 当前资产: ${engine.get_total_value():,.0f}
         """)
 
