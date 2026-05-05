@@ -14,12 +14,6 @@ import glob
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# ================== 配置 ==================
-CONFIG = {
-    "trading": {"max_position_pct": 0.3, "commission_rate": 0.0005},
-    "risk": {"stop_loss_pct": 0.02, "take_profit_pct": 0.04},
-}
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("QuantSystem")
 
@@ -42,30 +36,45 @@ class Position:
         self.current_price = avg_price
         self.realized_pnl = 0
 
-# ================== 策略加载器（扫描文件夹）=================
+# ================== 策略加载器（扫描所有文件夹和文件）=================
 class StrategyLoader:
     def __init__(self):
         self.strategies = []
-        self._scan_strategy_folder()
+        self._scan_all_strategies()
     
-    def _scan_strategy_folder(self):
-        """扫描策略库文件夹，加载所有策略"""
+    def _scan_all_strategies(self):
+        """扫描策略库下所有文件夹中的所有策略文件"""
         strategy_base_path = "策略库"
         
-        folder_config = {
-            "外汇策略": {"symbol": "EURUSD", "category": "外汇"},
-            "期货策略": {"symbol": "GC=F", "category": "期货"},
-            "加密货币策略": {"symbol": "BTC-USD", "category": "加密货币"},
-            "A股策略": {"symbol": "600519.SS", "category": "A股"},
-            "港股策略": {"symbol": "0700.HK", "category": "港股"},
-            "美股策略": {"symbol": "AAPL", "category": "美股"},
-        }
+        if not os.path.exists(strategy_base_path):
+            logger.warning(f"策略库文件夹不存在: {strategy_base_path}")
+            self._add_demo_strategies()
+            return
         
-        for folder_name, config in folder_config.items():
+        # 获取所有子文件夹
+        for folder_name in os.listdir(strategy_base_path):
             folder_path = os.path.join(strategy_base_path, folder_name)
-            if not os.path.exists(folder_path):
+            if not os.path.isdir(folder_path):
                 continue
             
+            # 提取类别名称
+            category = folder_name.replace("策略", "").replace("_", "")
+            if category == "外汇":
+                default_symbol = "EURUSD"
+            elif category == "期货":
+                default_symbol = "GC=F"
+            elif category == "加密货币":
+                default_symbol = "BTC-USD"
+            elif category == "A股":
+                default_symbol = "600519.SS"
+            elif category == "港股":
+                default_symbol = "0700.HK"
+            elif category == "美股":
+                default_symbol = "AAPL"
+            else:
+                default_symbol = "EURUSD"
+            
+            # 扫描文件夹下的所有.py文件
             for py_file in glob.glob(os.path.join(folder_path, "*.py")):
                 if py_file.endswith("__init__.py"):
                     continue
@@ -74,10 +83,12 @@ class StrategyLoader:
                 strategy_name = file_name.replace(".py", "")
                 
                 try:
+                    # 动态加载模块
                     spec = importlib.util.spec_from_file_location(strategy_name, py_file)
                     module = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(module)
                     
+                    # 查找策略类
                     strategy_class = None
                     for attr_name in dir(module):
                         if attr_name.endswith("Strategy") and attr_name != "BaseStrategy":
@@ -88,22 +99,27 @@ class StrategyLoader:
                         self.strategies.append({
                             "name": strategy_name,
                             "class": strategy_class,
-                            "symbol": config["symbol"],
-                            "category": config["category"],
+                            "symbol": default_symbol,
+                            "category": category,
                             "file": py_file
                         })
-                        logger.info(f"✅ 加载策略: {strategy_name}")
+                        logger.info(f"✅ 加载策略: {strategy_name} ({category})")
                 except Exception as e:
                     logger.warning(f"⚠️ 加载失败 {strategy_name}: {e}")
         
         if not self.strategies:
             self._add_demo_strategies()
+            logger.warning("未找到策略文件，使用演示策略")
     
     def _add_demo_strategies(self):
+        """添加演示策略"""
         self.strategies = [
             {"name": "趋势跟踪策略", "class": None, "symbol": "EURUSD", "category": "外汇", "demo": True},
             {"name": "均值回归策略", "class": None, "symbol": "GC=F", "category": "期货", "demo": True},
             {"name": "双均线策略", "class": None, "symbol": "BTC-USD", "category": "加密货币", "demo": True},
+            {"name": "RSI策略", "class": None, "symbol": "AAPL", "category": "美股", "demo": True},
+            {"name": "布林带策略", "class": None, "symbol": "600519.SS", "category": "A股", "demo": True},
+            {"name": "动量策略", "class": None, "symbol": "0700.HK", "category": "港股", "demo": True},
         ]
     
     def get_strategies(self):
@@ -183,7 +199,6 @@ class OrderEngine:
         else:
             self.positions[symbol] = Position(symbol, qty, price)
         self.trade_log.append({"time": datetime.now(), "action": "买入", "symbol": symbol, "price": price, "qty": qty})
-        self._update_capital()
     
     def sell(self, symbol, price, qty=1000):
         if symbol in self.positions and self.positions[symbol].quantity >= qty:
@@ -194,13 +209,6 @@ class OrderEngine:
             if pos.quantity <= 0:
                 del self.positions[symbol]
             self.trade_log.append({"time": datetime.now(), "action": "卖出", "symbol": symbol, "price": price, "qty": qty, "pnl": pnl})
-            self._update_capital()
-    
-    def _update_capital(self):
-        total = self.initial_capital
-        for pos in self.positions.values():
-            total += pos.realized_pnl
-        self.capital = total
     
     def get_total_value(self):
         total = self.initial_capital
@@ -245,14 +253,15 @@ def main():
     <style>
         .stApp { background-color: #0a0c10; }
         .stMetric { background-color: #1a1d24; border-radius: 8px; padding: 10px; text-align: center; }
-        h1 { color: white; text-align: center; font-size: 24px; }
+        h1 { color: white; text-align: center; font-size: 24px; margin-bottom: 5px; }
+        .caption { text-align: center; color: #8892b0; font-size: 12px; margin-bottom: 20px; }
         .strategy-card { background-color: #1a1d24; border-radius: 8px; padding: 12px; margin: 8px 0; border-left: 3px solid #00d2ff; }
         .category-title { color: #00d2ff; font-size: 18px; margin-top: 20px; margin-bottom: 10px; }
     </style>
     """, unsafe_allow_html=True)
     
     st.markdown('<h1>📊 量化交易系统 v5.0</h1>', unsafe_allow_html=True)
-    st.markdown('<p style="text-align:center;color:#8892b0">多类目 · 多策略 · AI自动交易 | 真实策略库接入</p>', unsafe_allow_html=True)
+    st.markdown('<div class="caption">多类目 · 多策略 · AI自动交易 | 真实策略库接入</div>', unsafe_allow_html=True)
     
     tabs = st.tabs(["首页", "策略中心", "AI交易", "持仓管理", "资金曲线"])
     
@@ -274,6 +283,8 @@ def main():
     with tabs[1]:
         st.markdown("### 🎯 策略库")
         strategies = strategy_loader.get_strategies()
+        
+        # 按类别分组
         categories = {}
         for s in strategies:
             cat = s["category"]
@@ -281,8 +292,11 @@ def main():
                 categories[cat] = []
             categories[cat].append(s)
         
+        # 显示策略数量
+        st.caption(f"共加载 {len(strategies)} 个策略")
+        
         for cat, cat_strategies in categories.items():
-            st.markdown(f'<div class="category-title">📁 {cat}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="category-title">📁 {cat} ({len(cat_strategies)})</div>', unsafe_allow_html=True)
             for s in cat_strategies:
                 col1, col2, col3, col4, col5 = st.columns([2, 1.5, 1, 1, 1.5])
                 col1.write(f"**{s['name']}**")
