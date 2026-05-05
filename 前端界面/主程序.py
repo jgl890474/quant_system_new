@@ -36,51 +36,70 @@ class Position:
         self.current_price = avg_price
         self.realized_pnl = 0
 
-# ================== 策略加载器（扫描所有文件夹和文件）=================
+# ================== 策略加载器（完整扫描）=================
 class StrategyLoader:
     def __init__(self):
         self.strategies = []
         self._scan_all_strategies()
     
     def _scan_all_strategies(self):
-        """扫描策略库下所有文件夹中的所有策略文件"""
+        """完整扫描策略库下所有策略文件"""
         strategy_base_path = "策略库"
         
         if not os.path.exists(strategy_base_path):
-            logger.warning(f"策略库文件夹不存在: {strategy_base_path}")
+            logger.warning(f"策略库不存在: {strategy_base_path}")
             self._add_demo_strategies()
             return
         
-        # 获取所有子文件夹
+        # 遍历所有子文件夹
         for folder_name in os.listdir(strategy_base_path):
             folder_path = os.path.join(strategy_base_path, folder_name)
             if not os.path.isdir(folder_path):
                 continue
             
-            # 提取类别名称
-            category = folder_name.replace("策略", "").replace("_", "")
-            if category == "外汇":
-                default_symbol = "EURUSD"
-            elif category == "期货":
-                default_symbol = "GC=F"
-            elif category == "加密货币":
-                default_symbol = "BTC-USD"
-            elif category == "A股":
-                default_symbol = "600519.SS"
-            elif category == "港股":
-                default_symbol = "0700.HK"
-            elif category == "美股":
-                default_symbol = "AAPL"
-            else:
-                default_symbol = "EURUSD"
+            # 类别映射
+            category_map = {
+                "外汇策略": "外汇", "外汇": "外汇",
+                "期货策略": "期货", "期货": "期货",
+                "加密货币策略": "加密货币", "加密货币": "加密货币",
+                "A股策略": "A股", "A股": "A股",
+                "港股策略": "港股", "港股": "港股",
+                "美股策略": "美股", "美股": "美股",
+            }
+            category = category_map.get(folder_name, folder_name)
             
-            # 扫描文件夹下的所有.py文件
-            for py_file in glob.glob(os.path.join(folder_path, "*.py")):
-                if py_file.endswith("__init__.py"):
+            # 符号映射
+            symbol_map = {
+                "外汇": "EURUSD",
+                "期货": "GC=F",
+                "加密货币": "BTC-USD",
+                "A股": "000001.SS",
+                "港股": "00700.HK",
+                "美股": "AAPL",
+            }
+            default_symbol = symbol_map.get(category, "EURUSD")
+            
+            # 扫描文件夹下所有.py文件
+            py_files = glob.glob(os.path.join(folder_path, "*.py"))
+            logger.info(f"扫描 {folder_name}: 找到 {len(py_files)} 个py文件")
+            
+            for py_file in py_files:
+                file_name = os.path.basename(py_file)
+                if file_name == "__init__.py":
                     continue
                 
-                file_name = os.path.basename(py_file)
                 strategy_name = file_name.replace(".py", "")
+                
+                # 尝试从文件名提取有用的类名
+                # 策略类名通常是驼峰命名，如 "ForexCarryStrategy"
+                possible_class_names = [
+                    strategy_name,
+                    strategy_name.replace("策略", "Strategy"),
+                    strategy_name + "Strategy",
+                ]
+                
+                strategy_class = None
+                module = None
                 
                 try:
                     # 动态加载模块
@@ -89,11 +108,22 @@ class StrategyLoader:
                     spec.loader.exec_module(module)
                     
                     # 查找策略类
-                    strategy_class = None
                     for attr_name in dir(module):
                         if attr_name.endswith("Strategy") and attr_name != "BaseStrategy":
                             strategy_class = getattr(module, attr_name)
+                            logger.info(f"找到策略类: {attr_name}")
                             break
+                    
+                    # 如果没找到Strategy结尾的，找任何类（排除基类和内置类）
+                    if not strategy_class:
+                        for attr_name in dir(module):
+                            attr = getattr(module, attr_name)
+                            if (isinstance(attr, type) and 
+                                attr_name not in ["BaseStrategy", "object"] and
+                                not attr_name.startswith("_")):
+                                strategy_class = attr
+                                logger.info(f"使用类: {attr_name}")
+                                break
                     
                     if strategy_class:
                         self.strategies.append({
@@ -103,7 +133,10 @@ class StrategyLoader:
                             "category": category,
                             "file": py_file
                         })
-                        logger.info(f"✅ 加载策略: {strategy_name} ({category})")
+                        logger.info(f"✅ 加载策略: {strategy_name} [{category}]")
+                    else:
+                        logger.warning(f"⚠️ 未找到策略类: {strategy_name}")
+                        
                 except Exception as e:
                     logger.warning(f"⚠️ 加载失败 {strategy_name}: {e}")
         
@@ -118,8 +151,8 @@ class StrategyLoader:
             {"name": "均值回归策略", "class": None, "symbol": "GC=F", "category": "期货", "demo": True},
             {"name": "双均线策略", "class": None, "symbol": "BTC-USD", "category": "加密货币", "demo": True},
             {"name": "RSI策略", "class": None, "symbol": "AAPL", "category": "美股", "demo": True},
-            {"name": "布林带策略", "class": None, "symbol": "600519.SS", "category": "A股", "demo": True},
-            {"name": "动量策略", "class": None, "symbol": "0700.HK", "category": "港股", "demo": True},
+            {"name": "布林带策略", "class": None, "symbol": "000001.SS", "category": "A股", "demo": True},
+            {"name": "动量策略", "class": None, "symbol": "00700.HK", "category": "港股", "demo": True},
         ]
     
     def get_strategies(self):
@@ -229,7 +262,7 @@ def get_price(symbol):
             return MarketData(symbol, kline.get('close', 1.085), kline.get('high', 1.085), kline.get('low', 1.085), kline.get('open', 1.085), kline.get('volume', 0))
     except:
         pass
-    base = {"EURUSD": 1.085, "BTC-USD": 45000, "GC=F": 1950, "AUDJPY": 90, "GBPUSD": 1.25, "600519.SS": 1500, "0700.HK": 350, "AAPL": 175}.get(symbol, 100)
+    base = {"EURUSD": 1.085, "BTC-USD": 45000, "GC=F": 1950, "AUDJPY": 90, "GBPUSD": 1.25, "000001.SS": 3000, "00700.HK": 350, "AAPL": 175}.get(symbol, 100)
     return MarketData(symbol, base * (1 + random.uniform(-0.005, 0.005)), base * 1.003, base * 0.997, base, 1000)
 
 # ================== 主程序 ==================
@@ -249,19 +282,27 @@ def main():
     strategy_loader = st.session_state.strategy_loader
     ai_engine = st.session_state.ai_engine
     
+    strategies = strategy_loader.get_strategies()
+    
     st.markdown("""
     <style>
         .stApp { background-color: #0a0c10; }
         .stMetric { background-color: #1a1d24; border-radius: 8px; padding: 10px; text-align: center; }
-        h1 { color: white; text-align: center; font-size: 24px; margin-bottom: 5px; }
+        h1 { color: white; text-align: center; font-size: 24px; }
         .caption { text-align: center; color: #8892b0; font-size: 12px; margin-bottom: 20px; }
         .strategy-card { background-color: #1a1d24; border-radius: 8px; padding: 12px; margin: 8px 0; border-left: 3px solid #00d2ff; }
         .category-title { color: #00d2ff; font-size: 18px; margin-top: 20px; margin-bottom: 10px; }
+        .log-area { background-color: #1a1d24; border-radius: 8px; padding: 10px; font-family: monospace; font-size: 11px; height: 200px; overflow-y: auto; }
     </style>
     """, unsafe_allow_html=True)
     
     st.markdown('<h1>📊 量化交易系统 v5.0</h1>', unsafe_allow_html=True)
     st.markdown('<div class="caption">多类目 · 多策略 · AI自动交易 | 真实策略库接入</div>', unsafe_allow_html=True)
+    
+    # 显示加载日志
+    with st.expander(f"📁 策略加载日志 (共{len(strategies)}个策略)"):
+        for s in strategies:
+            st.write(f"✅ {s['category']}/{s['name']} -> {s['symbol']}")
     
     tabs = st.tabs(["首页", "策略中心", "AI交易", "持仓管理", "资金曲线"])
     
@@ -282,18 +323,14 @@ def main():
     
     with tabs[1]:
         st.markdown("### 🎯 策略库")
-        strategies = strategy_loader.get_strategies()
+        st.caption(f"共加载 {len(strategies)} 个策略")
         
-        # 按类别分组
         categories = {}
         for s in strategies:
             cat = s["category"]
             if cat not in categories:
                 categories[cat] = []
             categories[cat].append(s)
-        
-        # 显示策略数量
-        st.caption(f"共加载 {len(strategies)} 个策略")
         
         for cat, cat_strategies in categories.items():
             st.markdown(f'<div class="category-title">📁 {cat} ({len(cat_strategies)})</div>', unsafe_allow_html=True)
@@ -315,7 +352,6 @@ def main():
     
     with tabs[2]:
         st.markdown("### 🤖 AI智能交易")
-        strategies = strategy_loader.get_strategies()
         strategy_names = [s["name"] for s in strategies]
         if strategy_names:
             selected = st.selectbox("选择策略", strategy_names)
