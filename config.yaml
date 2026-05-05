@@ -1,1 +1,14 @@
+trading:
+  max_position_pct: 0.3
+  commission_rate: 0.0005
+  default_slippage: 0.0001
 
+risk:
+  stop_loss_pct: 0.02
+  take_profit_pct: 0.04
+  max_daily_loss: 0.05
+
+ui:
+  theme: dark
+  refresh_interval: 60
+  chart_height: 350
