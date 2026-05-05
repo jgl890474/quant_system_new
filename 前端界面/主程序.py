@@ -3,51 +3,46 @@ import time
 import random
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import datetime
+from datetime import datetime, timedelta
 
 st.set_page_config(page_title="量化交易系统", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
 <style>
     .stApp { background-color: #0a0c10; }
-    .stMetric { background-color: #1a1d24; border-radius: 8px; padding: 8px 10px; text-align: center; border: 1px solid #2a2d34; }
+    .stMetric { background-color: #1a1d24; border-radius: 8px; padding: 8px 10px; text-align: center; border: 1px solid #2a2d34; cursor: pointer; transition: all 0.2s; }
+    .stMetric:hover { border-color: #00d2ff; background-color: #252a36; }
     .stMetric label { color: #8892b0 !important; font-size: 11px !important; font-weight: normal; }
     .stMetric div { color: #00d2ff !important; font-size: 16px !important; font-weight: 500; }
-    .stMetric .delta { font-size: 10px !important; }
-    h1 { color: #ffffff; text-align: center; font-size: 18px; margin: 5px 0; font-weight: normal; letter-spacing: 1px; }
+    h1 { color: #ffffff; text-align: center; font-size: 18px; margin: 5px 0; font-weight: normal; }
     .caption { text-align: center; color: #8892b0; font-size: 10px; margin-bottom: 15px; }
     .market-card { background-color: #1a1d24; border-radius: 8px; padding: 8px; text-align: center; border: 1px solid #2a2d34; }
     .market-card span:first-child { font-size: 11px; color: #8892b0; }
     .market-card .price { font-size: 14px; color: #00d2ff; font-weight: 500; }
-    .market-card .change { font-size: 10px; }
     .strategy-item { background-color: #1a1d24; border-radius: 6px; padding: 6px 10px; margin: 4px 0; display: flex; justify-content: space-between; align-items: center; border-left: 2px solid #00d2ff; }
     .strategy-name { color: #e6e6e6; font-size: 12px; }
     .strategy-pnl { font-size: 12px; font-weight: 500; }
     .positive { color: #00ff88; }
     .neutral { color: #ffaa00; }
     hr { border-color: #2a2d34; margin: 10px 0; }
-    .nav-btn { background-color: transparent; border: none; color: #8892b0; padding: 4px 0; font-size: 11px; text-align: center; }
     .footer { text-align: center; color: #8892b0; font-size: 9px; margin-top: 15px; padding-top: 10px; border-top: 1px solid #2a2d34; }
     .stButton button { background-color: #1a1d24; color: #8892b0; border: 1px solid #2a2d34; border-radius: 6px; padding: 4px 8px; font-size: 11px; }
     .stButton button:hover { background-color: #2a2d34; color: #00d2ff; border-color: #00d2ff; }
-    .detail-popup { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: #1e1e2e; border-radius: 12px; padding: 20px; border: 1px solid #00d2ff; z-index: 1000; width: 320px; }
+    .detail-popup { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: #1e1e2e; border-radius: 12px; padding: 20px; border: 1px solid #00d2ff; z-index: 1000; width: 500px; max-height: 80vh; overflow-y: auto; }
     .detail-popup h4 { color: #00d2ff; margin-bottom: 12px; font-size: 14px; }
     .detail-popup p { margin: 6px 0; font-size: 12px; }
     .close-btn { background-color: #00d2ff; color: #000; border: none; padding: 6px 16px; border-radius: 16px; cursor: pointer; margin-top: 12px; width: 100%; font-size: 12px; }
     .overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.7); z-index: 999; }
-    .stSelectbox label { font-size: 11px; color: #8892b0; }
-    .stSelectbox div { font-size: 12px; }
-    .stDataFrame { font-size: 11px; }
 </style>
 """, unsafe_allow_html=True)
 
 # ================== 初始化 ==================
 if 'page' not in st.session_state:
     st.session_state.page = "首页"
-if 'show_strategy_detail' not in st.session_state:
-    st.session_state.show_strategy_detail = False
-if 'selected_strategy' not in st.session_state:
-    st.session_state.selected_strategy = None
+if 'show_popup' not in st.session_state:
+    st.session_state.show_popup = False
+if 'popup_type' not in st.session_state:
+    st.session_state.popup_type = None
 
 def get_price(symbol):
     try:
@@ -61,11 +56,81 @@ eurusd = get_price("EURUSD")
 btc = get_price("BTC-USD")
 gold = get_price("GC=F")
 
-# ================== 标题（最顶上，小字）==================
+# 生成模拟收益数据
+def generate_curve_data():
+    days = list(range(1, 31))
+    values = [100000 + i * 500 + random.randint(-200, 500) for i in range(30)]
+    return days, values
+
+def generate_monthly_data():
+    months = ['1月', '2月', '3月', '4月', '5月', '6月']
+    returns = [2.1, 3.5, -1.2, 4.2, 5.1, 3.2]
+    return months, returns
+
+def generate_holdings_data():
+    return [
+        {"品种": "EURUSD", "数量": 10000, "现价": eurusd, "盈亏": f"${(eurusd-1.085)*10000:.0f}"},
+        {"品种": "BTC", "数量": 0.05, "现价": btc, "盈亏": f"${(btc-45000)*0.05:.0f}"},
+        {"品种": "黄金", "数量": 1, "现价": gold, "盈亏": f"${gold-1950:.0f}"},
+    ]
+
+# ================== 弹窗组件 ==================
+def show_popup():
+    if st.session_state.show_popup and st.session_state.popup_type:
+        st.markdown('<div class="overlay"></div>', unsafe_allow_html=True)
+        with st.container():
+            st.markdown('<div class="detail-popup">', unsafe_allow_html=True)
+            
+            if st.session_state.popup_type == "asset":
+                st.markdown("<h4>💰 总资产收益曲线</h4>", unsafe_allow_html=True)
+                days, values = generate_curve_data()
+                fig = go.Figure(data=go.Scatter(x=days, y=values, mode='lines+markers', line=dict(color='#00d2ff', width=2)))
+                fig.update_layout(height=300, paper_bgcolor="#1e1e2e", plot_bgcolor="#1a1d24", font_color="#e6e6e6", margin=dict(l=0, r=0, t=20, b=0))
+                st.plotly_chart(fig, use_container_width=True)
+                st.markdown("**策略收益汇总**")
+                st.write("期货趋势: +$2,140")
+                st.write("外汇利差: +$1,280")
+                st.write("加密双均线: +$3,450")
+            
+            elif st.session_state.popup_type == "daily":
+                st.markdown("<h4>📈 今日收益明细</h4>", unsafe_allow_html=True)
+                days, values = generate_curve_data()
+                fig = go.Figure(data=go.Bar(x=days[-7:], y=values[-7:], marker_color='#00d2ff'))
+                fig.update_layout(height=250, paper_bgcolor="#1e1e2e", plot_bgcolor="#1a1d24", font_color="#e6e6e6", margin=dict(l=0, r=0, t=20, b=0))
+                st.plotly_chart(fig, use_container_width=True)
+                st.markdown("**今日交易明细**")
+                st.write("buy EURUSD @ 1.0850 → +$85")
+                st.write("sell BTC @ 45000 → +$120")
+            
+            elif st.session_state.popup_type == "position":
+                st.markdown("<h4>📊 当前持仓详情</h4>", unsafe_allow_html=True)
+                holdings = generate_holdings_data()
+                st.dataframe(pd.DataFrame(holdings), use_container_width=True, hide_index=True)
+                fig = go.Figure(data=go.Pie(labels=['EURUSD', 'BTC', '黄金'], values=[45, 30, 25], marker_colors=['#00d2ff', '#00ff88', '#ffaa00']))
+                fig.update_layout(height=250, paper_bgcolor="#1e1e2e", font_color="#e6e6e6")
+                st.plotly_chart(fig, use_container_width=True)
+            
+            elif st.session_state.popup_type == "monthly":
+                st.markdown("<h4>📅 月度收益汇总</h4>", unsafe_allow_html=True)
+                months, returns = generate_monthly_data()
+                fig = go.Figure(data=go.Bar(x=months, y=returns, marker_color=['#00ff88' if r>0 else '#ff4444' for r in returns]))
+                fig.update_layout(height=300, paper_bgcolor="#1e1e2e", plot_bgcolor="#1a1d24", font_color="#e6e6e6", margin=dict(l=0, r=0, t=20, b=0))
+                st.plotly_chart(fig, use_container_width=True)
+                st.markdown("**各月策略表现**")
+                for m, r in zip(months, returns):
+                    st.write(f"{m}: {r}%")
+            
+            if st.button("关闭", key="close_popup", use_container_width=True):
+                st.session_state.show_popup = False
+                st.session_state.popup_type = None
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+
+# ================== 标题 ==================
 st.markdown('<h1>📊 量化交易系统 v5.0</h1>', unsafe_allow_html=True)
 st.markdown('<div class="caption">多类目 · 多策略 · AI自动交易</div>', unsafe_allow_html=True)
 
-# ================== 导航栏（缩小）==================
+# ================== 导航栏 ==================
 nav_cols = st.columns(6)
 nav_items = ["首页", "市场行情", "策略中心", "AI交易", "持仓管理", "关于"]
 for i, item in enumerate(nav_items):
@@ -76,16 +141,46 @@ for i, item in enumerate(nav_items):
 
 st.markdown("---")
 
-# ================== 顶部指标（缩小）==================
+# ================== 顶部指标（点击弹窗）==================
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("总资产", "$108.4k", delta="+8.4%")
-col2.metric("今日收益", "+$2.1k", delta="+2.1%")
-col3.metric("持仓", "4", delta="0")
-col4.metric("月收益", "+12.5%", delta="+3.2%")
+
+with col1:
+    with st.container():
+        st.markdown('<div class="stMetric">', unsafe_allow_html=True)
+        st.metric("总资产", "$108.4k", delta="+8.4%")
+        st.markdown('</div>', unsafe_allow_html=True)
+        if st.button("查看详情", key="asset_btn", use_container_width=True):
+            st.session_state.show_popup = True
+            st.session_state.popup_type = "asset"
+            st.rerun()
+
+with col2:
+    st.metric("今日收益", "+$2.1k", delta="+2.1%")
+    if st.button("查看详情", key="daily_btn", use_container_width=True):
+        st.session_state.show_popup = True
+        st.session_state.popup_type = "daily"
+        st.rerun()
+
+with col3:
+    st.metric("持仓", "4", delta="0")
+    if st.button("查看详情", key="position_btn", use_container_width=True):
+        st.session_state.show_popup = True
+        st.session_state.popup_type = "position"
+        st.rerun()
+
+with col4:
+    st.metric("月收益", "+12.5%", delta="+3.2%")
+    if st.button("查看详情", key="monthly_btn", use_container_width=True):
+        st.session_state.show_popup = True
+        st.session_state.popup_type = "monthly"
+        st.rerun()
 
 st.markdown("---")
 
-# ================== 首页 ==================
+# ================== 显示弹窗 ==================
+show_popup()
+
+# ================== 首页内容 ==================
 if st.session_state.page == "首页":
     st.markdown("### 🔔 行情")
     row1 = st.columns(4)
@@ -136,105 +231,46 @@ if st.session_state.page == "首页":
     
     # 策略状态
     st.markdown("### 📋 策略")
-    st.caption("点击「详情」查看")
-    
     strategies = [
-        ("期货趋势", "+8.2%", "positive", "GC=F", "趋势跟踪", "运行中"),
-        ("外汇利差", "+5.1%", "positive", "AUDJPY", "利差交易", "运行中"),
-        ("期货均值", "+2.3%", "neutral", "CL=F", "均值回归", "待机"),
-        ("外汇突破", "+6.7%", "positive", "EURUSD", "突破交易", "运行中"),
-        ("加密双均线", "+12.3%", "positive", "BTC-USD", "双均线", "运行中"),
+        ("期货趋势", "+8.2%", "positive"),
+        ("外汇利差", "+5.1%", "positive"),
+        ("期货均值", "+2.3%", "neutral"),
+        ("外汇突破", "+6.7%", "positive"),
+        ("加密双均线", "+12.3%", "positive"),
     ]
-    
-    for name, pnl, cls, symbol, stype, status in strategies:
-        col1, col2, col3 = st.columns([3, 1, 1])
+    for name, pnl, cls in strategies:
+        col1, col2 = st.columns([3, 1])
         with col1:
             st.markdown(f'<div class="strategy-item"><span class="strategy-name">🟢 {name}</span></div>', unsafe_allow_html=True)
         with col2:
             st.markdown(f'<span class="strategy-pnl {cls}">{pnl}</span>', unsafe_allow_html=True)
-        with col3:
-            if st.button(f"详情", key=f"detail_{name}", use_container_width=True):
-                st.session_state.show_strategy_detail = True
-                st.session_state.selected_strategy = {"name": name, "pnl": pnl, "symbol": symbol, "type": stype, "status": status}
-                st.rerun()
 
-# ================== 市场行情 ==================
+# ================== 其他页面（简化）==================
 elif st.session_state.page == "市场行情":
     st.markdown("### 📊 行情")
-    market_data = pd.DataFrame([
-        {"品种": "EUR/USD", "价格": f"{eurusd:.5f}", "涨跌": f"{eurusd-1.085:.4f}"},
-        {"品种": "BTC/USD", "价格": f"${btc:,.0f}", "涨跌": f"${btc-45000:,.0f}"},
-        {"品种": "黄金", "价格": f"${gold:.0f}", "涨跌": f"${gold-1950:.0f}"},
-        {"品种": "WTI原油", "价格": "$78.50", "涨跌": "+$1.20"},
-        {"品种": "美元指数", "价格": "104.50", "涨跌": "+0.30"},
-    ])
-    st.dataframe(market_data, use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame([
+        {"品种": "EUR/USD", "价格": f"{eurusd:.5f}"},
+        {"品种": "BTC/USD", "价格": f"${btc:,.0f}"},
+        {"品种": "黄金", "价格": f"${gold:.0f}"},
+    ]), use_container_width=True)
 
-# ================== 策略中心 ==================
 elif st.session_state.page == "策略中心":
     st.markdown("### 🎯 策略库")
-    strategies_detail = [
-        {"名称": "期货趋势", "品种": "GC=F", "收益率": "+8.2%", "夏普": "1.42"},
-        {"名称": "期货均值", "品种": "CL=F", "收益率": "+2.3%", "夏普": "0.95"},
-        {"名称": "外汇利差", "品种": "AUDJPY", "收益率": "+5.1%", "夏普": "1.21"},
-        {"名称": "外汇突破", "品种": "EURUSD", "收益率": "+6.7%", "夏普": "1.35"},
-        {"名称": "加密双均线", "品种": "BTC-USD", "收益率": "+12.3%", "夏普": "1.68"},
-    ]
-    for s in strategies_detail:
-        col_a, col_b, col_c, col_d = st.columns([2, 1, 1, 1])
-        with col_a:
-            st.write(s['名称'])
-        with col_b:
-            st.write(s['品种'])
-        with col_c:
-            st.write(f"🟢 {s['收益率']}")
-        with col_d:
-            st.write(s['夏普'])
-        st.markdown("---")
+    for name, pnl in [("期货趋势", "+8.2%"), ("外汇利差", "+5.1%"), ("期货均值", "+2.3%")]:
+        st.write(f"{name}: {pnl}")
 
-# ================== AI交易 ==================
 elif st.session_state.page == "AI交易":
     st.markdown("### 🤖 AI交易")
-    symbol = st.selectbox("品种", ["EUR/USD", "BTC/USD", "黄金"])
-    if st.button("执行AI分析", use_container_width=True):
-        with st.spinner("分析中"):
-            time.sleep(1)
+    if st.button("执行AI分析"):
         st.success("信号: 买入")
-        st.info("置信度: 87%")
 
-# ================== 持仓管理 ==================
 elif st.session_state.page == "持仓管理":
     st.markdown("### 💼 持仓")
-    holdings = pd.DataFrame([
-        {"代码": "EURUSD", "数量": 10000, "盈亏": f"${(eurusd-1.085)*10000:.0f}"},
-        {"代码": "BTC", "数量": 0.05, "盈亏": f"${(btc-45000)*0.05:.0f}"},
-        {"代码": "黄金", "数量": 1, "盈亏": f"${gold-1950:.0f}"},
-    ])
-    st.dataframe(holdings, use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(generate_holdings_data()), use_container_width=True)
 
-# ================== 关于 ==================
 elif st.session_state.page == "关于":
     st.markdown("### 📖 关于")
-    st.markdown("量化系统 v5.0 | Streamlit + DeepSeek | GitHub: jgl890474")
-
-# ================== 策略详情弹窗 ==================
-if st.session_state.show_strategy_detail and st.session_state.selected_strategy:
-    s = st.session_state.selected_strategy
-    st.markdown(f"""
-    <div class="overlay"></div>
-    <div class="detail-popup">
-        <h4>{s['name']}</h4>
-        <p><strong>品种:</strong> {s.get('symbol', '-')}</p>
-        <p><strong>类型:</strong> {s.get('type', '-')}</p>
-        <p><strong>状态:</strong> {s.get('status', '-')}</p>
-        <p><strong>收益:</strong> {s.get('pnl', '-')}</p>
-        <p><strong>回撤:</strong> -2.1%</p>
-        <button class="close-btn" onclick="location.reload()">关闭</button>
-    </div>
-    """, unsafe_allow_html=True)
-    if st.button("关闭", key="close_popup"):
-        st.session_state.show_strategy_detail = False
-        st.rerun()
+    st.markdown("量化系统 v5.0 | Streamlit + DeepSeek")
 
 # ================== 底部 ==================
 st.markdown("---")
