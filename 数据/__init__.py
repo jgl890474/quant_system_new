@@ -1,1 +1,2 @@
-# Êý¾ÝÄ£¿é
+# -*- coding: utf-8 -*-
+# Data module
