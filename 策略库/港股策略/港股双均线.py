@@ -1,0 +1,29 @@
+# -*- coding: utf-8 -*-
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from 策略库.策略基类 import BaseStrategy
+
+class HKStockDualMAStrategy(BaseStrategy):
+    """港股双均线策略"""
+    
+    def __init__(self, name, symbol, initial_capital, short=5, long=20):
+        super().__init__(name, symbol, initial_capital)
+        self.short = short
+        self.long = long
+        self.prices = []
+        
+    def on_data(self, kline):
+        self.prices.append(kline['close'])
+        
+        if len(self.prices) < self.long:
+            return 'hold'
+        
+        short_ma = sum(self.prices[-self.short:]) / self.short
+        long_ma = sum(self.prices[-self.long:]) / self.long
+        
+        if short_ma > long_ma:
+            return 'buy'
+        elif short_ma < long_ma:
+            return 'sell'
+        return 'hold'
