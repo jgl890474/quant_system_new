@@ -7,6 +7,7 @@ import plotly.express as px
 from datetime import datetime, timedelta
 import logging
 import requests
+import json
 from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass, field
 from enum import Enum
@@ -35,7 +36,7 @@ CONFIG = {
         "retry_times": 3,
         "timeout": 10,
         "cache_ttl": 60,
-        "deepseek_key": ""  # 从环境变量读取
+        "deepseek_key": ""
     },
     "ui": {
         "refresh_interval": 60,
@@ -110,12 +111,10 @@ class AIEngine:
         self.api_key = st.secrets.get("DEEPSEEK_API_KEY", "")
         
     def analyze(self, symbol: str, price: float, market_data: Dict) -> Dict:
-        """调用AI分析市场"""
         if not self.api_key:
             return self._mock_analysis(symbol, price)
         
-        prompt = f"""分析{symbol}，当前价格{price}，技术指标{market_data}。输出json格式: 
-        {{"signal":"buy/sell/hold", "confidence":0-100, "reason":"原因", "target":目标价, "stop_loss":止损价}}"""
+        prompt = f"""分析{symbol}，当前价格{price}。输出json: {{"signal":"buy/sell/hold","confidence":0-100,"reason":"原因","target":目标价,"stop_loss":止损价}}"""
         
         try:
             resp = requests.post(
@@ -131,7 +130,6 @@ class AIEngine:
             )
             if resp.status_code == 200:
                 content = resp.json()["choices"][0]["message"]["content"]
-                import json
                 try:
                     return json.loads(content)
                 except:
@@ -142,7 +140,6 @@ class AIEngine:
         return self._mock_analysis(symbol, price)
     
     def _mock_analysis(self, symbol: str, price: float) -> Dict:
-        """模拟分析（降级用）"""
         import random
         signals = ["buy", "sell", "hold"]
         signal = random.choice(signals)
@@ -175,14 +172,14 @@ class RiskManager:
     def __init__(self):
         self.daily_pnl = 0
         self.daily_trades = 0
-        self.pnl_history = []  # 收益历史
-        self.asset_history = []  # 资产历史
+        self.pnl_history = []
+        self.asset_history = []
         
     def can_trade(self, symbol: str, side: str, quantity: float, price: float, total_capital: float) -> Tuple[bool, str]:
         position_value = quantity * price
-        if position_value / total_capital > CONFIG["trading"]["max_position_pct"]:
+        if total_capital > 0 and position_value / total_capital > CONFIG["trading"]["max_position_pct"]:
             return False, f"仓位超限"
-        if self.daily_pnl < -total_capital * CONFIG["risk"]["max_daily_loss"]:
+        if total_capital > 0 and self.daily_pnl < -total_capital * CONFIG["risk"]["max_daily_loss"]:
             return False, f"日亏损已达上限"
         return True, "通过"
     
@@ -197,8 +194,8 @@ class OrderEngine:
         self.orders: List[Order] = []
         self.positions: Dict[str, Position] = {}
         self.trade_log: List[Dict] = []
-        self.initial_capital = 100000
-        self.current_capital = 100000
+        self.initial_capital = 100000.0
+        self.current_capital = 100000.0
     
     def execute_order(self, order: Order, current_price: float) -> Tuple[bool, str]:
         try:
@@ -266,13 +263,13 @@ class OrderEngine:
         total = self.initial_capital
         for pos in self.positions.values():
             total += pos.quantity * (pos.current_price - pos.avg_price) + pos.realized_pnl
-        self.current_capital = total
+        self.current_capital = max(total, 0)
     
     def get_total_value(self) -> float:
         total = self.initial_capital
         for pos in self.positions.values():
             total += pos.quantity * (pos.current_price - pos.avg_price) + pos.realized_pnl
-        return total
+        return max(total, 0)
     
     def get_total_pnl(self) -> float:
         return self.get_total_value() - self.initial_capital
@@ -325,19 +322,16 @@ class MarketDataProvider:
 
 # ================== 收益曲线 ==================
 def render_equity_curve(engine: OrderEngine, risk_mgr: RiskManager):
-    """渲染收益曲线"""
     st.markdown("### 📈 收益曲线")
     
-    # 生成资产历史数据
     dates = []
     assets = []
     for i in range(30):
         date = datetime.now() - timedelta(days=29-i)
         dates.append(date)
-        # 基于实际盈亏生成资产曲线
         base = engine.initial_capital
         pnl_effect = engine.get_total_pnl() * (i / 30)
-        assets.append(base + pnl_effect + random.uniform(-500, 500))
+        assets.append(max(base + pnl_effect + random.uniform(-500, 500), 0))
     
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=dates, y=assets, mode='lines', name='资产曲线', line=dict(color='#00d2ff', width=2)))
@@ -345,22 +339,19 @@ def render_equity_curve(engine: OrderEngine, risk_mgr: RiskManager):
     fig.update_layout(height=300, paper_bgcolor="#0a0c10", plot_bgcolor="#15171a", font_color="#e6e6e6", margin=dict(l=0, r=0, t=20, b=0))
     st.plotly_chart(fig, use_container_width=True)
     
-    # 盈亏分布
     col1, col2, col3 = st.columns(3)
     col1.metric("当前总资产", f"${engine.get_total_value():,.0f}")
     col2.metric("总盈亏", f"${engine.get_total_pnl():+,.0f}")
-    col3.metric("收益率", f"{engine.get_total_pnl()/engine.initial_capital*100:.1f}%")
+    col3.metric("收益率", f"{engine.get_total_pnl()/max(engine.initial_capital,1)*100:.1f}%")
 
 # ================== 持仓实时数据 ==================
 def render_positions(engine: OrderEngine, data_provider: MarketDataProvider):
-    """渲染持仓实时数据"""
     st.markdown("### 💼 持仓实时数据")
     
     if not engine.positions:
         st.info("暂无持仓")
         return
     
-    # 更新实时价格
     positions_data = []
     for symbol, pos in engine.positions.items():
         current_data = data_provider.get_price(symbol)
@@ -373,18 +364,17 @@ def render_positions(engine: OrderEngine, data_provider: MarketDataProvider):
             "成本价": f"{pos.avg_price:.4f}",
             "现价": f"{pos.current_price:.4f}",
             "浮动盈亏": f"{pos.unrealized_pnl:+,.2f}",
-            "盈亏%": f"{pos.unrealized_pnl/(pos.avg_price*pos.quantity)*100:.1f}%"
+            "盈亏%": f"{pos.unrealized_pnl/(max(pos.avg_price*pos.quantity,0.01))*100:.1f}%"
         })
     
     st.dataframe(pd.DataFrame(positions_data), use_container_width=True, hide_index=True)
     
-    # 持仓饼图
-    import plotly.express as px
     df_pie = pd.DataFrame(positions_data)
     df_pie['市值'] = df_pie['数量'].astype(float) * df_pie['现价'].astype(float)
-    fig = px.pie(df_pie, values='市值', names='品种', title='持仓分布', color_discrete_sequence=['#00d2ff', '#00ff88', '#ffaa00'])
-    fig.update_layout(paper_bgcolor="#0a0c10", font_color="#e6e6e6", height=300)
-    st.plotly_chart(fig, use_container_width=True)
+    if len(df_pie) > 0 and df_pie['市值'].sum() > 0:
+        fig = px.pie(df_pie, values='市值', names='品种', title='持仓分布', color_discrete_sequence=['#00d2ff', '#00ff88', '#ffaa00'])
+        fig.update_layout(paper_bgcolor="#0a0c10", font_color="#e6e6e6", height=300)
+        st.plotly_chart(fig, use_container_width=True)
 
 # ================== 主程序 ==================
 def main():
@@ -415,7 +405,6 @@ def main():
         h1 { color: #ffffff; text-align: center; font-size: 22px; }
         .caption { text-align: center; color: #8892b0; font-size: 11px; margin-bottom: 20px; }
         .market-card { background-color: #1a1d24; border-radius: 8px; padding: 10px; text-align: center; border: 1px solid #2a2d34; }
-        .strategy-card { background-color: #1a1d24; border-radius: 6px; padding: 8px 12px; margin: 5px 0; border-left: 3px solid #00d2ff; }
     </style>
     """, unsafe_allow_html=True)
     
@@ -425,7 +414,6 @@ def main():
     # 导航
     tabs = st.tabs(["🏠 首页", "📈 市场行情", "🎯 策略中心", "🤖 AI交易", "💼 持仓管理", "📊 资金曲线", "⚙️ 系统设置"])
     
-    # ================== 首页 ==================
     with tabs[0]:
         st.markdown("### 📈 市场概览")
         cols = st.columns(4)
@@ -436,10 +424,9 @@ def main():
                 st.markdown(f'<div class="market-card">{sym}<br><span style="font-size:18px;color:#00d2ff">{data.price:.4f}</span></div>', unsafe_allow_html=True)
         
         st.markdown("---")
-        
-        # 持仓概览
+        total_val = engine.get_total_value()
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric("总资产", f"${engine.get_total_value():,.0f}")
+        col1.metric("总资产", f"${total_val:,.0f}")
         col2.metric("总盈亏", f"${engine.get_total_pnl():+,.0f}")
         col3.metric("持仓数", f"{len(engine.positions)}")
         col4.metric("今日盈亏", f"${risk_mgr.daily_pnl:+,.0f}")
@@ -449,7 +436,6 @@ def main():
         st.markdown("---")
         render_positions(engine, data_provider)
     
-    # ================== 市场行情 ==================
     with tabs[1]:
         st.markdown("### 📊 全球市场行情")
         market_data = []
@@ -458,7 +444,6 @@ def main():
             market_data.append({"品种": sym, "价格": data.price, "涨跌": f"{data.price - data.open:.4f}", "时间": data.timestamp.strftime("%H:%M:%S")})
         st.dataframe(pd.DataFrame(market_data), use_container_width=True, hide_index=True)
     
-    # ================== 策略中心 ==================
     with tabs[2]:
         st.markdown("### 🎯 策略库")
         strategies = [
@@ -467,7 +452,6 @@ def main():
             {"名称": "外汇利差策略", "品种": "AUDJPY", "类型": "利差交易", "状态": "运行中", "收益率": "+5.1%"},
             {"名称": "外汇突破策略", "品种": "EURUSD", "类型": "突破交易", "状态": "运行中", "收益率": "+6.7%"},
             {"名称": "加密双均线", "品种": "BTC-USD", "类型": "趋势跟踪", "状态": "运行中", "收益率": "+12.3%"},
-            {"名称": "加密RSI策略", "品种": "ETH-USD", "类型": "RSI指标", "状态": "测试中", "收益率": "+3.2%"},
         ]
         for s in strategies:
             cols = st.columns([2, 1, 1.2, 1, 1])
@@ -478,24 +462,20 @@ def main():
             cols[4].write(f"<span style='color:#00ff88'>{s['收益率']}</span>" if "+" in s['收益率'] else s['收益率'], unsafe_allow_html=True)
             st.markdown("---")
     
-    # ================== AI交易 ==================
     with tabs[3]:
         st.markdown("### 🤖 AI智能交易")
-        
         col_a, col_b = st.columns(2)
         with col_a:
             symbol = st.selectbox("选择品种", ["EURUSD", "BTC-USD", "GC=F", "AAPL"])
         with col_b:
             strategy = st.selectbox("选择策略", ["综合AI分析", "趋势跟踪", "均值回归", "突破交易"])
         
-        # 获取当前价格
         current_data = data_provider.get_price(symbol)
         st.metric("当前价格", f"{current_data.price:.5f}")
         
         if st.button("🚀 执行AI分析", type="primary", use_container_width=True):
             with st.spinner("AI模型分析中..."):
-                # 准备市场数据
-                market_info = {"price": current_data.price, "high": current_data.high, "low": current_data.low, "volume": current_data.volume}
+                market_info = {"price": current_data.price, "high": current_data.high, "low": current_data.low}
                 result = ai.analyze(symbol, current_data.price, market_info)
                 
                 st.success(f"🤖 AI信号: {result['signal'].upper()}")
@@ -507,7 +487,6 @@ def main():
                 elif result['signal'] == 'sell':
                     st.error(f"🎯 目标价: {result.get('target', current_data.price*0.98):.5f} | 止损: {result.get('stop_loss', current_data.price*1.02):.5f}")
                 
-                # 执行交易（可选）
                 if st.button("执行交易", key="exec_trade"):
                     if result['signal'] == 'buy':
                         order = Order(symbol=symbol, side="buy", price=current_data.price, quantity=1000)
@@ -519,11 +498,8 @@ def main():
                         st.success("✅ 卖出订单已执行")
                     st.rerun()
     
-    # ================== 持仓管理 ==================
     with tabs[4]:
-        st.markdown("### 💼 持仓管理")
         render_positions(engine, data_provider)
-        
         st.markdown("---")
         st.markdown("### 📜 交易记录")
         if engine.trade_log:
@@ -533,40 +509,28 @@ def main():
         else:
             st.info("暂无交易记录")
     
-    # ================== 资金曲线 ==================
     with tabs[5]:
-        st.markdown("### 📈 资金曲线分析")
-        
-        # 资产曲线
         render_equity_curve(engine, risk_mgr)
-        
-        # 月度收益
         st.markdown("### 📅 月度收益")
         months = ['1月', '2月', '3月', '4月', '5月', '6月']
-        returns = [2.1, 3.5, -1.2, 4.2, 5.1, engine.get_total_pnl()/engine.initial_capital*100]
+        returns = [2.1, 3.5, -1.2, 4.2, 5.1, engine.get_total_pnl()/max(engine.initial_capital,1)*100]
         colors = ['#00ff88' if r>=0 else '#ff4444' for r in returns]
         fig = go.Figure(data=go.Bar(x=months, y=returns, marker_color=colors))
-        fig.update_layout(height=300, paper_bgcolor="#0a0c10", plot_bgcolor="#15171a", font_color="#e6e6e6", margin=dict(l=0, r=0, t=20, b=0))
+        fig.update_layout(height=300, paper_bgcolor="#0a0c10", plot_bgcolor="#15171a", font_color="#e6e6e6")
         st.plotly_chart(fig, use_container_width=True)
         
-        # 统计指标
         col1, col2, col3, col4 = st.columns(4)
-        total_return = engine.get_total_pnl()/engine.initial_capital*100
+        total_return = engine.get_total_pnl()/max(engine.initial_capital,1)*100
         col1.metric("累计收益率", f"{total_return:.1f}%")
         col2.metric("最大回撤", "-2.3%")
         col3.metric("夏普比率", "1.42")
         col4.metric("胜率", "68.5%")
     
-    # ================== 系统设置 ==================
     with tabs[6]:
         st.markdown("### ⚙️ 系统设置")
-        
-        st.subheader("风控参数")
         max_pos = st.slider("单笔最大仓位(%)", 5, 50, 30)
         stop_loss = st.slider("止损(%)", 1, 10, 2)
         take_profit = st.slider("止盈(%)", 2, 20, 4)
-        
-        st.subheader("数据源")
         data_source = st.selectbox("数据源", ["yfinance (真实)", "模拟数据"], index=0)
         
         if st.button("保存设置", type="primary"):
@@ -575,7 +539,6 @@ def main():
             CONFIG["risk"]["take_profit_pct"] = take_profit / 100
             st.success("设置已保存")
         
-        st.subheader("系统信息")
         st.info(f"""
         - 系统版本: v5.0
         - AI引擎: DeepSeek
