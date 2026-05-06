@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
+import pandas as pd
 from 核心 import 行情获取, 策略运行器
 
 def 显示(引擎, 策略加载器, 策略信号):
@@ -31,12 +32,15 @@ def 显示(引擎, 策略加载器, 策略信号):
                     st.rerun()
             
             if 策略['名称'] in 策略信号:
-                if 策略信号[策略['名称']] == "buy":
+                信号 = 策略信号[策略['名称']]
+                if 信号 == "buy":
                     if st.button("执行买入", key=f"buy_{idx}"):
                         引擎.买入(策略['品种'], 行情获取.获取价格(策略['品种']).价格)
                         st.rerun()
-                elif 策略信号[策略['名称']] == "sell":
+                elif 信号 == "sell":
                     if st.button("执行卖出", key=f"sell_{idx}"):
                         引擎.卖出(策略['品种'], 行情获取.获取价格(策略['品种']).价格)
                         st.rerun()
+                else:
+                    st.caption(f"信号: {信号.upper()}")
             st.divider()
