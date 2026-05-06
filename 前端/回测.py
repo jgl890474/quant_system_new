@@ -9,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from 回测.回测引擎 import 回测引擎
 
-# 只导入确认没有错误的策略
+# 只导入可用的策略
 from 策略库.期货策略.期货趋势策略 import FuturesTrendStrategy
 from 策略库.加密货币策略.加密双均线 import CryptoDualMAStrategy
 from 策略库.A股策略.A股双均线 import AStockDualMAStrategy
@@ -17,7 +17,7 @@ from 策略库.美股策略.美股双均线 import USStockDualMAStrategy
 
 
 def 显示():
-    st.markdown("### 📈 策略回测系统")
+    st.markdown("### 策略回测系统")
     st.markdown("使用真实历史数据回测策略表现")
     
     策略类型映射 = {
@@ -31,7 +31,7 @@ def 显示():
     
     col1, col2 = st.columns(2)
     with col1:
-        品种 = st.selectbox("选择品种", ["AAPL", "BTC-USD", "EURUSD", "GC=F", "000001.SS", "00700.HK"])
+        品种 = st.selectbox("选择品种", ["AAPL", "BTC-USD", "EURUSD", "GC=F"])
     with col2:
         周期 = st.selectbox("K线周期", ["1d", "1h", "30m", "15m", "5m"])
     
@@ -47,7 +47,7 @@ def 显示():
         滑点基点 = st.number_input("滑点 (基点)", value=1, min_value=0, max_value=100) / 10000
         手续费率 = st.number_input("手续费率 (%)", value=0.05, min_value=0.0, max_value=1.0) / 100
     
-    if st.button("开始回测", type="primary", use_container_width=True):
+    if st.button("开始回测", type="primary"):
         with st.spinner("回测运行中..."):
             try:
                 策略类 = 策略类型映射[策略名称]
@@ -82,16 +82,8 @@ def 显示():
                         name='净值',
                         line=dict(color='#00d2ff', width=2)
                     ))
-                    fig.update_layout(height=400, paper_bgcolor="#0a0c10", plot_bgcolor="#15171a")
+                    fig.update_layout(height=400)
                     st.plotly_chart(fig, use_container_width=True)
-                
-                if "调试信息" in 结果:
-                    with st.expander("调试信息"):
-                        调试 = 结果["调试信息"]
-                        st.write(f"K线数量: {调试['K线数量']}")
-                        st.write(f"买入信号: {调试['买入信号次数']}")
-                        st.write(f"卖出信号: {调试['卖出信号次数']}")
-                        st.write(f"实际交易: {调试['实际交易次数']}")
                     
             except Exception as e:
                 st.error(f"回测出错: {e}")
