@@ -3,13 +3,13 @@ import streamlit as st
 import requests
 import json
 import time
-from 工具 import 数据库  # 新增：导入数据库模块
+from 工具 import 数据库
 
 
 class AI引擎:
     def __init__(self):
-        # 优先从 st.secrets 读取，其次从环境变量
-        self.api_key = st.secrets.get("DEEPSEEK_API_KEY", "")
+        # 临时测试：直接写死 API Key
+        self.api_key = "sk-c9a16385ae9644c1b5f13c7c519eebde"
         self.api_url = "https://api.deepseek.com/v1/chat/completions"
         
     def 分析(self, 品种, 价格, 策略信号):
@@ -22,7 +22,7 @@ class AI引擎:
         }
         """
         
-        # 如果没有配置 API Key，降级为简化模式
+        # 检查 API Key 是否有效
         if not self.api_key or self.api_key == "":
             return self._简化分析(品种, 价格, 策略信号)
         
@@ -60,7 +60,7 @@ class AI引擎:
                 内容 = 结果["choices"][0]["message"]["content"]
                 分析结果 = self._解析AI返回(内容)
                 
-                # 新增：保存AI决策到数据库
+                # 保存AI决策到数据库
                 数据库.保存AI决策(品种, 价格, 策略信号, 分析结果["最终信号"], 分析结果["置信度"], 分析结果["理由"])
                 
                 return 分析结果
@@ -100,7 +100,6 @@ class AI引擎:
     def _解析AI返回(self, 内容):
         """解析 AI 返回的 JSON"""
         try:
-            # 尝试提取 JSON 部分（处理可能的多余文字）
             import re
             json_match = re.search(r'\{[^{}]*\}', 内容)
             if json_match:
