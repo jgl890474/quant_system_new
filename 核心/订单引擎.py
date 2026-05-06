@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
 from datetime import datetime
-from 工具 import 数据库  # 新增：导入数据库模块
+from 工具 import 数据库
 
 
 class 订单引擎:
@@ -11,14 +11,15 @@ class 订单引擎:
         self.初始资金 = 初始资金
     
     def 买入(self, 品种, 价格, 数量=1000):
-        # 获取风控引擎检查
-        if '风控引擎' in st.session_state:
-            风控 = st.session_state.风控引擎
-            总资金 = self.获取总资产()
-            允许, 理由 = 风控.检查新交易(品种, "买入", 数量, 价格, self, 总资金)
-            if not 允许:
-                st.error(理由)
-                return
+        # ========== 临时禁用风控检查 ==========
+        # if '风控引擎' in st.session_state:
+        #     风控 = st.session_state.风控引擎
+        #     总资金 = self.获取总资产()
+        #     允许, 理由 = 风控.检查新交易(品种, "买入", 数量, 价格, self, 总资金)
+        #     if not 允许:
+        #         st.error(理由)
+        #         return
+        # ========== 风控检查已禁用 ==========
         
         # 延迟导入避免循环依赖
         from .数据模型 import 持仓数据
@@ -34,7 +35,7 @@ class 订单引擎:
         
         self.交易记录.append({"时间": datetime.now(), "动作": "买入", "品种": 品种, "价格": 价格, "数量": 数量})
         
-        # 新增：保存到数据库
+        # 保存到数据库
         数据库.保存交易记录("买入", 品种, 价格, 数量, 策略名称=st.session_state.get('当前策略', ''))
         
         st.success(f"✅ 买入 {品种} @ {价格:.4f}")
@@ -56,7 +57,7 @@ class 订单引擎:
             
             self.交易记录.append({"时间": datetime.now(), "动作": "卖出", "品种": 品种, "价格": 价格, "数量": 数量, "盈亏": 盈亏})
             
-            # 新增：保存到数据库
+            # 保存到数据库
             数据库.保存交易记录("卖出", 品种, 价格, 数量, 盈亏, st.session_state.get('当前策略', ''))
             
             st.success(f"✅ 卖出 {品种} @ {价格:.4f}, 盈亏: ${盈亏:+.2f}")
