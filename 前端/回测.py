@@ -10,7 +10,7 @@ def 显示():
     
     col1, col2 = st.columns(2)
     with col1:
-        品种 = st.selectbox("选择品种", ["AAPL", "BTC-USD", "GC=F", "EURUSD=X", "MSFT", "GOOGL", "TSLA", "NVDA"])
+        品种 = st.selectbox("选择品种", ["AAPL", "BTC-USD", "GC=F", "EURUSD=X", "MSFT", "GOOGL", "TSLA"])
     with col2:
         周期 = st.selectbox("K线周期", ["1d", "1wk", "1mo"])
     
@@ -25,48 +25,52 @@ def 显示():
     if st.button("🚀 开始回测", type="primary", use_container_width=True):
         with st.spinner("回测运行中..."):
             try:
-                # 直接使用选择的品种代码（已包含正确格式）
                 代码 = 品种
-                
-                st.info(f"正在获取数据: {代码}")
                 
                 # 下载数据
                 数据 = yf.download(代码, start=开始日期, end=结束日期, interval=周期, progress=False)
                 
                 if 数据.empty:
-                    st.error(f"无法获取数据: {代码}")
-                    st.info("提示：BTC-USD 可能需要使用 'BTC-USD'，EURUSD 需要使用 'EURUSD=X'")
+                    st.error("无法获取数据")
                     return
                 
-                # 提取收盘价
-                if 'Close' in 数据.columns:
-                    收盘价 = 数据['Close']
-                else:
-                    st.error("无法获取收盘价")
+                # 安全提取收盘价
+                if 'Close' not in 数据.columns:
+                    st.error("没有收盘价数据")
                     return
                 
-                if len(收盘价) < 2:
-                    st.error(f"数据不足，仅 {len(收盘价)} 个点")
+                # 方法1：直接使用 values
+                收盘价_array = 数据['Close'].values
+                
+                if len(收盘价_array) < 2:
+                    st.error(f"数据点不足: {len(收盘价_array)}")
+                    return
+                
+                # 获取第一个和最后一个数值
+                收盘价_开始 = float(收盘价_array[0])
+                收盘价_结束 = float(收盘价_array[-1])
+                
+                if 收盘价_开始 == 0:
+                    st.error("起始价格为0")
                     return
                 
                 # 计算收益率
-                收盘价_开始 = float(收盘价.iloc[0])
-                收盘价_结束 = float(收盘价.iloc[-1])
                 总收益率 = (收盘价_结束 - 收盘价_开始) / 收盘价_开始
                 最终资金 = 初始资金 * (1 + 总收益率)
                 
                 # 显示结果
-                st.success(f"✅ 回测完成！数据点: {len(收盘价)}")
+                st.success(f"✅ 回测完成！数据点: {len(收盘价_array)}")
                 
+                # 指标卡片
                 col_a, col_b, col_c, col_d = st.columns(4)
                 col_a.metric("总收益率", f"{总收益率*100:.2f}%")
                 col_b.metric("初始资金", f"${初始资金:,.0f}")
                 col_c.metric("最终资金", f"${最终资金:,.0f}")
-                col_d.metric("数据量", f"{len(收盘价)}")
+                col_d.metric("数据量", f"{len(收盘价_array)}")
                 
                 # 净值曲线
                 fig = go.Figure()
-                净值 = [初始资金 * (1 + 总收益率 * i / len(收盘价)) for i in range(len(收盘价))]
+                净值 = [初始资金 * (1 + 总收益率 * i / len(收盘价_array)) for i in range(len(收盘价_array))]
                 fig.add_trace(go.Scatter(
                     x=数据.index, 
                     y=净值, 
@@ -90,7 +94,7 @@ def 显示():
                     fig2 = go.Figure()
                     fig2.add_trace(go.Scatter(
                         x=数据.index,
-                        y=收盘价,
+                        y=收盘价_array,
                         mode='lines',
                         name='收盘价',
                         line=dict(color='#ffaa00', width=1.5)
@@ -100,3 +104,4 @@ def 显示():
                 
             except Exception as e:
                 st.error(f"回测出错: {str(e)}")
+                st.info("提示：请尝试选择 AAPL 测试，或更换日期范围")
