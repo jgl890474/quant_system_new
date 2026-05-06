@@ -5,7 +5,7 @@ import os
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from 前端 import 首页, 策略中心, AI交易, 持仓管理, 资金曲线, 回测
+from 前端 import 首页, 策略中心, AI交易, 持仓管理, 资金曲线
 from 核心 import 订单引擎, 策略加载器, AI引擎
 
 # ========== 初始化数据库 ==========
@@ -39,15 +39,13 @@ st.markdown("""
     .stMetric { background-color: #1a1d24; border-radius: 8px; padding: 10px; text-align: center; }
     h1 { color: white; text-align: center; font-size: 24px; }
     .caption { text-align: center; color: #8892b0; font-size: 12px; margin-bottom: 20px; }
-    .category-title { color: #00d2ff; font-size: 16px; margin-top: 20px; margin-bottom: 10px; }
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown('<h1>📊 量化交易系统 v5.0</h1>', unsafe_allow_html=True)
 st.markdown('<div class="caption">多类目 · 多策略 · AI自动交易 | 云端部署</div>', unsafe_allow_html=True)
 
-# ========== 创建6个Tab ==========
-tabs = st.tabs(["首页", "策略中心", "AI交易", "持仓管理", "资金曲线", "回测"])
+tabs = st.tabs(["首页", "策略中心", "AI交易", "持仓管理", "资金曲线"])
 
 引擎 = st.session_state.订单引擎
 策略加载器 = st.session_state.策略加载器
@@ -68,6 +66,3 @@ with tabs[3]:
 
 with tabs[4]:
     资金曲线.显示(引擎)
-
-with tabs[5]:
-    回测.显示()
