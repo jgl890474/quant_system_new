@@ -10,13 +10,13 @@ from 核心 import 订单引擎, 策略加载器, AI引擎
 
 # ========== 初始化 session_state ==========
 if '订单引擎' not in st.session_state:
-    st.session_state.订单引擎 = 订单引擎.订单引擎()
+    st.session_state.订单引擎 = 订单引擎()          # 修正：直接实例化类
 
 if '策略加载器' not in st.session_state:
-    st.session_state.策略加载器 = 策略加载器.策略加载器()
+    st.session_state.策略加载器 = 策略加载器()      # 修正：直接实例化类
 
 if 'AI引擎' not in st.session_state:
-    st.session_state.AI引擎 = AI引擎.AI引擎()
+    st.session_state.AI引擎 = AI引擎()              # 修正：直接实例化类
 
 if '策略信号' not in st.session_state:
     st.session_state.策略信号 = {}
@@ -59,7 +59,7 @@ with tabs[2]:
     AI交易.显示(引擎, 策略加载器, AI引擎)
 
 with tabs[3]:
-    持仓管理.显示(引擎, 策略加载器, AI引擎)  # 修改这里：传入3个参数
+    持仓管理.显示(引擎, 策略加载器, AI引擎)
 
 with tabs[4]:
     资金曲线.显示(引擎)
