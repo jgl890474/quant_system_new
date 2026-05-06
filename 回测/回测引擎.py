@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from .历史数据获取 import 获取历史K线
-from .模拟订单 import 订单簿  # 修改：订单模拟 → 模拟订单
 from .评价指标 import 计算完整指标
 
 
@@ -17,7 +16,6 @@ class 回测引擎:
         self.持仓成本 = {}
         self.交易记录 = []
         self.每日净值 = []
-        self.订单簿 = None
         self.滑点基点 = 滑点基点
         self.手续费率 = 手续费率
         self.买入信号次数 = 0
@@ -45,12 +43,8 @@ class 回测引擎:
         self.持仓成本 = {}
         self.交易记录 = []
         self.每日净值 = []
-        self.订单簿 = 订单簿(self.滑点基点, self.手续费率)
         self.买入信号次数 = 0
         self.卖出信号次数 = 0
-        
-        # 存储品种（确保一致性）
-        回测品种 = 品种
         
         # 3. 逐K线回测
         for 索引, K线 in 历史数据.iterrows():
@@ -72,12 +66,10 @@ class 回测引擎:
             # 统计信号并执行交易
             if 信号 == 'buy':
                 self.买入信号次数 += 1
-                # 直接调用买入方法，传入品种
-                self._执行买入(回测品种, 当前价格)
+                self._执行买入(品种, 当前价格)
             elif 信号 == 'sell':
                 self.卖出信号次数 += 1
-                # 直接调用卖出方法，传入品种
-                self._执行卖出(回测品种, 当前价格)
+                self._执行卖出(品种, 当前价格)
             
             # 记录每日净值
             当前净值 = self._计算当前净值(当前价格)
@@ -165,8 +157,7 @@ class 回测引擎:
             手续费 = 成交价 * 数量 * self.手续费率
             总成本 = 成交价 * 数量 + 手续费
             
-            # 检查资金是否足够
-            if 总成本 <= self.当前资金:  # 修复：if总成本 → if 总成本
+            if 总成本 <= self.当前资金:
                 self._记录买入(品种, 成交价, 数量, 手续费)
         except Exception as e:
             print(f"买入异常: {e}")
@@ -174,7 +165,6 @@ class 回测引擎:
     def _执行卖出(self, 品种, 价格):
         """执行市价卖出"""
         try:
-            # 检查是否有持仓
             if 品种 not in self.持仓:
                 return
             
@@ -184,7 +174,6 @@ class 回测引擎:
             滑点 = 价格 * self.滑点基点
             成交价 = 价格 - 滑点
             
-            # 卖出所有持仓或固定数量
             数量 = min(1000, self.持仓[品种])
             
             手续费 = 成交价 * 数量 * self.手续费率
