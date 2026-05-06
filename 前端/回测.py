@@ -8,6 +8,8 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from 回测.回测引擎 import 回测引擎
+
+# 导入所有策略
 from 策略库.期货策略.期货趋势策略 import FuturesTrendStrategy
 from 策略库.加密货币策略.加密双均线 import CryptoDualMAStrategy
 from 策略库.A股策略.A股双均线 import AStockDualMAStrategy
@@ -48,7 +50,7 @@ def 显示():
         手续费率 = st.number_input("手续费率 (%)", value=0.05, min_value=0.0, max_value=1.0) / 100
     
     if st.button("🚀 开始回测", type="primary", use_container_width=True):
-        with st.spinner("回测运行中，正在获取历史数据..."):
+        with st.spinner("回测运行中..."):
             try:
                 策略类 = 策略类型映射[策略名称]
                 策略 = 策略类("回测策略", 品种, 初始资金)
@@ -61,8 +63,6 @@ def 显示():
                 
                 st.success(f"✅ 回测完成！共 {结果['交易次数']} 笔交易")
                 
-                # 显示核心指标
-                st.markdown("### 📊 核心指标")
                 col1, col2, col3, col4 = st.columns(4)
                 col1.metric("总收益率", f"{结果['总收益率']*100:.2f}%")
                 col2.metric("年化收益率", f"{结果['年化收益率']*100:.2f}%")
@@ -75,9 +75,7 @@ def 显示():
                 col7.metric("交易次数", f"{结果['交易次数']}")
                 col8.metric("换手率", f"{结果['换手率']:.2f}")
                 
-                # 净值曲线
                 if not 结果['净值曲线'].empty:
-                    st.markdown("### 📈 净值曲线")
                     fig = go.Figure()
                     fig.add_trace(go.Scatter(
                         x=结果['净值曲线']['日期'],
@@ -86,56 +84,17 @@ def 显示():
                         name='净值',
                         line=dict(color='#00d2ff', width=2)
                     ))
-                    fig.add_hline(
-                        y=初始资金,
-                        line_dash="dash",
-                        line_color="gray",
-                        annotation_text=f"初始资金 ${初始资金:,.0f}"
-                    )
-                    fig.update_layout(
-                        height=400,
-                        paper_bgcolor="#0a0c10",
-                        plot_bgcolor="#15171a"
-                    )
+                    fig.update_layout(height=400, paper_bgcolor="#0a0c10", plot_bgcolor="#15171a")
                     st.plotly_chart(fig, use_container_width=True)
                 
-                # 交易记录
-                if not 结果['交易记录'].empty:
-                    with st.expander(f"📋 交易记录 ({len(结果['交易记录'])} 笔)"):
-                        st.dataframe(结果['交易记录'], use_container_width=True)
-                
-                # ========== 调试信息（始终显示） ==========
-                st.markdown("### 🔧 调试信息")
+                # 调试信息
                 if "调试信息" in 结果:
                     调试 = 结果["调试信息"]
-                    st.info(f"""
-                    📊 **数据统计**
-                    - K线数量: {调试['K线数量']}
-                    - 数据范围: {调试['数据开始']} 至 {调试['数据结束']}
-                    - 策略类型: {调试['策略类型']}
-                    - 品种: {调试['品种']}
-                    
-                    🎯 **信号统计**
-                    - 买入信号次数: {调试['买入信号次数']}
-                    - 卖出信号次数: {调试['卖出信号次数']}
-                    - 实际交易次数: {调试['实际交易次数']}
-                    """)
-                    
-                    if 调试['买入信号次数'] == 0 and 调试['卖出信号次数'] == 0:
-                        st.warning("⚠️ 策略未产生任何交易信号！可能原因：")
-                        st.markdown("""
-                        1. **策略代码问题**：检查策略类的 `处理行情` 方法
-                        2. **数据不足**：双均线策略需要积累足够K线（长周期参数）
-                        3. **价格波动小**：在测试日期内价格没有明显趋势
-                        
-                        **建议**：
-                        - 尝试选择其他品种（如 BTC-USD 波动更大）
-                        - 延长回测时间范围
-                        - 修改策略参数（短周期=5，长周期=10）
-                        """)
-                else:
-                    st.warning("无调试信息返回")
+                    with st.expander("🔧 调试信息"):
+                        st.write(f"K线数量: {调试['K线数量']}")
+                        st.write(f"买入信号: {调试['买入信号次数']}")
+                        st.write(f"卖出信号: {调试['卖出信号次数']}")
+                        st.write(f"实际交易: {调试['实际交易次数']}")
                     
             except Exception as e:
                 st.error(f"回测出错: {e}")
-                st.exception(e)
