@@ -94,7 +94,7 @@ def 显示():
                 ))
                 fig.update_layout(
                     height=350,
-                    title=f"{品种} 价格走势（模拟）",
+                    title=f"{品种} 价格走势",
                     paper_bgcolor="#0a0c10",
                     plot_bgcolor="#15171a",
                     font_color="#e6e6e6",
@@ -152,13 +152,13 @@ def 显示():
                             if 持仓 == 0:
                                 持仓 = 策略资金 / 当前价格
                                 策略资金 = 0
-                                交易记录.append({'日期': df.index[i], '动作': '买入', '价格': 当前价格})
+                                交易记录.append({'日期': df.index[i].strftime('%Y-%m-%d'), '动作': '买入', '价格': f"{当前价格:.2f}"})
                         # 死叉卖出
                         elif df['短均线'].iloc[i] < df['长均线'].iloc[i] and df['短均线'].iloc[i-1] >= df['长均线'].iloc[i-1]:
                             if 持仓 > 0:
                                 策略资金 = 持仓 * 当前价格
                                 盈亏 = 策略资金 - 初始资金
-                                交易记录.append({'日期': df.index[i], '动作': '卖出', '价格': 当前价格, '盈亏': 盈亏})
+                                交易记录.append({'日期': df.index[i].strftime('%Y-%m-%d'), '动作': '卖出', '价格': f"{当前价格:.2f}", '盈亏': f"${盈亏:+.2f}"})
                                 持仓 = 0
                         
                         当前净值 = 策略资金 + 持仓 * 当前价格
@@ -170,10 +170,22 @@ def 显示():
                     col_r1.metric("策略收益率", f"{策略收益率*100:.2f}%", delta=f"vs 持有 {总收益率*100:.2f}%")
                     col_r2.metric("交易次数", len(交易记录))
                     
-                    # 对比曲线
+                    # 对比曲线 - 修复参数错误
                     fig3 = go.Figure()
-                    fig3.add_trace(go.Scatter(x=日期列表, y=策略净值, mode='lines', name='策略净值', line=dict(color='#ffaa00', width=2)))
-                    fig3.add_trace(go.Scatter(x=日期列表, y=资产, mode='lines', name='持有净值', line=dict(color='#00ff88', width=2, line_dash='dot')))
+                    fig3.add_trace(go.Scatter(
+                        x=日期列表, 
+                        y=策略净值, 
+                        mode='lines', 
+                        name='策略净值', 
+                        line=dict(color='#ffaa00', width=2)
+                    ))
+                    fig3.add_trace(go.Scatter(
+                        x=日期列表, 
+                        y=资产, 
+                        mode='lines', 
+                        name='持有净值', 
+                        line=dict(color='#00ff88', width=2, dash='dot')
+                    ))
                     fig3.update_layout(
                         height=350, 
                         title="策略 vs 持有",
@@ -184,7 +196,7 @@ def 显示():
                     st.plotly_chart(fig3, use_container_width=True)
                     
                     if 交易记录:
-                        with st.expander("交易记录"):
+                        with st.expander(f"交易记录 ({len(交易记录)} 笔)"):
                             st.dataframe(pd.DataFrame(交易记录), use_container_width=True)
                 
                 # 数据说明
