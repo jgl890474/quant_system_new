@@ -31,19 +31,27 @@ if '风控引擎' not in st.session_state:
     st.session_state.风控引擎 = 风控引擎()
 
 # ========== 页面配置 ==========
-st.set_page_config(page_title="量化交易系统", layout="wide")
+st.set_page_config(page_title="量化交易系统 v5.0", page_icon="📈", layout="wide", initial_sidebar_state="expanded")
 
+# ========== 全局样式 ==========
 st.markdown("""
 <style>
-    .stApp { background-color: #0a0c10; }
-    .stMetric { background-color: #1a1d24; border-radius: 8px; padding: 10px; text-align: center; }
-    h1 { color: white; text-align: center; font-size: 24px; }
-    .caption { text-align: center; color: #8892b0; font-size: 12px; margin-bottom: 20px; }
+    .stApp { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); }
+    .stMetric label { color: #94a3b8 !important; }
+    .stMetric value { color: #f8fafc !important; }
+    .stButton > button { background: linear-gradient(90deg, #3b82f6, #8b5cf6); color: white; border: none; border-radius: 0.5rem; }
+    .stButton > button:hover { transform: translateY(-1px); }
+    .stTabs [data-baseweb="tab-list"] { background: #1e293b; border-radius: 0.75rem; }
+    .stTabs [aria-selected="true"] { background: #3b82f6; color: white; }
+    [data-testid="stSidebar"] { background: #1e293b; border-right: 1px solid #334155; }
+    .dataframe { background: #1e293b !important; border-radius: 0.75rem !important; }
+    .dataframe th { background: #334155 !important; color: #f8fafc !important; }
+    .dataframe td { color: #cbd5e1 !important; }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<h1>📊 量化交易系统 v5.0</h1>', unsafe_allow_html=True)
-st.markdown('<div class="caption">多类目 · 多策略 · AI自动交易 | 云端部署</div>', unsafe_allow_html=True)
+st.markdown('<h1 style="text-align:center; color:#3b82f6">📊 量化交易系统 v5.0</h1>', unsafe_allow_html=True)
+st.markdown('<p style="text-align:center; color:#94a3b8">多类目 · 多策略 · AI自动交易 | 云端部署</p>', unsafe_allow_html=True)
 
 # ========== 创建6个Tab ==========
 tabs = st.tabs(["首页", "策略中心", "AI交易", "持仓管理", "资金曲线", "回测"])
