@@ -8,15 +8,19 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from 前端 import 首页, 策略中心, AI交易, 持仓管理, 资金曲线
 from 核心 import 订单引擎, 策略加载器, AI引擎
 
+# ========== 初始化数据库 ==========
+from 工具 import 数据库
+数据库.初始化数据库()
+
 # ========== 初始化 session_state ==========
 if '订单引擎' not in st.session_state:
-    st.session_state.订单引擎 = 订单引擎()          # 修正：直接实例化类
+    st.session_state.订单引擎 = 订单引擎()
 
 if '策略加载器' not in st.session_state:
-    st.session_state.策略加载器 = 策略加载器()      # 修正：直接实例化类
+    st.session_state.策略加载器 = 策略加载器()
 
 if 'AI引擎' not in st.session_state:
-    st.session_state.AI引擎 = AI引擎()              # 修正：直接实例化类
+    st.session_state.AI引擎 = AI引擎()
 
 if '策略信号' not in st.session_state:
     st.session_state.策略信号 = {}
