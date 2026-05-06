@@ -11,6 +11,18 @@ class 订单引擎:
         self.初始资金 = 初始资金
         self.已实现盈亏 = 0
     
+    def 获取总资产(self):
+        """计算总资产 = 初始资金 + 已实现盈亏 + 浮动盈亏"""
+        总资产 = self.初始资金
+        for pos in self.持仓.values():
+            总资产 += self.已实现盈亏
+            总资产 += pos.数量 * pos.当前价格 - pos.数量 * pos.平均成本
+        return 总资产
+    
+    def 获取总盈亏(self):
+        """计算总盈亏 = 总资产 - 初始资金"""
+        return self.获取总资产() - self.初始资金
+    
     def 买入(self, 品种, 价格, 数量=1000):
         from .数据模型 import 持仓数据
         
@@ -48,13 +60,3 @@ class 订单引擎:
             st.rerun()
         else:
             st.error(f"❌ 卖出失败: {品种} 持仓不足")
-    
-    def 获取总资产(self):
-        总值 = self.初始资金
-        for pos in self.持仓.values():
-            总值 += self.已实现盈亏
-            总值 += pos.数量 * pos.当前价格 - pos.数量 * pos.平均成本
-        return 总值
-    
-    def 获取总盈亏(self):
-        return self.获取总资产() - self.初始资金
