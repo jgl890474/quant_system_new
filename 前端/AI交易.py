@@ -12,10 +12,19 @@ def 显示(引擎, 策略加载器, AI引擎):
     
     col_test1, col_test2 = st.columns(2)
     with col_test1:
-        if st.button("🔴 强制买入 AAPL", type="primary", use_container_width=True):
-            价格 = 行情获取.获取价格("AAPL").价格
+        # 使用唯一的key避免缓存问题
+        import time
+        button_key = f"force_buy_{int(time.time())}"
+        if st.button("🔴 强制买入 AAPL", key=button_key, type="primary", use_container_width=True):
+            st.warning("🔍 调试：按钮被点击了")
+            行情对象 = 行情获取.获取价格("AAPL")
+            st.warning(f"🔍 调试：行情对象类型={type(行情对象)}")
+            价格 = 行情对象.价格
+            st.warning(f"🔍 调试：获取到的价格={价格}")
             st.success(f"当前价格: {价格}")
+            st.warning("🔍 调试：准备调用引擎.买入()")
             引擎.买入("AAPL", 价格)
+            st.warning("🔍 调试：引擎.买入() 调用完成")
             st.rerun()
     
     with col_test2:
@@ -58,11 +67,13 @@ def 显示(引擎, 策略加载器, AI引擎):
                     st.write(f"💡 理由: {结果['理由']}")
                     
                     if 结果['最终信号'] == 'buy':
-                        if st.button("✅ 确认执行买入"):
+                        confirm_key = f"confirm_buy_{int(time.time())}"
+                        if st.button("✅ 确认执行买入", key=confirm_key):
                             引擎.买入(策略信息['品种'], 行情数据.价格)
                             st.rerun()
                     elif 结果['最终信号'] == 'sell':
-                        if st.button("✅ 确认执行卖出"):
+                        confirm_key = f"confirm_sell_{int(time.time())}"
+                        if st.button("✅ 确认执行卖出", key=confirm_key):
                             引擎.卖出(策略信息['品种'], 行情数据.价格)
                             st.rerun()
                     
