@@ -1,5 +1,5 @@
-from .数据模型 import *
-from .行情获取 import 获取实时价格
+# -*- coding: utf-8 -*-
+from .行情获取 import 获取价格
 from .策略基类 import 策略基类
 from .策略加载器 import 策略加载器
 from .策略运行器 import 策略运行器
