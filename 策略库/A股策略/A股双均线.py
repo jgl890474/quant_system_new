@@ -17,6 +17,7 @@ class AStockDualMAStrategy(策略基类):
     
     def 处理行情(self, k线):
         self.价格历史.append(k线['close'])
+        
         if len(self.价格历史) < self.长周期:
             return 'hold'
         
@@ -27,4 +28,5 @@ class AStockDualMAStrategy(策略基类):
             return 'buy'
         elif 短均线 < 长均线:
             return 'sell'
+        
         return 'hold'
