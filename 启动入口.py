@@ -8,15 +8,19 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from 前端 import 首页, 策略中心, AI交易, 持仓管理, 资金曲线
 from 核心 import 订单引擎, 策略加载器, AI引擎
 
+# ========== 初始化数据库 ==========
+from 工具 import 数据库
+数据库.初始化数据库()
+
 # ========== 初始化 session_state ==========
 if '订单引擎' not in st.session_state:
-    st.session_state.订单引擎 = 订单引擎()          # 修正：直接实例化类
+    st.session_state.订单引擎 = 订单引擎()
 
 if '策略加载器' not in st.session_state:
-    st.session_state.策略加载器 = 策略加载器()      # 修正：直接实例化类
+    st.session_state.策略加载器 = 策略加载器()
 
 if 'AI引擎' not in st.session_state:
-    st.session_state.AI引擎 = AI引擎()              # 修正：直接实例化类
+    st.session_state.AI引擎 = AI引擎()
 
 if '策略信号' not in st.session_state:
     st.session_state.策略信号 = {}
@@ -35,7 +39,6 @@ st.markdown("""
     .stMetric { background-color: #1a1d24; border-radius: 8px; padding: 10px; text-align: center; }
     h1 { color: white; text-align: center; font-size: 24px; }
     .caption { text-align: center; color: #8892b0; font-size: 12px; margin-bottom: 20px; }
-    .category-title { color: #00d2ff; font-size: 16px; margin-top: 20px; margin-bottom: 10px; }
 </style>
 """, unsafe_allow_html=True)
 
