@@ -37,7 +37,7 @@ def 显示():
     
     col3, col4 = st.columns(2)
     with col3:
-        开始日期 = st.date_input("开始日期", datetime.now() - timedelta(days=180))
+        开始日期 = st.date_input("开始日期", datetime.now() - timedelta(days=500))
     with col4:
         结束日期 = st.date_input("结束日期", datetime.now())
     
@@ -46,9 +46,10 @@ def 显示():
     with st.expander("⚙️ 高级参数"):
         滑点基点 = st.number_input("滑点 (基点)", value=1, min_value=0, max_value=100) / 10000
         手续费率 = st.number_input("手续费率 (%)", value=0.05, min_value=0.0, max_value=1.0) / 100
+        st.caption(f"实际滑点: {滑点基点*10000:.0f}基点, 手续费: {手续费率*100:.2f}%")
     
     if st.button("🚀 开始回测", type="primary", use_container_width=True):
-        with st.spinner("回测运行中..."):
+        with st.spinner("回测运行中，正在获取历史数据..."):
             try:
                 策略类 = 策略类型映射[策略名称]
                 策略 = 策略类("回测策略", 品种, 初始资金)
@@ -59,8 +60,13 @@ def 显示():
                     st.error(f"回测失败: {结果['错误']}")
                     return
                 
+                if not 结果.get("成功"):
+                    st.warning("回测完成但数据可能不完整")
+                
                 st.success(f"✅ 回测完成！共 {结果['交易次数']} 笔交易")
                 
+                # 显示关键指标
+                st.markdown("### 📊 核心指标")
                 col1, col2, col3, col4 = st.columns(4)
                 col1.metric("总收益率", f"{结果['总收益率']*100:.2f}%")
                 col2.metric("年化收益率", f"{结果['年化收益率']*100:.2f}%")
@@ -73,7 +79,9 @@ def 显示():
                 col7.metric("交易次数", f"{结果['交易次数']}")
                 col8.metric("换手率", f"{结果['换手率']:.2f}")
                 
+                # 净值曲线图
                 if not 结果['净值曲线'].empty:
+                    st.markdown("### 📈 净值曲线")
                     fig = go.Figure()
                     fig.add_trace(go.Scatter(
                         x=结果['净值曲线']['日期'],
@@ -82,8 +90,64 @@ def 显示():
                         name='净值',
                         line=dict(color='#00d2ff', width=2)
                     ))
-                    fig.update_layout(height=400, paper_bgcolor="#0a0c10", plot_bgcolor="#15171a")
+                    fig.add_hline(
+                        y=初始资金,
+                        line_dash="dash",
+                        line_color="gray",
+                        annotation_text=f"初始资金 ${初始资金:,.0f}"
+                    )
+                    fig.update_layout(
+                        title="策略净值曲线",
+                        xaxis_title="日期",
+                        yaxis_title="净值 (美元)",
+                        height=450,
+                        paper_bgcolor="#0a0c10",
+                        plot_bgcolor="#15171a",
+                        font_color="#e6e6e6",
+                        hovermode="x unified"
+                    )
                     st.plotly_chart(fig, use_container_width=True)
+                
+                # 交易记录
+                if not 结果['交易记录'].empty:
+                    with st.expander(f"📋 交易记录 ({len(结果['交易记录'])} 笔)"):
+                        st.dataframe(结果['交易记录'], use_container_width=True)
+                else:
+                    st.info("暂无交易记录")
+                
+                # 调试信息
+                with st.expander("🔧 调试信息"):
+                    if "调试信息" in 结果:
+                        调试 = 结果["调试信息"]
+                        st.markdown(f"""
+                        | 项目 | 数值 |
+                        |------|------|
+                        | K线数量 | {调试['K线数量']} |
+                        | 买入信号次数 | {调试['买入信号次数']} |
+                        | 卖出信号次数 | {调试['卖出信号次数']} |
+                        | 实际交易次数 | {调试['实际交易次数']} |
+                        | 数据开始 | {调试['数据开始']} |
+                        | 数据结束 | {调试['数据结束']} |
+                        """)
+                    else:
+                        st.info("无调试信息")
+                
+                # 详细指标说明
+                with st.expander("📐 详细指标说明"):
+                    st.markdown(f"""
+                    | 指标 | 数值 | 说明 |
+                    |------|------|------|
+                    | 初始资金 | ${结果['初始资金']:,.0f} | 回测起始资金 |
+                    | 最终资金 | ${结果['最终资金']:,.0f} | 回测结束资金 |
+                    | 总收益率 | {结果['总收益率']*100:.2f}% | (最终-初始)/初始 |
+                    | 年化收益率 | {结果['年化收益率']*100:.2f}% | 年化后的收益率 |
+                    | 夏普比率 | {结果['夏普比率']} | >1较好，>2优秀 |
+                    | 最大回撤 | {结果['最大回撤率']*100:.2f}% | 历史最大亏损幅度 |
+                    | 胜率 | {结果['胜率']*100:.2f}% | 盈利交易占比 |
+                    | 盈亏比 | {结果['盈亏比']} | 平均盈利/平均亏损 |
+                    | 换手率 | {结果['换手率']:.2f} | 总成交额/平均资金 |
+                    """)
                     
             except Exception as e:
                 st.error(f"回测出错: {e}")
+                st.exception(e)
