@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
+import pandas as pd
 from 核心 import 行情获取, 策略运行器
 
 def 显示(引擎, 策略加载器, AI引擎):
