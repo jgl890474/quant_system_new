@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from .历史数据获取 import 获取历史K线
-from .订单模拟 import 订单簿
+from .模拟订单 import 订单簿  # 修改：订单模拟 → 模拟订单
 from .评价指标 import 计算完整指标
 
 
@@ -166,11 +166,8 @@ class 回测引擎:
             总成本 = 成交价 * 数量 + 手续费
             
             # 检查资金是否足够
-            if总成本 <= self.当前资金:
+            if 总成本 <= self.当前资金:  # 修复：if总成本 → if 总成本
                 self._记录买入(品种, 成交价, 数量, 手续费)
-                # print(f"✅ 买入: {品种} @ {成交价:.4f}, 数量={数量}, 总成本={总成本:.2f}")
-            # else:
-            #     print(f"❌ 买入失败: 资金不足. 需要 {总成本:.2f}, 可用 {self.当前资金:.2f}")
         except Exception as e:
             print(f"买入异常: {e}")
     
@@ -179,11 +176,9 @@ class 回测引擎:
         try:
             # 检查是否有持仓
             if 品种 not in self.持仓:
-                # print(f"❌ 卖出失败: 没有 {品种} 持仓")
                 return
             
             if self.持仓[品种] <= 0:
-                # print(f"❌ 卖出失败: {品种} 持仓量为 {self.持仓[品种]}")
                 return
             
             滑点 = 价格 * self.滑点基点
@@ -195,8 +190,7 @@ class 回测引擎:
             手续费 = 成交价 * 数量 * self.手续费率
             盈亏 = (成交价 - self.持仓成本[品种]) * 数量
             
-            self._记录卖出(品种,成交价, 数量, 手续费, 盈亏)
-            # print(f"✅ 卖出: {品种} @ {成交价:.4f}, 数量={数量}, 盈亏={盈亏:.2f}")
+            self._记录卖出(品种, 成交价, 数量, 手续费, 盈亏)
         except Exception as e:
             print(f"卖出异常: {e}")
     
@@ -238,7 +232,7 @@ class 回测引擎:
             '时间': datetime.now(),
             '动作': '卖出',
             '品种': 品种,
-            '价格':价格,
+            '价格': 价格,
             '数量': 数量,
             '手续费': 手续费,
             '盈亏': 盈亏
