@@ -4,4 +4,4 @@ from .策略中心 import 显示 as 显示策略中心
 from .AI交易 import 显示 as 显示AI交易
 from .持仓管理 import 显示 as 显示持仓管理
 from .资金曲线 import 显示 as 显示资金曲线
-# from .回测 import 显示 as 显示回测   # 暂时注释，等回测文件修复后再启用
+# from .回测 import 显示 as 显示回测   # 已删除回测文件，注释掉
