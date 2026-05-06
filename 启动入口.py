@@ -46,7 +46,6 @@ st.markdown("""
 st.markdown('<h1>📊 量化交易系统 v5.0</h1>', unsafe_allow_html=True)
 st.markdown('<div class="caption">多类目 · 多策略 · AI自动交易 | 云端部署</div>', unsafe_allow_html=True)
 
-# ========== 创建5个Tab ==========
 tabs = st.tabs(["首页", "策略中心", "AI交易", "持仓管理", "资金曲线"])
 
 引擎 = st.session_state.订单引擎
