@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
 from datetime import datetime
+from 工具 import 数据库  # 新增：导入数据库模块
 
 
 class 订单引擎:
@@ -32,6 +33,10 @@ class 订单引擎:
             self.持仓[品种] = 持仓数据(品种, 数量, 价格)
         
         self.交易记录.append({"时间": datetime.now(), "动作": "买入", "品种": 品种, "价格": 价格, "数量": 数量})
+        
+        # 新增：保存到数据库
+        数据库.保存交易记录("买入", 品种, 价格, 数量, 策略名称=st.session_state.get('当前策略', ''))
+        
         st.success(f"✅ 买入 {品种} @ {价格:.4f}")
         st.rerun()
     
@@ -50,6 +55,10 @@ class 订单引擎:
                 del self.持仓[品种]
             
             self.交易记录.append({"时间": datetime.now(), "动作": "卖出", "品种": 品种, "价格": 价格, "数量": 数量, "盈亏": 盈亏})
+            
+            # 新增：保存到数据库
+            数据库.保存交易记录("卖出", 品种, 价格, 数量, 盈亏, st.session_state.get('当前策略', ''))
+            
             st.success(f"✅ 卖出 {品种} @ {价格:.4f}, 盈亏: ${盈亏:+.2f}")
             st.rerun()
         else:
