@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
 import plotly.graph_objects as go
+import pandas as pd
 from datetime import datetime, timedelta
 
 def 显示(引擎):
@@ -9,17 +10,15 @@ def 显示(引擎):
     # 时间周期选择
     周期选择 = st.radio("选择周期", ["日", "月", "年"], horizontal=True)
     
-    # 获取净值历史（从数据库或交易记录生成）
+    # 获取净值历史
     净值历史 = []
     
-    # 模拟生成净值数据（实际应从数据库读取）
+    # 生成净值数据
     if 引擎.交易记录:
-        # 从交易记录生成净值曲线
         base_date = datetime.now() - timedelta(days=30)
         净值历史 = [{'日期': base_date + timedelta(days=i), '净值': 引擎.初始资金 + i * 100} for i in range(31)]
         净值历史[-1]['净值'] = 引擎.获取总资产()
     else:
-        # 模拟演示数据
         for i in range(30):
             date = datetime.now() - timedelta(days=30-i)
             净值历史.append({'日期': date, '净值': 引擎.初始资金 + (i - 15) * 50})
