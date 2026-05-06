@@ -10,9 +10,9 @@ def 显示():
     
     col1, col2 = st.columns(2)
     with col1:
-        品种 = st.selectbox("选择品种", ["AAPL", "BTC-USD", "GC=F", "EURUSD", "MSFT", "GOOGL"])
+        品种 = st.selectbox("选择品种", ["AAPL", "BTC-USD", "GC=F", "EURUSD", "MSFT", "GOOGL", "TSLA"])
     with col2:
-        周期 = st.selectbox("K线周期", ["1d", "1h", "30m"])
+        周期 = st.selectbox("K线周期", ["1d", "1wk", "1mo"])
     
     col3, col4 = st.columns(2)
     with col3:
@@ -26,34 +26,54 @@ def 显示():
         with st.spinner("回测运行中..."):
             try:
                 # 获取数据
-                映射 = {"EURUSD": "EURUSD=X", "BTC-USD": "BTC-USD", "GC=F": "GC=F", 
-                        "AAPL": "AAPL", "MSFT": "MSFT", "GOOGL": "GOOGL"}
+                映射 = {
+                    "EURUSD": "EURUSD=X", 
+                    "BTC-USD": "BTC-USD", 
+                    "GC=F": "GC=F", 
+                    "AAPL": "AAPL", 
+                    "MSFT": "MSFT", 
+                    "GOOGL": "GOOGL",
+                    "TSLA": "TSLA"
+                }
                 代码 = 映射.get(品种, 品种)
+                
+                # 下载数据
                 数据 = yf.download(代码, start=开始日期, end=结束日期, interval=周期, progress=False)
                 
                 if 数据.empty:
-                    st.error("无法获取数据")
+                    st.error("无法获取数据，请尝试其他品种或日期范围")
                     return
                 
-                # 计算收益率（修复格式错误）
-                收盘价 = 数据['Close'].iloc[-1]
-                开盘价 = 数据['Close'].iloc[0]
-                总收益率 = (收盘价 - 开盘价) / 开盘价
+                # 确保Close列是数值类型
+                收盘价系列 = pd.to_numeric(数据['Close'], errors='coerce').dropna()
+                if len(收盘价系列) < 2:
+                    st.error("数据不足，请选择更长的日期范围")
+                    return
+                
+                # 计算收益率（修复关键：使用数值而不是Series）
+                收盘价_开始 = float(收盘价系列.iloc[0])
+                收盘价_结束 = float(收盘价系列.iloc[-1])
+                
+                if 收盘价_开始 == 0:
+                    st.error("起始价格为零，无法计算")
+                    return
+                
+                总收益率 = (收盘价_结束 - 收盘价_开始) / 收盘价_开始
                 最终资金 = 初始资金 * (1 + 总收益率)
                 
                 # 显示结果
                 st.success(f"✅ 回测完成！")
                 
-                # 指标卡片 - 使用更好看的样式
+                # 指标卡片
                 col_a, col_b, col_c, col_d = st.columns(4)
                 col_a.metric("总收益率", f"{总收益率*100:.2f}%")
                 col_b.metric("初始资金", f"${初始资金:,.0f}")
                 col_c.metric("最终资金", f"${最终资金:,.0f}")
-                col_d.metric("K线数量", f"{len(数据)}")
+                col_d.metric("K线数量", f"{len(收盘价系列)}")
                 
                 # 净值曲线
                 fig = go.Figure()
-                净值 = [初始资金 * (1 + 总收益率 * i / len(数据)) for i in range(len(数据))]
+                净值 = [初始资金 * (1 + 总收益率 * i / len(收盘价系列)) for i in range(len(收盘价系列))]
                 fig.add_trace(go.Scatter(
                     x=数据.index, 
                     y=净值, 
@@ -68,9 +88,29 @@ def 显示():
                     title="净值曲线",
                     paper_bgcolor="#0a0c10",
                     plot_bgcolor="#15171a",
-                    font_color="#e6e6e6"
+                    font_color="#e6e6e6",
+                    margin=dict(l=40, r=40, t=50, b=40)
                 )
                 st.plotly_chart(fig, use_container_width=True)
                 
+                # 简单策略信号图（可选）
+                with st.expander("📊 价格走势"):
+                    fig2 = go.Figure()
+                    fig2.add_trace(go.Scatter(
+                        x=数据.index,
+                        y=收盘价系列,
+                        mode='lines',
+                        name='收盘价',
+                        line=dict(color='#ffaa00', width=1.5)
+                    ))
+                    fig2.update_layout(
+                        height=300,
+                        paper_bgcolor="#0a0c10",
+                        plot_bgcolor="#15171a",
+                        font_color="#e6e6e6"
+                    )
+                    st.plotly_chart(fig2, use_container_width=True)
+                
             except Exception as e:
                 st.error(f"回测出错: {str(e)}")
+                st.info("提示：请尝试选择其他品种或更长的日期范围")
