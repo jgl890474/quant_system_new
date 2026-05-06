@@ -9,7 +9,7 @@ import numpy as np
 
 class ForexMultiTimeframeStrategy(策略基类):
     """
-    外汇多时间框架确认策略
+    外汇多时间框架策略
     结合快慢均线 + RSI + 趋势强度过滤
     """
     
@@ -78,11 +78,11 @@ class ForexMultiTimeframeStrategy(策略基类):
         当前价格 = k线['close']
         
         # 均线多头排列 + RSI不超买 = 买入信号
-        if 快均线 > 慢均线和 rsi < self.rsi超买 and self.持仓 == 0:
+        if 快均线 > 慢均线 and rsi < self.rsi超买 and self.持仓 == 0:
             return 'buy'
         
         # 均线空头排列 + RSI不超卖 = 卖出信号
-        elif 快均线 < 慢均线和 rsi > self.rsi超卖 and self.持仓 > 0:
+        elif 快均线 < 慢均线 and rsi > self.rsi超卖 and self.持仓 > 0:
             return 'sell'
         
         return 'hold'
