@@ -25,59 +25,68 @@ def 显示():
     if st.button("🚀 开始回测", type="primary", use_container_width=True):
         with st.spinner("正在获取真实数据..."):
             try:
-                # 直接使用选择的品种
                 代码 = 品种
-                
                 st.info(f"正在获取 {代码} 真实数据...")
                 
-                # 下载真实数据
-                数据 = yf.download(
-                    代码, 
-                    start=开始日期, 
-                    end=结束日期, 
-                    interval=周期, 
-                    progress=False,
-                    auto_adjust=True
-                )
+                # 下载数据 - 使用更稳定的方式
+                数据 = yf.download(代码, start=开始日期, end=结束日期, interval=周期, progress=False)
                 
                 if 数据.empty:
-                    st.warning(f"无法获取 {代码} 真实数据，请尝试其他品种")
+                    st.warning(f"无法获取 {代码} 真实数据")
                     return
                 
-                # 提取收盘价
+                # 安全提取收盘价 - 关键修复
                 if 'Close' in 数据.columns:
-                    收盘价 = 数据['Close']
+                    收盘价原始 = 数据['Close']
                 elif 'Adj Close' in 数据.columns:
-                    收盘价 = 数据['Adj Close']
+                    收盘价原始 = 数据['Adj Close']
                 else:
                     st.error("没有价格数据")
                     return
                 
-                if len(收盘价) < 5:
-                    st.warning(f"数据点不足: {len(收盘价)}，请选择更长的日期范围")
+                # 转换为简单列表（解决 Series 问题）
+                收盘价列表 = []
+                日期列表 = []
+                
+                for idx, val in 收盘价原始.items():
+                    try:
+                        # 处理各种数据类型
+                        if hasattr(val, 'iloc'):
+                            val = val.iloc[0]
+                        if hasattr(val, 'values'):
+                            val = val.values[0] if len(val.values) > 0 else val
+                        if hasattr(val, 'item'):
+                            val = val.item()
+                        价格数值 = float(val)
+                        收盘价列表.append(价格数值)
+                        日期列表.append(idx)
+                    except:
+                        continue
+                
+                if len(收盘价列表) < 5:
+                    st.warning(f"数据点不足: {len(收盘价列表)}")
                     return
                 
-                # 计算真实收益率
-                开盘价_真实 = float(收盘价.iloc[0])
-                收盘价_真实 = float(收盘价.iloc[-1])
+                # 计算收益率
+                开盘价_真实 = 收盘价列表[0]
+                收盘价_真实 = 收盘价列表[-1]
                 总收益率 = (收盘价_真实 - 开盘价_真实) / 开盘价_真实
                 最终资金 = 初始资金 * (1 + 总收益率)
                 
-                # 显示成功信息
-                st.success(f"✅ 回测完成！使用真实数据，数据点: {len(收盘价)}")
+                st.success(f"✅ 回测完成！数据点: {len(收盘价列表)}")
                 
                 # 指标卡片
                 col_a, col_b, col_c, col_d = st.columns(4)
-                col_a.metric("总收益率", f"{总收益率*100:.2f}%", delta=f"{总收益率*100:.2f}%")
+                col_a.metric("总收益率", f"{总收益率*100:.2f}%")
                 col_b.metric("初始资金", f"${初始资金:,.0f}")
                 col_c.metric("最终资金", f"${最终资金:,.0f}")
-                col_d.metric("数据量", f"{len(收盘价)}")
+                col_d.metric("数据量", f"{len(收盘价列表)}")
                 
-                # 净值曲线
+                # 价格曲线
                 fig = go.Figure()
                 fig.add_trace(go.Scatter(
-                    x=收盘价.index, 
-                    y=收盘价, 
+                    x=日期列表, 
+                    y=收盘价列表, 
                     mode='lines', 
                     name=品种,
                     line=dict(color='#00d2ff', width=2),
@@ -86,80 +95,69 @@ def 显示():
                 ))
                 fig.update_layout(
                     height=350,
-                    title=f"{品种} 价格走势（真实数据）",
+                    title=f"{品种} 价格走势",
                     paper_bgcolor="#0a0c10",
                     plot_bgcolor="#15171a",
-                    font_color="#e6e6e6",
-                    xaxis_title="日期",
-                    yaxis_title="价格 (美元)"
+                    font_color="#e6e6e6"
                 )
                 st.plotly_chart(fig, use_container_width=True)
                 
                 # 资产曲线
                 fig2 = go.Figure()
-                资产 = [初始资金 * (收盘价_真实 / 开盘价_真实) ** (i / max(len(收盘价), 1)) for i in range(len(收盘价))]
+                资产 = [初始资金 * (收盘价_真实 / 开盘价_真实) ** (i / max(len(收盘价列表), 1)) for i in range(len(收盘价列表))]
                 fig2.add_trace(go.Scatter(
-                    x=收盘价.index,
+                    x=日期列表,
                     y=资产,
                     mode='lines',
                     name='资产',
                     line=dict(color='#00ff88', width=2)
                 ))
-                fig2.update_layout(
-                    height=350,
-                    title="资产曲线",
-                    paper_bgcolor="#0a0c10",
-                    plot_bgcolor="#15171a",
-                    font_color="#e6e6e6"
-                )
+                fig2.update_layout(height=350, paper_bgcolor="#0a0c10", plot_bgcolor="#15171a")
                 st.plotly_chart(fig2, use_container_width=True)
                 
-                # 简单均线策略
+                # 简单策略
                 with st.expander("📈 均线策略回测"):
                     短周期 = st.slider("短周期", 5, 30, 10, key="short")
                     长周期 = st.slider("长周期", 20, 100, 30, key="long")
                     
-                    # 计算均线
-                    df = pd.DataFrame({'价格': 收盘价})
+                    df = pd.DataFrame({'价格': 收盘价列表}, index=日期列表)
                     df['短均线'] = df['价格'].rolling(window=短周期).mean()
                     df['长均线'] = df['价格'].rolling(window=长周期).mean()
-                    
-                    # 生成信号
-                    df['信号'] = 0
-                    df.loc[df['短均线'] > df['长均线'], '信号'] = 1
-                    df.loc[df['短均线'] <= df['长均线'], '信号'] = -1
                     
                     # 策略回测
                     策略资金 = 初始资金
                     持仓 = 0
+                    持仓价 = 0
                     策略净值 = [初始资金]
                     
                     for i in range(1, len(df)):
-                        if df['信号'].iloc[i] == 1 and df['信号'].iloc[i-1] != 1:
+                        当前价格 = df['价格'].iloc[i]
+                        
+                        # 金叉买入
+                        if df['短均线'].iloc[i] > df['长均线'].iloc[i] and df['短均线'].iloc[i-1] <= df['长均线'].iloc[i-1]:
                             if 持仓 == 0:
-                                持仓 = 策略资金 / df['价格'].iloc[i]
+                                持仓 = 策略资金 / 当前价格
                                 策略资金 = 0
-                        elif df['信号'].iloc[i] == -1 and df['信号'].iloc[i-1] != -1:
+                                持仓价 = 当前价格
+                        # 死叉卖出
+                        elif df['短均线'].iloc[i] < df['长均线'].iloc[i] and df['短均线'].iloc[i-1] >= df['长均线'].iloc[i-1]:
                             if 持仓 > 0:
-                                策略资金 = 持仓 * df['价格'].iloc[i]
+                                策略资金 = 持仓 * 当前价格
                                 持仓 = 0
                         
-                        当前净值 = 策略资金 + 持仓 * df['价格'].iloc[i]
+                        当前净值 = 策略资金 + 持仓 * 当前价格
                         策略净值.append(当前净值)
                     
                     策略收益率 = (策略净值[-1] - 初始资金) / 初始资金
-                    st.metric("策略收益率", f"{策略收益率*100:.2f}%", delta=f"vs 持仓收益 {总收益率*100:.2f}%")
+                    st.metric("策略收益率", f"{策略收益率*100:.2f}%")
                     
-                    # 策略曲线
+                    # 对比曲线
                     fig3 = go.Figure()
-                    fig3.add_trace(go.Scatter(x=收盘价.index, y=策略净值, mode='lines', name='策略净值', line=dict(color='#ffaa00', width=2)))
-                    fig3.add_trace(go.Scatter(x=收盘价.index, y=资产, mode='lines', name='持仓净值', line=dict(color='#00ff88', width=2, line_dash='dot')))
+                    fig3.add_trace(go.Scatter(x=日期列表, y=策略净值, mode='lines', name='策略净值', line=dict(color='#ffaa00', width=2)))
+                    fig3.add_trace(go.Scatter(x=日期列表, y=资产, mode='lines', name='持有净值', line=dict(color='#00ff88', width=2, line_dash='dot')))
                     fig3.update_layout(height=300, paper_bgcolor="#0a0c10", plot_bgcolor="#15171a")
                     st.plotly_chart(fig3, use_container_width=True)
                 
-                # 显示数据源信息
-                st.caption(f"数据源: Yahoo Finance | 品种: {代码} | 数据点: {len(收盘价)}")
-                
             except Exception as e:
-                st.error(f"获取真实数据失败: {str(e)}")
-                st.info("请检查网络连接或稍后重试")
+                st.error(f"获取数据失败: {str(e)}")
+                st.info("请尝试选择 AAPL 或缩短日期范围")
