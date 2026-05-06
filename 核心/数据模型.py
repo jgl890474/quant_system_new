@@ -1,7 +1,4 @@
-
 # -*- coding: utf-8 -*-
-from datetime import datetime
-
 class 行情数据:
     def __init__(self, 品种, 价格, 最高, 最低, 开盘, 成交量):
         self.品种 = 品种
@@ -10,7 +7,7 @@ class 行情数据:
         self.最低 = 最低
         self.开盘 = 开盘
         self.成交量 = 成交量
-        self.时间 = datetime.now()
+        self.涨跌 = 0
 
 class 持仓数据:
     def __init__(self, 品种, 数量, 平均成本):
