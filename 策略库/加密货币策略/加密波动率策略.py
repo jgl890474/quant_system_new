@@ -58,9 +58,9 @@ class CryptoVolatilityStrategy(策略基类):
         """根据波动率动态调整周期"""
         波动率 = self.计算波动率()
         if 波动率 > self.波动率阈值:
-            return int(self.基础周期 * 0.5)  # 高波动 → 更短周期
+            return int(self.基础周期 * 0.5)
         else:
-            return int(self.基础周期 * 1.5)  # 低波动 → 更长周期
+            return int(self.基础周期 * 1.5)
     
     def 处理行情(self, k线):
         self.价格历史.append(k线['close'])
@@ -69,10 +69,7 @@ class CryptoVolatilityStrategy(策略基类):
         if len(self.价格历史) < self.基础周期 * 2:
             return 'hold'
         
-        # 动态调整周期
         动态周期 = self.计算动态周期()
-        
-        # 计算动态均线
         短周期 = max(3, int(动态周期 * 0.3))
         长周期 = 动态周期
         
@@ -82,15 +79,12 @@ class CryptoVolatilityStrategy(策略基类):
         rsi = self.计算RSI()
         波动率 = self.计算波动率()
         
-        # 高波动时更谨慎
         if 波动率 > self.波动率阈值:
-            # 只在极值位置交易
             if 短均线 > 长均线和 rsi < 35 and self.持仓 == 0:
                 return 'buy'
             elif 短均线 < 长均线和 rsi > 65 and self.持仓 > 0:
                 return 'sell'
         else:
-            # 正常波动
             if 短均线 > 长均线和 rsi < 50 and self.持仓 == 0:
                 return 'buy'
             elif 短均线 < 长均线和 rsi > 50 and self.持仓 > 0:
