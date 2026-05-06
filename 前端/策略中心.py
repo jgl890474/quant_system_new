@@ -27,27 +27,38 @@ def 显示(引擎, 策略加载器, 策略信号):
             col2.write(策略信息['品种'])
             col3.write(策略信息['类别'])
             
+            # 运行信号按钮
             if col4.button(f"▶ 运行信号", key=f"运行_{策略信息['名称']}_{idx}"):
                 行情数据 = 行情获取.获取价格(策略信息['品种'])
                 信号 = 策略运行器.运行(策略信息, 行情数据)
                 策略信号[策略信息['名称']] = 信号
                 st.success(f"📡 {策略信息['名称']} 信号: {信号.upper()}")
+                st.rerun()
             
+            # 显示信号和执行按钮
             if 策略信息['名称'] in 策略信号:
                 信号 = 策略信号[策略信息['名称']]
                 信号列, 执行列 = st.columns([1, 3])
+                
                 if 信号 == "buy":
                     信号列.markdown(f"<span style='color:#00ff88;font-weight:bold'>📈 信号: BUY</span>", unsafe_allow_html=True)
-                    if 执行列.button(f"💸 执行买入", key=f"买入_{策略信息['名称']}_{idx}"):
-                        价格 = 行情获取.获取价格(策略信息['品种']).价格
-                        引擎.买入(策略信息['品种'], 价格)
+                    # 执行买入按钮 - 使用独立的session状态避免重复触发
+                    button_key = f"买入_{策略信息['名称']}_{idx}"
+                    if 执行列.button(f"💸 执行买入", key=button_key):
+                        价格 = 行情获取.获取价格(策略信息['品种']).price
+                        # 直接调用引擎买入
+                       引擎.买入(策略信息['品种'], 价格)
                         st.rerun()
+                        
                 elif 信号 == "sell":
                     信号列.markdown(f"<span style='color:#ff4444;font-weight:bold'>📉 信号: SELL</span>", unsafe_allow_html=True)
-                    if 执行列.button(f"💸 执行卖出", key=f"卖出_{策略信息['名称']}_{idx}"):
-                        价格 = 行情获取.获取价格(策略信息['品种']).价格
+                    button_key = f"卖出_{策略信息['名称']}_{idx}"
+                    if 执行列.button(f"💸 执行卖出", key=button_key):
+                        价格 = 行情获取.获取价格(策略信息['品种']).price
                         引擎.卖出(策略信息['品种'], 价格)
                         st.rerun()
+                        
                 else:
                     信号列.markdown(f"<span style='color:#ffaa00;font-weight:bold'>⏸️ 信号: HOLD</span>", unsafe_allow_html=True)
+            
             st.markdown("---")
