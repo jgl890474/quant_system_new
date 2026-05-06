@@ -56,8 +56,7 @@ class AStockVolumePriceStrategy(策略基类):
             return 'buy'
         
         # 卖出：死叉 或 高位放量滞涨
-        elif (短均线 < 长均线 or 
-              (当前价格 > 长均线 * 1.2 and is_放量和 self.持仓 > 0)):
+        elif (短均线 < 长均线 or (当前价格 > 长均线 * 1.2 and is_放量)) and self.持仓 > 0:
             return 'sell'
         
         return 'hold'
