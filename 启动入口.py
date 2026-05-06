@@ -5,8 +5,8 @@ import os
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# 只导入稳定工作的5个核心模块
-from 前端 import 首页, 策略中心, AI交易, 持仓管理, 资金曲线
+# 导入6个核心模块（加上回测）
+from 前端 import 首页, 策略中心, AI交易, 持仓管理, 资金曲线, 回测
 from 核心 import 订单引擎, 策略加载器, AI引擎
 
 # ========== 初始化数据库 ==========
@@ -46,8 +46,8 @@ st.markdown("""
 st.markdown('<h1>📊 量化交易系统 v5.0</h1>', unsafe_allow_html=True)
 st.markdown('<div class="caption">多类目 · 多策略 · AI自动交易 | 云端部署</div>', unsafe_allow_html=True)
 
-# 创建5个Tab，对应5个稳定模块
-tabs = st.tabs(["首页", "策略中心", "AI交易", "持仓管理", "资金曲线"])
+# 创建6个Tab（加上回测）
+tabs = st.tabs(["首页", "策略中心", "AI交易", "持仓管理", "资金曲线", "回测"])
 
 # 获取各引擎实例
 引擎 = st.session_state.订单引擎
@@ -70,3 +70,6 @@ with tabs[3]:
 
 with tabs[4]:
     资金曲线.显示(引擎)
+
+with tabs[5]:
+    回测.显示()
