@@ -9,53 +9,23 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from 回测.回测引擎 import 回测引擎
 
-# 导入策略 - 逐行导入，避免语法错误
-try:
-    from 策略库.期货策略.期货趋势策略 import FuturesTrendStrategy
-except:
-    FuturesTrendStrategy = None
-
-try:
-    from 策略库.加密货币策略.加密双均线 import CryptoDualMAStrategy
-except:
-    CryptoDualMAStrategy = None
-
-try:
-    from 策略库.A股策略.A股双均线 import AStockDualMAStrategy
-except:
-    AStockDualMAStrategy = None
-
-try:
-    from 策略库.美股策略.美股双均线 import USStockDualMAStrategy
-except:
-    USStockDualMAStrategy = None
-
-try:
-    from 策略库.港股策略.港股双均线 import HKStockDualMAStrategy
-except:
-    HKStockDualMAStrategy = None
+# 只导入确认没有错误的策略
+from 策略库.期货策略.期货趋势策略 import FuturesTrendStrategy
+from 策略库.加密货币策略.加密双均线 import CryptoDualMAStrategy
+from 策略库.A股策略.A股双均线 import AStockDualMAStrategy
+from 策略库.美股策略.美股双均线 import USStockDualMAStrategy
 
 
 def 显示():
     st.markdown("### 📈 策略回测系统")
     st.markdown("使用真实历史数据回测策略表现")
     
-    策略类型映射 = {}
-    
-    if FuturesTrendStrategy:
-        策略类型映射["期货趋势策略"] = FuturesTrendStrategy
-    if CryptoDualMAStrategy:
-        策略类型映射["加密双均线"] = CryptoDualMAStrategy
-    if AStockDualMAStrategy:
-        策略类型映射["A股双均线"] = AStockDualMAStrategy
-    if USStockDualMAStrategy:
-        策略类型映射["美股双均线"] = USStockDualMAStrategy
-    if HKStockDualMAStrategy:
-        策略类型映射["港股双均线"] = HKStockDualMAStrategy
-    
-    if not 策略类型映射:
-        st.error("没有找到任何策略，请检查策略库")
-        return
+    策略类型映射 = {
+        "期货趋势策略": FuturesTrendStrategy,
+        "加密双均线": CryptoDualMAStrategy,
+        "A股双均线": AStockDualMAStrategy,
+        "美股双均线": USStockDualMAStrategy,
+    }
     
     策略名称 = st.selectbox("选择策略", list(策略类型映射.keys()))
     
