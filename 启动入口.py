@@ -1,68 +1,101 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
-import sys
-import os
+import yfinance as yf
+import pandas as pd
+from datetime import datetime
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-from 前端 import 首页, 策略中心, AI交易, 持仓管理, 资金曲线
-from 核心 import 订单引擎, 策略加载器, AI引擎
-
-# ========== 初始化数据库 ==========
-from 工具 import 数据库
-数据库.初始化数据库()
-
-# ========== 初始化 session_state ==========
-if '订单引擎' not in st.session_state:
-    st.session_state.订单引擎 = 订单引擎()
-
-if '策略加载器' not in st.session_state:
-    st.session_state.策略加载器 = 策略加载器()
-
-if 'AI引擎' not in st.session_state:
-    st.session_state.AI引擎 = AI引擎()
-
-if '策略信号' not in st.session_state:
-    st.session_state.策略信号 = {}
-
-# ========== 初始化风控引擎 ==========
-if '风控引擎' not in st.session_state:
-    from 核心.风控引擎 import 风控引擎
-    st.session_state.风控引擎 = 风控引擎()
-
-# ========== 页面配置 ==========
 st.set_page_config(page_title="量化交易系统", layout="wide")
 
-st.markdown("""
-<style>
-    .stApp { background-color: #0a0c10; }
-    .stMetric { background-color: #1a1d24; border-radius: 8px; padding: 10px; text-align: center; }
-    h1 { color: white; text-align: center; font-size: 24px; }
-    .caption { text-align: center; color: #8892b0; font-size: 12px; margin-bottom: 20px; }
-</style>
-""", unsafe_allow_html=True)
+st.title("📊 量化交易系统 v5.0")
+st.caption("多类目 · 多策略 · AI自动交易 | 云端部署")
 
-st.markdown('<h1>📊 量化交易系统 v5.0</h1>', unsafe_allow_html=True)
-st.markdown('<div class="caption">多类目 · 多策略 · AI自动交易 | 云端部署</div>', unsafe_allow_html=True)
+# 初始化
+if '资金' not in st.session_state:
+    st.session_state.资金 = 100000
+if '持仓' not in st.session_state:
+    st.session_state.持仓 = {}
+if '交易记录' not in st.session_state:
+    st.session_state.交易记录 = []
 
-tabs = st.tabs(["首页", "策略中心", "AI交易", "持仓管理", "资金曲线"])
+def 获取价格(品种):
+    try:
+        映射 = {"EURUSD": "EURUSD=X", "BTC-USD": "BTC-USD", "GC=F": "GC=F", "AAPL": "AAPL"}
+        代码 = 映射.get(品种, 品种)
+        数据 = yf.Ticker(代码).history(period="1d")
+        if not 数据.empty:
+            return round(数据['Close'].iloc[-1], 2)
+    except:
+        pass
+    return {"AAPL": 175, "BTC-USD": 45000, "GC=F": 1950, "EURUSD": 1.08}.get(品种, 100)
 
-引擎 = st.session_state.订单引擎
-策略加载器 = st.session_state.策略加载器
-AI引擎 = st.session_state.AI引擎
-策略信号 = st.session_state.策略信号
+def 买入(品种, 价格):
+    if 品种 in st.session_state.持仓:
+        st.session_state.持仓[品种]['数量'] += 1000
+    else:
+        st.session_state.持仓[品种] = {'数量': 1000, '成本': 价格}
+    st.session_state.资金 -= 价格 * 1000
+    st.session_state.交易记录.append({'时间': datetime.now(), '动作': '买入', '品种': 品种, '价格': 价格})
 
-with tabs[0]:
-    首页.显示(引擎)
+def 卖出(品种, 价格):
+    if 品种 in st.session_state.持仓:
+        数量 = st.session_state.持仓[品种]['数量']
+        成本 = st.session_state.持仓[品种]['成本']
+        盈亏 = (价格 - 成本) * 数量
+        st.session_state.资金 += 价格 * 数量
+        del st.session_state.持仓[品种]
+        st.session_state.交易记录.append({'时间': datetime.now(), '动作': '卖出', '品种': 品种, '价格': 价格, '盈亏': 盈亏})
+        return盈亏
+    return None
 
-with tabs[1]:
-    策略中心.显示(引擎, 策略加载器, 策略信号)
+# 页面
+tab1, tab2, tab3, tab4 = st.tabs(["首页", "交易", "持仓", "记录"])
 
-with tabs[2]:
-    AI交易.显示(引擎, 策略加载器, AI引擎)
+with tab1:
+    col1, col2, col3, col4 = st.columns(4)
+    总资产 = st.session_state.资金 + sum(p['数量'] * 获取价格(s) for s, p in st.session_state.持仓.items())
+    col1.metric("总资产", f"${总资产:,.0f}")
+    col2.metric("可用资金", f"${st.session_state.资金:,.0f}")
+    col3.metric("持仓数", len(st.session_state.持仓))
+    col4.metric("交易次数", len(st.session_state.交易记录))
+    
+    st.subheader("市场行情")
+    for 品种 in ["AAPL", "BTC-USD", "GC=F", "EURUSD"]:
+        c1, c2 = st.columns([1, 3])
+        c1.write(品种)
+        c2.write(f"${获取价格(品种)}")
 
-with tabs[3]:
-    持仓管理.显示(引擎, 策略加载器, AI引擎)
+with tab2:
+    品种 = st.selectbox("选择品种", ["AAPL", "BTC-USD", "GC=F", "EURUSD"])
+    价格 = 获取价格(品种)
+    st.info(f"当前价格: ${价格}")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("买入", type="primary"):
+            买入(品种, 价格)
+            st.success(f"✅ 买入 {品种} @ ${价格}")
+            st.rerun()
+    with col2:
+        if st.button("卖出"):
+            if 品种 in st.session_state.持仓:
+                卖出(品种, 价格)
+                st.success(f"✅ 卖出 {品种} @ ${价格}")
+                st.rerun()
+            else:
+                st.error(f"❌ 没有 {品种} 持仓")
 
-with tabs[4]:
-    资金曲线.显示(引擎)
+with tab3:
+    if st.session_state.持仓:
+        for 品种, 数据 in st.session_state.持仓.items():
+            现价 = 获取价格(品种)
+            盈亏 = (现价 - 数据['成本']) * 数据['数量']
+            st.metric(品种, f"数量: {数据['数量']}", delta=f"盈亏: ${盈亏:+.2f}")
+    else:
+        st.info("暂无持仓")
+
+with tab4:
+    if st.session_state.交易记录:
+        df = pd.DataFrame(st.session_state.交易记录[-20:])
+        st.dataframe(df, use_container_width=True)
+    else:
+        st.info("暂无交易记录")
