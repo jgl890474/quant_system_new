@@ -11,6 +11,7 @@ class 策略加载器:
     
     def _加载所有(self, 路径):
         if not os.path.exists(路径):
+            print(f"策略路径不存在: {路径}")
             return
         
         类别配置 = {
@@ -48,9 +49,10 @@ class 策略加载器:
                                 "品种": 配置["品种"],
                                 "类别": 配置["显示"],
                             })
+                            print(f"✅ 加载策略: {策略名}")
                             break
                 except Exception as e:
-                    print(f"加载失败 {策略名}: {e}")
+                    print(f"❌ 加载失败 {策略名}: {e}")
     
     def 获取策略(self):
         return self.策略列表
