@@ -3,6 +3,7 @@ import streamlit as st
 import requests
 import json
 import time
+from 工具 import 数据库  # 新增：导入数据库模块
 
 
 class AI引擎:
@@ -57,7 +58,12 @@ class AI引擎:
             if response.status_code == 200:
                 结果 = response.json()
                 内容 = 结果["choices"][0]["message"]["content"]
-                return self._解析AI返回(内容)
+                分析结果 = self._解析AI返回(内容)
+                
+                # 新增：保存AI决策到数据库
+                数据库.保存AI决策(品种, 价格, 策略信号, 分析结果["最终信号"], 分析结果["置信度"], 分析结果["理由"])
+                
+                return 分析结果
             else:
                 st.warning(f"AI API 调用失败: {response.status_code}，使用简化模式")
                 return self._简化分析(品种, 价格, 策略信号)
