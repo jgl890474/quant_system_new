@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import pandas as pd
 import yfinance as yf
 from datetime import datetime, timedelta
+import numpy as np
 
 def 显示():
     st.markdown("### 📈 策略回测系统")
@@ -44,15 +45,38 @@ def 显示():
                     st.error("无法获取数据，请尝试其他品种或日期范围")
                     return
                 
-                # 确保Close列是数值类型
-                收盘价系列 = pd.to_numeric(数据['Close'], errors='coerce').dropna()
-                if len(收盘价系列) < 2:
-                    st.error("数据不足，请选择更长的日期范围")
+                # 确保数据是DataFrame格式
+                if not isinstance(数据, pd.DataFrame):
+                    st.error("数据格式错误")
                     return
                 
-                # 计算收益率（修复关键：使用数值而不是Series）
-                收盘价_开始 = float(收盘价系列.iloc[0])
-                收盘价_结束 = float(收盘价系列.iloc[-1])
+                # 提取收盘价 - 修复关键点
+                if 'Close' in 数据.columns:
+                    收盘价系列 = 数据['Close']
+                else:
+                    st.error("无法获取收盘价数据")
+                    return
+                
+                # 转换为数值列表
+                收盘价列表 = []
+                for val in 收盘价系列:
+                    try:
+                        if isinstance(val, (int, float)):
+                            收盘价列表.append(float(val))
+                        elif hasattr(val, 'iloc'):
+                            收盘价列表.append(float(val.iloc[0]))
+                        else:
+                            收盘价列表.append(float(val))
+                    except:
+                        continue
+                
+                if len(收盘价列表) < 2:
+                    st.error(f"有效数据不足，仅获取到 {len(收盘价列表)} 个数据点")
+                    return
+                
+                # 计算收益率
+                收盘价_开始 = 收盘价列表[0]
+                收盘价_结束 = 收盘价列表[-1]
                 
                 if 收盘价_开始 == 0:
                     st.error("起始价格为零，无法计算")
@@ -62,20 +86,20 @@ def 显示():
                 最终资金 = 初始资金 * (1 + 总收益率)
                 
                 # 显示结果
-                st.success(f"✅ 回测完成！")
+                st.success(f"✅ 回测完成！数据点: {len(收盘价列表)}")
                 
                 # 指标卡片
                 col_a, col_b, col_c, col_d = st.columns(4)
                 col_a.metric("总收益率", f"{总收益率*100:.2f}%")
                 col_b.metric("初始资金", f"${初始资金:,.0f}")
                 col_c.metric("最终资金", f"${最终资金:,.0f}")
-                col_d.metric("K线数量", f"{len(收盘价系列)}")
+                col_d.metric("数据量", f"{len(收盘价列表)}")
                 
                 # 净值曲线
                 fig = go.Figure()
-                净值 = [初始资金 * (1 + 总收益率 * i / len(收盘价系列)) for i in range(len(收盘价系列))]
+                净值 = [初始资金 * (1 + 总收益率 * i / max(len(收盘价列表), 1)) for i in range(len(收盘价列表))]
                 fig.add_trace(go.Scatter(
-                    x=数据.index, 
+                    x=数据.index[:len(收盘价列表)], 
                     y=净值, 
                     mode='lines', 
                     name='净值',
@@ -93,12 +117,12 @@ def 显示():
                 )
                 st.plotly_chart(fig, use_container_width=True)
                 
-                # 简单策略信号图（可选）
+                # 价格走势
                 with st.expander("📊 价格走势"):
                     fig2 = go.Figure()
                     fig2.add_trace(go.Scatter(
-                        x=数据.index,
-                        y=收盘价系列,
+                        x=数据.index[:len(收盘价列表)],
+                        y=收盘价列表,
                         mode='lines',
                         name='收盘价',
                         line=dict(color='#ffaa00', width=1.5)
