@@ -1,27 +1,23 @@
-
 # -*- coding: utf-8 -*-
 import streamlit as st
-from 核心 import 行情获取, 策略运行器
+import pandas as pd
+from 核心 import 行情获取
 
-def 显示(引擎, 策略加载器, AI引擎):
-    st.markdown("### 🤖 AI智能交易")
-    策略列表 = 策略加载器.获取策略()
-    策略名称列表 = [s["名称"] for s in 策略列表]
-    if 策略名称列表:
-        选中策略 = st.selectbox("选择策略", 策略名称列表)
-        if st.button("🚀 AI分析并执行", type="primary", use_container_width=True):
-            策略信息 = 策略加载器.根据名称获取(选中策略)
-            if 策略信息:
-                行情数据 = 行情获取.获取价格(策略信息['品种'])
-                策略信号 = 策略运行器.运行(策略信息, 行情数据)
-                st.info(f"📊 策略信号: {策略信号.upper()}")
-                结果 = AI引擎.分析(策略信息['品种'], 行情数据.价格, 策略信号)
-                st.success(f"🤖 AI决策: {结果['最终信号'].upper()}")
-                if 结果['最终信号'] == 'buy':
-                    if st.button("确认执行买入"):
-                        引擎.买入(策略信息['品种'], 行情数据.价格)
-                        st.rerun()
-                elif 结果['最终信号'] == 'sell':
-                    if st.button("确认执行卖出"):
-                        引擎.卖出(策略信息['品种'], 行情数据.价格)
-                        st.rerun()
+def 显示(引擎):
+    st.markdown("### 💼 当前持仓")
+    if 引擎.持仓:
+        数据 = []
+        for 品种, 持仓对象 in 引擎.持仓.items():
+            价格 = 行情获取.获取价格(品种).价格
+            持仓对象.当前价格 = 价格
+            盈亏 = 持仓对象.数量 * (价格 - 持仓对象.平均成本)
+            数据.append({"品种": 品种, "数量": f"{持仓对象.数量:.4f}", "成本": f"{持仓对象.平均成本:.4f}", "现价": f"{价格:.4f}", "盈亏": f"${盈亏:+,.2f}"})
+        st.dataframe(pd.DataFrame(数据), use_container_width=True, hide_index=True)
+    else:
+        st.info("暂无持仓")
+    
+    st.markdown("### 📜 交易记录")
+    if 引擎.交易记录:
+        df = pd.DataFrame(引擎.交易记录[-10:])
+        df['时间'] = df['时间'].dt.strftime('%H:%M:%S')
+        st.dataframe(df, use_container_width=True)
