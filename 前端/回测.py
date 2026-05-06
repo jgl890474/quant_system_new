@@ -9,12 +9,12 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from 回测.回测引擎 import 回测引擎
 
-# 导入策略
+# 导入策略（删除港股）
 from 策略库.期货策略.期货趋势策略 import FuturesTrendStrategy
 from 策略库.加密货币策略.加密双均线 import CryptoDualMAStrategy
 from 策略库.A股策略.A股双均线 import AStockDualMAStrategy
 from 策略库.美股策略.美股双均线 import USStockDualMAStrategy
-# from 策略库.港股策略.港股双均线 import HKStockDualMAStrategy
+# from 策略库.港股策略.港股双均线 import HKStockDualMAStrategy   # 已删除
 
 
 def 显示():
