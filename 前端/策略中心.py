@@ -1,19 +1,53 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
-from 核心 import 行情获取
+from 核心 import 行情获取, 策略运行器
 
-def 显示(引擎):
-    col1, col2, col3, col4 = st.columns(4)
-    总资产 = 引擎.获取总资产()
-    总盈亏 = 引擎.获取总盈亏()
-    col1.metric("总资产", f"${总资产:,.0f}")
-    col2.metric("总盈亏", f"${总盈亏:+,.0f}")
-    col3.metric("持仓数", f"{len(引擎.持仓)}")
-    col4.metric("交易次数", f"{len(引擎.交易记录)}")
+def 显示(引擎, 策略加载器, 策略信号):
+    st.markdown("### 🎯 策略库")
     
-    st.markdown("### 📈 市场行情")
-    行情列 = st.columns(4)
-    品种列表 = ["EURUSD", "BTC-USD", "GC=F", "AAPL"]
-    for i, 品种 in enumerate(品种列表):
-        行情数据 = 行情获取.获取价格(品种)
-        行情列[i].markdown(f'<div style="background:#1a1d24;border-radius:8px;padding:10px;text-align:center"><b>{品种}</b><br><span style="color:#00d2ff;font-size:18px">{行情数据.价格:.4f}</span></div>', unsafe_allow_html=True)
+    策略列表 = 策略加载器.获取策略()
+    
+    if not 策略列表:
+        st.info("暂无策略，请检查策略库文件夹")
+        return
+    
+    # 按类别分组
+    分组 = {}
+    for s in 策略列表:
+        类别 = s.get("类别", "其他")
+        if 类别 not in 分组:
+            分组[类别] = []
+        分组[类别].append(s)
+    
+    for 类别, 类别策略 in 分组.items():
+        st.markdown(f'<div class="category-title">📁 {类别} ({len(类别策略)})</div>', unsafe_allow_html=True)
+        for idx, 策略信息 in enumerate(类别策略):
+            col1, col2, col3, col4 = st.columns([2, 1.2, 1.2, 1.5])
+            col1.write(f"**{策略信息['名称']}**")
+            col2.write(策略信息['品种'])
+            col3.write(策略信息['类别'])
+            
+            if col4.button(f"▶ 运行信号", key=f"运行_{策略信息['名称']}_{idx}"):
+                行情数据 = 行情获取.获取价格(策略信息['品种'])
+                信号 = 策略运行器.运行(策略信息, 行情数据)
+                策略信号[策略信息['名称']] = 信号
+                st.success(f"📡 {策略信息['名称']} 信号: {信号.upper()}")
+            
+            if 策略信息['名称'] in 策略信号:
+                信号 = 策略信号[策略信息['名称']]
+                信号列, 执行列 = st.columns([1, 3])
+                if 信号 == "buy":
+                    信号列.markdown(f"<span style='color:#00ff88;font-weight:bold'>📈 信号: BUY</span>", unsafe_allow_html=True)
+                    if 执行列.button(f"💸 执行买入", key=f"买入_{策略信息['名称']}_{idx}"):
+                        价格 = 行情获取.获取价格(策略信息['品种']).价格
+                        引擎.买入(策略信息['品种'], 价格)
+                        st.rerun()
+                elif 信号 == "sell":
+                    信号列.markdown(f"<span style='color:#ff4444;font-weight:bold'>📉 信号: SELL</span>", unsafe_allow_html=True)
+                    if 执行列.button(f"💸 执行卖出", key=f"卖出_{策略信息['名称']}_{idx}"):
+                        价格 = 行情获取.获取价格(策略信息['品种']).价格
+                        引擎.卖出(策略信息['品种'], 价格)
+                        st.rerun()
+                else:
+                    信号列.markdown(f"<span style='color:#ffaa00;font-weight:bold'>⏸️ 信号: HOLD</span>", unsafe_allow_html=True)
+            st.markdown("---")
