@@ -5,7 +5,7 @@ import os
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from 前端 import 首页, 策略中心, AI交易, 持仓管理, 资金曲线, 回测
+from 前端 import 首页, 策略中心, AI交易, 持仓管理, 资金曲线
 from 核心 import 订单引擎, 策略加载器, AI引擎
 
 # ========== 初始化数据库 ==========
