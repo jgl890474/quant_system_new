@@ -14,7 +14,7 @@ from 策略库.期货策略.期货趋势策略 import FuturesTrendStrategy
 from 策略库.加密货币策略.加密双均线 import CryptoDualMAStrategy
 from 策略库.A股策略.A股双均线 import AStockDualMAStrategy
 from 策略库.美股策略.美股双均线 import USStockDualMAStrategy
-from 策略库.港股策略.港股双均线 import HKStockDualMAStrategy
+# from 策略库.港股策略.港股双均线 import HKStockDualMAStrategy
 
 
 def 显示():
@@ -26,14 +26,13 @@ def 显示():
         "加密双均线": CryptoDualMAStrategy,
         "A股双均线": AStockDualMAStrategy,
         "美股双均线": USStockDualMAStrategy,
-        "港股双均线": HKStockDualMAStrategy,
     }
     
     策略名称 = st.selectbox("选择策略", list(策略类型映射.keys()))
     
     col1, col2 = st.columns(2)
     with col1:
-        品种 = st.selectbox("选择品种", ["AAPL", "BTC-USD", "EURUSD", "GC=F", "000001.SS", "00700.HK"])
+        品种 = st.selectbox("选择品种", ["AAPL", "BTC-USD", "EURUSD", "GC=F", "000001.SS"])
     with col2:
         周期 = st.selectbox("K线周期", ["1d", "1h", "30m", "15m", "5m"])
     
