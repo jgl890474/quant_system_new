@@ -56,7 +56,7 @@ def 显示():
                 col_c.metric("最终资金", f"${最终资金:,.0f}")
                 col_d.metric("数据量", f"{len(日期列表)}")
                 
-                # ========== 平滑曲线 (spline) ==========
+                # ========== 净值曲线（优化版） ==========
                 净值 = [初始资金 * (1 + 总收益率 * i / len(日期列表)) for i in range(len(日期列表))]
                 
                 fig = go.Figure()
@@ -64,20 +64,34 @@ def 显示():
                     x=日期列表,
                     y=净值,
                     mode='lines',
-                    name='净值曲线',
-                    line=dict(color='#00d2ff', width=1.5, shape='spline'),  # shape='spline' = 平滑曲线
+                    name='净值',
+                    line=dict(color='#00d2ff', width=2, shape='spline'),  # 加粗到2，更明显
                     fill='tozeroy',
-                    opacity=0.2
+                    opacity=0.4  # 增加不透明度
                 ))
+                
+                # 添加初始资金参考线
+                fig.add_hline(
+                    y=初始资金,
+                    line_dash="dash",
+                    line_color="#ffaa00",
+                    annotation_text=f"初始资金 ${初始资金:,.0f}",
+                    annotation_font_color="#e6e6e6"
+                )
+                
                 fig.update_layout(
-                    height=300,
-                    title="净值曲线（平滑）",
+                    height=350,
+                    title="净值曲线",
                     paper_bgcolor="#0a0c10",
                     plot_bgcolor="#15171a",
                     font_color="#e6e6e6",
                     xaxis_title="日期",
                     yaxis_title="净值 (美元)",
-                    margin=dict(l=40, r=40, t=40, b=40)
+                    xaxis=dict(
+                        tickformat="%Y-%m-%d",  # 日期格式
+                        tickangle=-45  # 倾斜45度避免重叠
+                    ),
+                    margin=dict(l=50, r=40, t=50, b=80)
                 )
                 st.plotly_chart(fig, use_container_width=True)
                 
