@@ -23,6 +23,7 @@ class 订单引擎:
     def 买入(self, 品种, 价格, 数量=1000):
         from .数据模型 import 持仓数据
         
+        # 执行买入
         if 品种 in self.持仓:
             pos = self.持仓[品种]
             总数量 = pos.数量 + 数量
@@ -32,14 +33,17 @@ class 订单引擎:
         else:
             self.持仓[品种] = 持仓数据(品种, 数量, 价格)
         
+        # 记录交易
         self.交易记录.append({"时间": datetime.now(), "动作": "买入", "品种": 品种, "价格": 价格, "数量": 数量})
         
+        # 保存到数据库
         try:
             数据库.保存交易记录("买入", 品种, 价格, 数量, 策略名称=st.session_state.get('当前策略', ''))
         except:
             pass
         
-        st.success(f"✅ 买入 {品种} @ {价格:.4f}")
+        # 使用 session_state 存储成功消息，避免刷新时丢失
+        st.session_state['成功消息'] = f"✅ 买入 {品种} @ {价格:.4f}"
         st.rerun()
     
     def 卖出(self, 品种, 价格, 数量=1000):
@@ -59,7 +63,8 @@ class 订单引擎:
             except:
                 pass
             
-            st.success(f"✅ 卖出 {品种} @ {价格:.4f}, 盈亏: ${盈亏:+.2f}")
+            st.session_state['成功消息'] = f"✅ 卖出 {品种} @ {价格:.4f}, 盈亏: ${盈亏:+.2f}"
             st.rerun()
         else:
-            st.error(f"❌ 卖出失败: {品种} 持仓不足")
+            st.session_state['错误消息'] = f"❌ 卖出失败: {品种} 持仓不足"
+            st.rerun()
