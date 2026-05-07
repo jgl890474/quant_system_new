@@ -95,6 +95,20 @@ with st.sidebar:
         st.success("✅ 已清空")
         st.rerun()
     
+    # 刷新策略列表按钮
+    if st.button("🔄 刷新策略列表", use_container_width=True):
+        try:
+            # 清除策略缓存
+            if '策略加载器' in st.session_state:
+                del st.session_state['策略加载器']
+            st.session_state.策略加载器 = 策略加载器()
+            # 更新变量
+            策略加载器 = st.session_state.策略加载器
+            st.success("✅ 策略列表已刷新")
+            st.rerun()
+        except Exception as e:
+            st.error(f"刷新失败: {e}")
+    
     st.markdown("---")
     
     # ========== 风控设置 ==========
