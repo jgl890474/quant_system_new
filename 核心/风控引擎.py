@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
 from datetime import datetime, date
-import time
+from 核心 import 行情获取
 
 class 风控引擎:
     def __init__(self, 配置=None):
@@ -16,7 +16,7 @@ class 风控引擎:
         self.最大总仓位比例 = self.配置.get("最大总仓位比例", 0.8)
         self.每日最大亏损 = self.配置.get("每日最大亏损", 0.05)
         
-        # 移动止损记录 {品种: 最高价}
+        # 移动止损记录 {品种: {"最高价": xx, "止损价": xx}}
         self.移动止损记录 = {}
         
         # 每日统计
@@ -46,11 +46,11 @@ class 风控引擎:
         
         if 方向 == "long":
             # 多头：更新最高价
-            if 当前价 > record["最高价"]:
+            if 当前价 > record.get("最高价", 当前价):
                 record["最高价"] = 当前价
                 # 移动止损价 = 最高价 * (1 - 移动止损回撤)
                 new_stop = record["最高价"] * (1 - self.移动止损回撤)
-                if new_stop > record["止损价"]:
+                if new_stop > record.get("止损价", new_stop):
                     record["止损价"] = new_stop
                     return {"触发价": record["止损价"], "类型": "移动止损"}
         else:
@@ -94,7 +94,6 @@ class 风控引擎:
         for 品种, pos in 引擎.持仓.items():
             # 获取当前价格
             try:
-                from 核心 import 行情获取
                 当前价 = 行情获取.获取价格(品种).价格
                 pos.当前价格 = 当前价
             except:
@@ -160,7 +159,14 @@ class 风控引擎:
             return False, f"单品种仓位超限: {品种}"
         
         # 总仓位限制
-        当前总仓位 = sum(pos.数量 * price for pos, price in zip(引擎.持仓.values(), [行情获取.获取价格(s).价格 for s in 引擎.持仓.keys()]))
+        当前总仓位 = 0
+        for s, pos in 引擎.持仓.items():
+            try:
+                当前价 = 行情获取.获取价格(s).价格
+                当前总仓位 += pos.数量 * 当前价
+            except:
+                当前总仓位 += pos.数量 * pos.平均成本
+        
         新总仓位 = 当前总仓位 + 数量 * 价格
         
         if 新总仓位 > 总资金 * self.最大总仓位比例:
@@ -168,24 +174,35 @@ class 风控引擎:
         
         return True, "通过"
     
-    # 以下方法保持不变...
     def 检查持仓风控(self, 引擎):
-        return []
+        """检查所有持仓是否触发止损/止盈"""
+        return self.监控持仓(引擎)
     
     def 执行风控平仓(self, 引擎):
+        """自动执行风控平仓"""
         return self.执行自动平仓(引擎)
     
     def 更新每日盈亏(self, 盈亏):
+        """更新今日盈亏统计"""
         today = date.today()
         if today != self.今日交易日期:
+            # 新的一天，重置统计
             self.今日交易日期 = today
             self.今日盈亏 = 0
             self.今日交易次数 = 0
+        
         self.今日盈亏 += 盈亏
         self.今日交易次数 += 1
     
     def 获取风控状态(self, 引擎, 总资金):
-        当前总仓位 = sum(pos.数量 * pos.当前价格 for pos in 引擎.持仓.values())
+        """获取当前风控状态摘要"""
+        当前总仓位 = 0
+        for s, pos in 引擎.持仓.items():
+            try:
+                当前价 = 行情获取.获取价格(s).价格
+                当前总仓位 += pos.数量 * 当前价
+            except:
+                当前总仓位 += pos.数量 * pos.平均成本
         
         return {
             "总仓位比例": f"{当前总仓位/总资金*100:.1f}%",
