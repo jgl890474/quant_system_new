@@ -132,61 +132,77 @@ def 显示(引擎):
         if 明细数据:
             st.dataframe(pd.DataFrame(明细数据), use_container_width=True, hide_index=True)
     
-    # ========== 策略收益对比 + 持仓图表（两列对齐） ==========
-    st.markdown("### 📊 策略与持仓分析")
+    # ========== 策略收益对比（两列布局） ==========
+    st.markdown("### 📊 策略收益对比")
     st.markdown("---")
     
-    # 使用两列等宽布局
-    col1, col2 = st.columns(2, gap="large")
+    # 两列布局显示策略收益
+    # 将策略分成两列显示
+    half = len(策略名称列表) // 2 + (len(策略名称列表) % 2)
+    左列策略 = 策略名称列表[:half]
+    右列策略 = 策略名称列表[half:]
     
-    with col1:
-        st.markdown("#### 📈 策略收益对比")
-        
-        # 构建策略收益表格
-        对比数据 = []
-        for 策略名 in 策略名称列表:
+    col_left, col_right = st.columns(2)
+    
+    with col_left:
+        for 策略名 in 左列策略:
             收益率 = 策略收益率.get(策略名, 0)
             颜色 = 策略颜色.get(策略名, "#94a3b8")
-            
-            # 根据收益率设置箭头
             if 收益率 > 0:
                 箭头 = "▲"
+                箭头颜色 = "#10b981"
             elif 收益率 < 0:
                 箭头 = "▼"
+                箭头颜色 = "#ef4444"
             else:
                 箭头 = "●"
-            
-            对比数据.append({
-                "策略": 策略名,
-                "收益": f"{收益率:+.1f}%",
-                " ": f"<span style='color:{颜色}; font-size:14px;'>{箭头}</span>",
-            })
-        
-        对比_df = pd.DataFrame(对比数据)
-        st.markdown(对比_df.to_html(escape=False, index=False), unsafe_allow_html=True)
+                箭头颜色 = "#94a3b8"
+            st.markdown(f"<span style='color:{颜色}; font-size:14px;'>{箭头}</span> **{策略名}** : {收益率:+.1f}%", unsafe_allow_html=True)
     
-    with col2:
-        if 引擎.持仓:
-            st.markdown("#### 📊 持仓图表")
+    with col_right:
+        for 策略名 in 右列策略:
+            收益率 = 策略收益率.get(策略名, 0)
+            颜色 = 策略颜色.get(策略名, "#94a3b8")
+            if 收益率 > 0:
+                箭头 = "▲"
+                箭头颜色 = "#10b981"
+            elif 收益率 < 0:
+                箭头 = "▼"
+                箭头颜色 = "#ef4444"
+            else:
+                箭头 = "●"
+                箭头颜色 = "#94a3b8"
+            st.markdown(f"<span style='color:{颜色}; font-size:14px;'>{箭头}</span> **{策略名}** : {收益率:+.1f}%", unsafe_allow_html=True)
+    
+    # ========== 持仓图表（全宽，放在最后） ==========
+    if 引擎.持仓:
+        st.markdown("### 📊 持仓分析")
+        st.markdown("---")
+        
+        持仓数据 = []
+        总市值 = 0
+        for 品种, pos in 引擎.持仓.items():
+            try:
+                现价 = 行情获取.获取价格(品种).价格
+                盈亏 = (现价 - pos.平均成本) * pos.数量
+                市值 = pos.数量 * 现价
+                盈亏率 = (现价 / pos.平均成本 - 1) * 100
+                总市值 += 市值
+                持仓数据.append({
+                    "品种": 品种,
+                    "盈亏": 盈亏,
+                    "市值": 市值,
+                    "盈亏率": 盈亏率
+                })
+            except:
+                pass
+        
+        if 持仓数据:
+            # 两列布局：盈亏柱状图 + 横向条形图
+            col_a, col_b = st.columns(2)
             
-            持仓数据 = []
-            总市值 = 0
-            for 品种, pos in 引擎.持仓.items():
-                try:
-                    现价 = 行情获取.获取价格(品种).价格
-                    盈亏 = (现价 - pos.平均成本) * pos.数量
-                    市值 = pos.数量 * 现价
-                    总市值 += 市值
-                    持仓数据.append({
-                        "品种": 品种,
-                        "盈亏": 盈亏,
-                        "市值": 市值
-                    })
-                except:
-                    pass
-            
-            if 持仓数据:
-                # 盈亏柱状图
+            with col_a:
+                st.markdown("#### 盈亏柱状图")
                 df_bar = pd.DataFrame(持仓数据)
                 colors = ['#10b981' if x >= 0 else '#ef4444' for x in df_bar['盈亏']]
                 
@@ -199,8 +215,8 @@ def 显示(引擎):
                     textposition='outside'
                 ))
                 fig_bar.update_layout(
-                    height=280,
-                    margin=dict(l=20, r=20, t=20, b=20),
+                    height=350,
+                    margin=dict(l=30, r=30, t=30, b=30),
                     paper_bgcolor="#0a0c10",
                     plot_bgcolor="#15171a",
                     font_color="#e6e6e6",
@@ -208,30 +224,34 @@ def 显示(引擎):
                     yaxis_title="盈亏 (¥)"
                 )
                 st.plotly_chart(fig_bar, use_container_width=True)
+            
+            with col_b:
+                st.markdown("#### 持仓市值条形图")
+                df_bar_h = pd.DataFrame(持仓数据)
+                df_bar_h = df_bar_h.sort_values('市值', ascending=True)
                 
-                # 仓位饼图 - 横向排列
-                df_pie = pd.DataFrame(持仓数据)
-                pie_colors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec489a', '#14b8a6']
-                
-                fig_pie = go.Figure(data=[go.Pie(
-                    labels=df_pie['品种'],
-                    values=df_pie['市值'],
-                    hole=0.4,
-                    marker=dict(colors=pie_colors[:len(df_pie)]),
-                    textinfo='label+percent',
-                    textposition='auto'
-                )])
-                fig_pie.update_layout(
-                    height=280,
-                    title=f"总市值: ¥{总市值:,.0f}",
+                fig_bar_h = go.Figure()
+                fig_bar_h.add_trace(go.Bar(
+                    y=df_bar_h['品种'],
+                    x=df_bar_h['市值'],
+                    orientation='h',
+                    marker_color='#3b82f6',
+                    text=df_bar_h['市值'].apply(lambda x: f"¥{x:,.0f}"),
+                    textposition='outside'
+                ))
+                fig_bar_h.update_layout(
+                    height=350,
+                    margin=dict(l=30, r=80, t=30, b=30),
                     paper_bgcolor="#0a0c10",
                     plot_bgcolor="#15171a",
                     font_color="#e6e6e6",
-                    margin=dict(l=20, r=20, t=40, b=20)
+                    xaxis_title="市值 (¥)",
+                    yaxis_title="品种"
                 )
-                st.plotly_chart(fig_pie, use_container_width=True)
-        else:
-            st.info("暂无持仓")
+                st.plotly_chart(fig_bar_h, use_container_width=True)
+            
+            # 总市值
+            st.markdown(f"<div style='text-align:center; padding:15px; background:#1e293b; border-radius:10px;'><span style='color:#94a3b8'>总市值</span><br><span style='font-size:24px; color:#00d2ff;'>¥{总市值:,.0f}</span></div>", unsafe_allow_html=True)
     
     if not 引擎.持仓:
         st.info("暂无持仓，请在首页或策略中心买入")
