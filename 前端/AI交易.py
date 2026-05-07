@@ -27,10 +27,6 @@ def 显示(引擎, 策略加载器, AI引擎):
         
         st.info(f"📊 当前行情: {策略信息['品种']} = ${当前价格:.4f}")
         
-        # 策略信号显示区
-        if '策略信号' not in st.session_state:
-            st.session_state['策略信号'] = None
-        
         # 运行策略获取信号
         if st.button("🎯 运行策略信号", use_container_width=True):
             with st.spinner("运行策略中..."):
@@ -39,9 +35,7 @@ def 显示(引擎, 策略加载器, AI引擎):
                 st.success(f"📡 策略信号: {策略信号值.upper()}")
                 st.rerun()
         
-        # 安全显示策略信号
-        if st.session_state['策略信号'] is not None:
-            st.markdown(f"### 策略信号: **{st.session_state['策略信号'].upper()}**")
+        # 不直接显示策略信号，避免None错误
         
         # AI 分析按钮
         st.markdown("---")
