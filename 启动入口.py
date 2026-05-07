@@ -39,27 +39,38 @@ if '风控引擎' not in st.session_state:
 # ========== 页面配置 ==========
 st.set_page_config(page_title="量化交易系统 v5.0", page_icon="📈", layout="wide", initial_sidebar_state="expanded")
 
-# ========== 主标题（确保显示） ==========
-st.title("📊 量化交易系统 v5.0")
-st.markdown('<p style="text-align:center; color:#94a3b8; font-size:14px; margin-top:-20px;">多类目 · 多策略 · AI自动交易 | 云端部署</p>', unsafe_allow_html=True)
-
 # ========== 紧凑样式 ==========
 st.markdown("""
 <style>
+    /* 调整主容器位置，让标题显示 */
+    .main .block-container {
+        padding-top: 2rem !important;
+    }
+    
+    /* 隐藏默认的页边距 */
+    header {
+        background-color: transparent !important;
+    }
+    
     .stApp { font-size: 12px; }
     .stMetric label { font-size: 11px !important; }
     .stMetric value { font-size: 18px !important; }
     .stButton button { font-size: 11px !important; padding: 3px 10px !important; }
     .dataframe td, .dataframe th { font-size: 11px !important; padding: 2px 6px !important; }
     .stTabs [data-baseweb="tab"] { font-size: 11px !important; padding: 4px 12px !important; }
-    .block-container { padding-top: 0.2rem !important; padding-bottom: 0.2rem !important; }
+    .block-container { padding-top: 0.5rem !important; padding-bottom: 0.2rem !important; }
     .element-container { margin-bottom: 4px !important; }
     hr { margin: 4px 0 !important; }
     .stAlert, .stInfo { font-size: 11px !important; padding: 4px !important; }
     .stSelectbox label, .stNumberInput label { font-size: 11px !important; }
-    h1 { text-align: center !important; color: #3b82f6 !important; font-size: 26px !important; }
 </style>
 """, unsafe_allow_html=True)
+
+# ========== 主标题 ==========
+st.markdown("<br>", unsafe_allow_html=True)
+st.markdown('<h1 style="text-align:center; color:#3b82f6; font-size:28px; margin:0;">📊 量化交易系统 v5.0</h1>', unsafe_allow_html=True)
+st.markdown('<p style="text-align:center; color:#94a3b8; font-size:14px; margin-top:5px;">多类目 · 多策略 · AI自动交易 | 云端部署</p>', unsafe_allow_html=True)
+st.markdown("<br>", unsafe_allow_html=True)
 
 # ========== 显示消息 ==========
 if st.session_state.成功消息:
