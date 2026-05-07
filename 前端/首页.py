@@ -44,21 +44,21 @@ def 显示(引擎):
     with col1:
         st.markdown("#### 买入")
         买入品种 = st.selectbox("选择品种", ["AAPL", "BTC-USD", "GC=F", "EURUSD", "TSLA", "NVDA"], key="buy")
+        买入数量 = st.number_input("数量", min_value=1, value=100, step=100, key="buy_qty")
         if st.button("买入", type="primary", use_container_width=True):
             try:
                 价格 = 行情获取.获取价格(买入品种).价格
-                引擎.买入(买入品种, 价格)
-                st.rerun()
+                引擎.买入(买入品种, 价格, 买入数量)
             except Exception as e:
                 st.error(f"买入失败: {e}")
     
     with col2:
         st.markdown("#### 卖出")
         卖品种 = st.selectbox("选择品种", ["AAPL", "BTC-USD", "GC=F", "EURUSD", "TSLA", "NVDA"], key="sell")
+        卖出数量 = st.number_input("数量", min_value=1, value=100, step=100, key="sell_qty")
         if st.button("卖出", use_container_width=True):
             try:
                 价格 = 行情获取.获取价格(卖品种).价格
-                引擎.卖出(卖品种, 价格)
-                st.rerun()
+                引擎.卖出(卖品种, 价格, 卖出数量)
             except Exception as e:
                 st.error(f"卖出失败: {e}")
