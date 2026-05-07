@@ -12,6 +12,22 @@ from 核心 import 订单引擎, 策略加载器, AI引擎
 from 工具 import 数据库
 数据库.初始化数据库()
 
+# ========== 临时修复：清空错误持仓数据 ==========
+if '数据已修复' not in st.session_state:
+    try:
+        持仓 = 数据库.获取所有持仓()
+        if 持仓:
+            # 检查是否有异常数据（持仓市值异常大）
+            总资产 = 100000
+            for 品种, 数据 in 持仓.items():
+                if 数据['数量'] > 10000 or 数据['平均成本'] > 10000:
+                    数据库.清空所有持仓()
+                    st.warning("⚠️ 已清空异常持仓数据，请刷新页面")
+                    break
+        st.session_state['数据已修复'] = True
+    except:
+        pass
+
 # ========== 初始化 session_state ==========
 if '订单引擎' not in st.session_state:
     st.session_state.订单引擎 = 订单引擎()
@@ -67,6 +83,19 @@ if st.session_state.成功消息:
 if st.session_state.错误消息:
     st.error(st.session_state.错误消息)
     st.session_state.错误消息 = None
+
+# ========== 菜单栏添加清空数据按钮 ==========
+with st.sidebar:
+    st.markdown("### 🛠️ 系统工具")
+    if st.button("🗑️ 清空所有持仓数据", use_container_width=True):
+        数据库.清空所有持仓()
+        st.success("✅ 已清空所有持仓数据，请重启应用")
+        st.session_state['数据已修复'] = False
+        st.rerun()
+    
+    st.markdown("---")
+    st.caption(f"当前时间: {数据库.获取当前时间()}")
+    st.caption(f"数据版本: v5.0")
 
 # ========== 创建6个Tab ==========
 tabs = st.tabs(["首页", "策略中心", "AI交易", "持仓管理", "资金曲线", "回测"])
