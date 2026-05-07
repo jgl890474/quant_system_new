@@ -139,7 +139,14 @@ class 订单引擎:
             pass
         self._保存持仓到数据库()
         
-        st.session_state['成功消息'] = f"✅ 买入 {品种} {数量}股 @ {价格:.4f}"
+        # ========== 新增：设置止损止盈 ==========
+        if '风控引擎' in st.session_state:
+            风控 = st.session_state.风控引擎
+            止损止盈价位 = 风控.设置止损止盈(品种, 价格)
+            st.session_state['成功消息'] = f"✅ 买入 {品种} {数量}股 @ {价格:.4f}\n🛡️ 止损: ¥{止损止盈价位['止损价']:.2f} | 止盈: ¥{止损止盈价位['止盈价']:.2f}"
+        else:
+            st.session_state['成功消息'] = f"✅ 买入 {品种} {数量}股 @ {价格:.4f}"
+        
         st.rerun()
     
     def 卖出(self, 品种, 价格, 数量=1000):
@@ -161,6 +168,10 @@ class 订单引擎:
             
             if pos.数量 <= 0:
                 del self.持仓[品种]
+                # 清除移动止损记录
+                if '风控引擎' in st.session_state:
+                    if 品种 in st.session_state.风控引擎.移动止损记录:
+                        del st.session_state.风控引擎.移动止损记录[品种]
                 try:
                     数据库.删除持仓(品种)
                 except:
