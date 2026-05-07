@@ -36,9 +36,9 @@ def 显示(引擎, 策略加载器, AI引擎):
                 st.success(f"📡 策略信号: {策略信号值.upper()}")
                 st.rerun()
         
-        # 获取策略信号（安全方式）
-        策略信号值 = st.session_state.get('策略信号', None)
-        if 策略信号值 is not None:
+        # 显示策略信号（彻底修复None错误）
+        if '策略信号' in st.session_state and st.session_state['策略信号'] is not None:
+            策略信号值 = st.session_state['策略信号']
             st.markdown(f"### 策略信号: **{策略信号值.upper()}**")
         else:
             st.info("ℹ️ 请先点击「运行策略信号」")
@@ -51,9 +51,9 @@ def 显示(引擎, 策略加载器, AI引擎):
             with st.spinner("AI 正在分析中..."):
                 try:
                     # 获取策略信号
-                    策略信号值 = st.session_state.get('策略信号', 'hold')
-                    if 策略信号值 is None:
-                        策略信号值 = 'hold'
+                    策略信号值 = 'hold'
+                    if '策略信号' in st.session_state and st.session_state['策略信号'] is not None:
+                        策略信号值 = st.session_state['策略信号']
                     
                     # 调用 AI 引擎
                     结果 = AI引擎.分析(策略信息['品种'], 当前价格, 策略信号值)
@@ -69,7 +69,7 @@ def 显示(引擎, 策略加载器, AI引擎):
                     # 显示额外信息
                     col1, col2, col3 = st.columns(3)
                     with col1:
-                        st.metric("建议仓位", f"{结果.get('建议仓位', 'N/A')} ({结果.get('建议仓位比例', 0)}%)")
+                        st.metric("建议仓位", f"{结果.get('建议仓位', 'N/A')}")
                     with col2:
                         止损 = 结果.get('止损价', 0)
                         if 止损 and 止损 > 0:
@@ -114,9 +114,8 @@ def 显示(引擎, 策略加载器, AI引擎):
             "置信度": f"{数据.get('置信度', 0)}%",
             "理由": 数据.get('理由', 'N/A'),
             "建议仓位": 数据.get('建议仓位', 'N/A'),
-            "建议仓位比例": f"{数据.get('建议仓位比例', 0)}%",
-            "止损价": f"${数据.get('止损价', 0):.2f}" if data.get('止损价', 0) > 0 else "N/A",
-            "止盈价": f"${数据.get('止盈价', 0):.2f}" if data.get('止盈价', 0) > 0 else "N/A",
+            "止损价": f"${数据.get('止损价', 0):.2f}" if 数据.get('止损价', 0) > 0 else "N/A",
+            "止盈价": f"${数据.get('止盈价', 0):.2f}" if 数据.get('止盈价', 0) > 0 else "N/A",
             "风险提示": 数据.get('风险提示', 'N/A')
         })
     else:
