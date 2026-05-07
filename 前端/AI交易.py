@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
-import pandas as pd
-from datetime import datetime
 from 核心 import 行情获取, 策略运行器
 from 工具 import 数据库
 
@@ -29,6 +27,10 @@ def 显示(引擎, 策略加载器, AI引擎):
         
         st.info(f"📊 当前行情: {策略信息['品种']} = ${当前价格:.4f}")
         
+        # 策略信号显示区
+        if '策略信号' not in st.session_state:
+            st.session_state['策略信号'] = None
+        
         # 运行策略获取信号
         if st.button("🎯 运行策略信号", use_container_width=True):
             with st.spinner("运行策略中..."):
@@ -37,12 +39,9 @@ def 显示(引擎, 策略加载器, AI引擎):
                 st.success(f"📡 策略信号: {策略信号值.upper()}")
                 st.rerun()
         
-        # 显示策略信号（安全访问）
-        策略信号值 = st.session_state.get('策略信号', None)
-        if 策略信号值 is not None:
-            st.markdown(f"### 策略信号: **{策略信号值.upper()}**")
-        else:
-            st.info("ℹ️ 请先点击「运行策略信号」获取信号")
+        # 安全显示策略信号
+        if st.session_state['策略信号'] is not None:
+            st.markdown(f"### 策略信号: **{st.session_state['策略信号'].upper()}**")
         
         # AI 分析按钮
         st.markdown("---")
@@ -64,19 +63,6 @@ def 显示(引擎, 策略加载器, AI引擎):
                     st.info(f"📊 置信度: {结果['置信度']}%")
                     st.write(f"💡 分析理由: {结果['理由']}")
                     
-                    # 保存 AI 决策到数据库
-                    try:
-                        数据库.保存AI决策(
-                            策略信息['品种'], 
-                            当前价格, 
-                            策略信号值, 
-                            结果['最终信号'], 
-                            结果['置信度'], 
-                            结果['理由']
-                        )
-                    except:
-                        pass
-                    
                     # 根据 AI 决策显示执行按钮
                     if 结果['最终信号'] == 'buy':
                         if st.button("✅ 确认执行买入", use_container_width=True):
@@ -87,23 +73,10 @@ def 显示(引擎, 策略加载器, AI引擎):
                             引擎.卖出(策略信息['品种'], 当前价格)
                             st.rerun()
                     else:
-                        st.info("⏸️ AI 建议观望，暂不执行交易")
+                        st.info("⏸️ AI 建议观望")
                         
                 except Exception as e:
                     st.error(f"AI 分析失败: {e}")
-    
-    # 显示 AI 决策历史
-    st.markdown("---")
-    st.markdown("### 📜 AI 决策历史")
-    
-    try:
-        历史记录 = 数据库.获取AI决策历史(20)
-        if not 历史记录.empty:
-            st.dataframe(历史记录.head(10), use_container_width=True)
-        else:
-            st.info("暂无 AI 决策记录")
-    except:
-        st.info("暂无 AI 决策记录")
     
     # 强制买入测试按钮
     st.markdown("---")
