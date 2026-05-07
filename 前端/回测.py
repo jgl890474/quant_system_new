@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import yfinance as yf
 from datetime import datetime, timedelta
 from 工具 import 数据库
 
@@ -33,58 +34,67 @@ def 显示(引擎):
     
     初始资金 = st.number_input("初始资金 (美元)", value=100000, step=10000)
     
-    # 策略参数（可选）
     with st.expander("📊 策略参数"):
-        st.caption("使用当前持仓进行回测，参数仅供参考")
+        st.caption("参数仅供参考，不影响回测数据")
         短周期 = st.slider("短期均线", 5, 50, 10)
         长周期 = st.slider("长期均线", 20, 200, 30)
     
     if st.button("🚀 开始回测", type="primary", use_container_width=True):
-        with st.spinner(f"正在回测 {品种}..."):
+        with st.spinner(f"正在获取 {品种} 真实历史数据..."):
             try:
-                # 生成模拟数据（基于持仓品种）
-                np.random.seed(hash(品种) % 10000)
+                # ========== 使用 yfinance 获取真实数据 ==========
+                # 品种代码映射
+                代码映射 = {
+                    "AAPL": "AAPL",
+                    "BTC-USD": "BTC-USD",
+                    "GC=F": "GC=F", 
+                    "EURUSD": "EURUSD=X",
+                    "TSLA": "TSLA",
+                    "NVDA": "NVDA",
+                    "MSFT": "MSFT",
+                    "GOOGL": "GOOGL"
+                }
                 
-                # 生成日期范围
-                日期列表 = pd.date_range(start=开始日期, end=结束日期, freq='D')
-                if len(日期列表) < 10:
-                    日期列表 = pd.date_range(start=开始日期, end=结束日期, freq='W')
+                股票代码 = 代码映射.get(品种, 品种)
+                st.info(f"正在获取 {品种} ({股票代码}) 真实历史数据...")
                 
-                if len(日期列表) < 5:
-                    st.error("日期范围太短")
+                # 下载真实历史数据
+                股票 = yf.Ticker(股票代码)
+                历史数据 = 股票.history(start=开始日期, end=结束日期, interval="1d")
+                
+                if 历史数据.empty:
+                    st.error(f"无法获取 {品种} 的真实历史数据")
+                    st.info("请尝试选择其他品种或调整日期范围")
                     return
                 
-                # 获取持仓成本作为基准
-                持仓成本 = 引擎.持仓[品种].平均成本 if 品种 in 引擎.持仓 else 100
+                # 提取收盘价
+                价格序列 = 历史数据['Close'].values
+                日期列表 = 历史数据.index
                 
-                # 生成价格序列（围绕成本价波动）
-                波动率 = 0.02
-                涨跌 = np.random.randn(len(日期列表)) * 波动率
-                价格序列 = 持仓成本 * (1 + np.cumsum(涨跌) / 20)
-                价格序列 = np.maximum(价格序列, 持仓成本 * 0.7)
-                价格序列 = np.minimum(价格序列, 持仓成本 * 1.5)
-                
-                # 转换为 pandas Series
-                价格序列_series = pd.Series(价格序列, index=日期列表)
+                if len(价格序列) < 5:
+                    st.error(f"数据点不足: {len(价格序列)}")
+                    return
                 
                 # 计算净值
-                净值 = 初始资金 * (价格序列_series / 价格序列_series.iloc[0])
+                净值 = 初始资金 * (价格序列 / 价格序列[0])
                 
                 # 计算收益率
-                最终净值 = 净值.iloc[-1]
+                最终净值 = 净值[-1]
                 总收益率 = (最终净值 - 初始资金) / 初始资金
                 
                 # 计算动态回撤
-                累计最大值 = 净值.cummax()
-                动态回撤 = (净值 - 累计最大值) / 累计最大值 * 100
+                累计最大值 = np.maximum.accumulate(净值)
+                动态回撤 = (累计最大值 - 净值) / 累计最大值 * 100
                 
                 # 计算回撤统计
-                最大回撤 = 动态回撤.min()
-                平均回撤 = 动态回撤.mean()
-                当前回撤 = 动态回撤.iloc[-1]
-                回撤持续时间 = (动态回撤 < -5).sum()
+                最大回撤 = np.min(动态回撤)
+                平均回撤 = np.mean(动态回撤)
+                当前回撤 = 动态回撤[-1]
+                回撤持续时间 = np.sum(动态回撤 < -5)
                 
                 # 显示结果卡片
+                st.success(f"✅ 回测完成！数据点: {len(价格序列)} (真实历史数据)")
+                
                 st.markdown("### 📊 回测结果")
                 col1, col2, col3, col4 = st.columns(4)
                 col1.metric("总收益率", f"{总收益率*100:.2f}%", delta=f"{总收益率*100:.2f}%")
@@ -96,7 +106,7 @@ def 显示(引擎):
                 col5.metric("平均回撤", f"{平均回撤:.2f}%")
                 col6.metric("当前回撤", f"{当前回撤:.2f}%")
                 col7.metric("回撤>5%天数", f"{回撤持续时间}天")
-                col8.metric("数据点", f"{len(日期列表)}")
+                col8.metric("数据点", f"{len(价格序列)}")
                 
                 # ========== 动态回测曲线（双轴） ==========
                 st.markdown("### 📈 动态回测曲线")
@@ -105,18 +115,18 @@ def 显示(引擎):
                 
                 # 添加净值曲线（左轴）
                 fig.add_trace(go.Scatter(
-                    x=净值.index,
-                    y=净值.values,
+                    x=日期列表,
+                    y=净值,
                     mode='lines',
-                    name='资产净值',
+                    name=f'{品种} 资产净值',
                     line=dict(color='#00d2ff', width=2),
                     yaxis="y1"
                 ))
                 
                 # 添加动态回撤曲线（右轴）
                 fig.add_trace(go.Scatter(
-                    x=动态回撤.index,
-                    y=动态回撤.values,
+                    x=日期列表,
+                    y=动态回撤,
                     mode='lines',
                     name='动态回撤',
                     line=dict(color='#ef4444', width=1.5, dash='dot'),
@@ -133,7 +143,7 @@ def 显示(引擎):
                 # 双轴布局
                 fig.update_layout(
                     height=450,
-                    title=f"{品种} 净值 vs 动态回撤",
+                    title=f"{品种} 净值 vs 动态回撤 (真实历史数据)",
                     paper_bgcolor="#0a0c10",
                     plot_bgcolor="#15171a",
                     font_color="#e6e6e6",
@@ -167,6 +177,27 @@ def 显示(引擎):
                 
                 st.plotly_chart(fig, use_container_width=True)
                 
+                # ========== 价格走势图 ==========
+                st.markdown("### 📊 真实价格走势")
+                fig_price = go.Figure()
+                fig_price.add_trace(go.Scatter(
+                    x=日期列表,
+                    y=价格序列,
+                    mode='lines',
+                    name=f'{品种} 收盘价',
+                    line=dict(color='#f59e0b', width=1.5)
+                ))
+                fig_price.update_layout(
+                    height=300,
+                    title=f"{品种} 真实历史价格",
+                    paper_bgcolor="#0a0c10",
+                    plot_bgcolor="#15171a",
+                    font_color="#e6e6e6",
+                    xaxis_title="日期",
+                    yaxis_title="价格 (美元)"
+                )
+                st.plotly_chart(fig_price, use_container_width=True)
+                
                 # ========== 回撤分析图表 ==========
                 st.markdown("### 📉 回撤分析")
                 
@@ -176,7 +207,7 @@ def 显示(引擎):
                     # 回撤分布直方图
                     fig_hist = go.Figure()
                     fig_hist.add_trace(go.Histogram(
-                        x=动态回撤.values,
+                        x=动态回撤,
                         nbinsx=20,
                         marker_color='#ef4444',
                         opacity=0.7
@@ -196,7 +227,7 @@ def 显示(引擎):
                     # 回撤持续期
                     回撤持续期数据 = []
                     持续期 = 0
-                    for val in 动态回撤.values:
+                    for val in 动态回撤:
                         if val < -5:
                             持续期 += 1
                         else:
@@ -227,11 +258,13 @@ def 显示(引擎):
                 # ========== 回测数据表 ==========
                 with st.expander("📋 详细回测数据"):
                     回测数据 = pd.DataFrame({
-                        "日期": 净值.index,
-                        "资产净值": 净值.values,
-                        "动态回撤": 动态回撤.values,
-                        "日收益率": 净值.pct_change().fillna(0).values * 100
+                        "日期": 日期列表,
+                        "真实价格": 价格序列,
+                        "资产净值": 净值,
+                        "动态回撤": 动态回撤,
+                        "日收益率": np.diff(np.append([净值[0]], 净值)) / np.append([净值[0]], 净值[:-1]) * 100
                     })
+                    回测数据["真实价格"] = 回测数据["真实价格"].apply(lambda x: f"${x:.2f}")
                     回测数据["资产净值"] = 回测数据["资产净值"].apply(lambda x: f"${x:,.0f}")
                     回测数据["动态回撤"] = 回测数据["动态回撤"].apply(lambda x: f"{x:.2f}%")
                     回测数据["日收益率"] = 回测数据["日收益率"].apply(lambda x: f"{x:+.2f}%")
@@ -247,5 +280,9 @@ def 显示(引擎):
                     use_container_width=True
                 )
                 
+                # 数据来源说明
+                st.caption(f"📊 数据来源: Yahoo Finance | 品种: {股票代码} | 真实历史K线数据")
+                
             except Exception as e:
-                st.error(f"回测出错: {str(e)}")
+                st.error(f"获取真实数据失败: {str(e)}")
+                st.info("提示：请检查网络连接或稍后重试")
