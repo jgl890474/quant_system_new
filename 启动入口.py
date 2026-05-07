@@ -39,61 +39,30 @@ if '风控引擎' not in st.session_state:
 # ========== 页面配置 ==========
 st.set_page_config(page_title="量化交易系统 v5.0", page_icon="📈", layout="wide", initial_sidebar_state="expanded")
 
-# ========== 全局样式 ==========
+# ========== 标题 ==========
+st.markdown('<h1 style="text-align:center; color:#3b82f6; font-size:24px;">📊 量化交易系统 v5.0</h1>', unsafe_allow_html=True)
+st.markdown('<p style="text-align:center; color:#94a3b8; font-size:12px;">多类目 · 多策略 · AI自动交易 | 云端部署</p>', unsafe_allow_html=True)
+
+# ========== 紧凑样式 ==========
 st.markdown("""
 <style>
-    /* 全局字体缩小 */
-    .stApp { font-size: 13px; }
-    
-    /* 指标卡片字体 */
-    .stMetric label { font-size: 12px !important; }
-    .stMetric value { font-size: 20px !important; }
-    
-    /* 标题缩小 */
-    h1 { font-size: 22px !important; }
-    h3 { font-size: 16px !important; }
-    h4 { font-size: 14px !important; }
-    
-    /* 按钮缩小 */
-    .stButton button { font-size: 12px !important; padding: 4px 12px !important; }
-    
-    /* 表格字体 */
-    .dataframe td, .dataframe th { font-size: 12px !important; padding: 4px 8px !important; }
-    
-    /* 选择框字体 */
-    .stSelectbox label, .stNumberInput label { font-size: 12px !important; }
-    
-    /* 信息框字体 */
-    .stAlert, .stInfo, .stWarning, .stSuccess { font-size: 12px !important; padding: 8px !important; }
-    
-    /* 指标卡片间距 */
-    .stMetric { padding: 8px !important; }
-    
-    /* 行列间距 */
-    .row-widget { margin-bottom: 8px !important; }
-    
-    /* 分割线样式 */
-    hr { margin: 8px 0 !important; border-color: #334155 !important; }
-    
-    /* 标签页字体 */
-    .stTabs [data-baseweb="tab"] { font-size: 12px !important; padding: 6px 16px !important; }
-    
-    /* 侧边栏字体 */
-    [data-testid="stSidebar"] { font-size: 12px !important; }
-    
-    /* 展开器字体 */
-    .streamlit-expanderHeader { font-size: 13px !important; }
-    
-    /* 代码块字体 */
-    code { font-size: 11px !important; }
-    
-    /* 紧凑布局 */
-    .block-container { padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; }
+    /* 整体缩小 */
+    .stApp { font-size: 12px; }
+    .stMetric label { font-size: 11px !important; }
+    .stMetric value { font-size: 18px !important; }
+    .stButton button { font-size: 11px !important; padding: 3px 10px !important; }
+    .dataframe td, .dataframe th { font-size: 11px !important; padding: 2px 6px !important; }
+    .stTabs [data-baseweb="tab"] { font-size: 11px !important; padding: 4px 12px !important; }
+    .block-container { padding-top: 0.3rem !important; padding-bottom: 0.3rem !important; }
+    .element-container { margin-bottom: 4px !important; }
+    h1 { margin-bottom: 0.2rem !important; }
+    h3 { font-size: 14px !important; margin-bottom: 0.5rem !important; }
+    hr { margin: 4px 0 !important; }
+    .stAlert, .stInfo { font-size: 11px !important; padding: 4px !important; }
+    .stSelectbox label, .stNumberInput label { font-size: 11px !important; }
+    .stMarkdown { font-size: 12px; }
 </style>
 """, unsafe_allow_html=True)
-
-st.markdown('<h1 style="text-align:center; color:#3b82f6">📊 量化交易系统 v5.0</h1>', unsafe_allow_html=True)
-st.markdown('<p style="text-align:center; color:#94a3b8">多类目 · 多策略 · AI自动交易 | 云端部署</p>', unsafe_allow_html=True)
 
 # ========== 显示消息 ==========
 if st.session_state.成功消息:
@@ -104,19 +73,16 @@ if st.session_state.错误消息:
     st.error(st.session_state.错误消息)
     st.session_state.错误消息 = None
 
-# ========== 菜单栏添加清空数据按钮 ==========
+# ========== 侧边栏 ==========
 with st.sidebar:
     st.markdown("### 🛠️ 系统工具")
     if st.button("🗑️ 清空所有持仓数据", use_container_width=True):
         数据库.清空所有持仓()
-        st.success("✅ 已清空所有持仓数据")
+        st.success("✅ 已清空")
         st.rerun()
-    
-    st.markdown("---")
     st.caption(f"当前时间: {数据库.获取当前时间()}")
-    st.caption(f"数据版本: v5.0")
 
-# ========== 创建6个Tab ==========
+# ========== Tab ==========
 tabs = st.tabs(["首页", "策略中心", "AI交易", "持仓管理", "资金曲线", "回测"])
 
 引擎 = st.session_state.订单引擎
