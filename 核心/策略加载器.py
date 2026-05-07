@@ -10,6 +10,7 @@ class 策略加载器:
     
     def _加载所有(self, 路径):
         if not os.path.exists(路径):
+            print(f"路径不存在: {路径}")
             return
         
         类别配置 = {
@@ -24,7 +25,10 @@ class 策略加载器:
         for 文件夹名, 配置 in 类别配置.items():
             文件夹路径 = os.path.join(路径, 文件夹名)
             if not os.path.isdir(文件夹路径):
+                print(f"⚠️ 文件夹不存在: {文件夹名}")
                 continue
+            
+            print(f"📁 扫描: {文件夹名}")
             
             for py文件 in glob.glob(os.path.join(文件夹路径, "*.py")):
                 文件名 = os.path.basename(py文件)
@@ -32,12 +36,14 @@ class 策略加载器:
                     continue
                 
                 策略名 = 文件名.replace(".py", "")
+                print(f"   发现文件: {文件名}")
                 
                 try:
                     spec = importlib.util.spec_from_file_location(策略名, py文件)
                     模块 = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(模块)
                     
+                    找到 = False
                     for 属性名 in dir(模块):
                         属性 = getattr(模块, 属性名)
                         if isinstance(属性, type):
@@ -49,10 +55,17 @@ class 策略加载器:
                                     "品种": 配置["品种"],
                                     "类别": 配置["显示"],
                                 })
-                                print(f"✅ 加载策略: {策略名}")
+                                print(f"   ✅ 加载成功: {策略名}")
+                                找到 = True
                                 break
+                    
+                    if not 找到:
+                        print(f"   ⚠️ 未找到策略类: {文件名}")
+                        
                 except Exception as e:
-                    print(f"❌ 加载失败 {策略名}: {e}")
+                    print(f"   ❌ 加载失败 {文件名}: {e}")
+        
+        print(f"\n📊 共加载 {len(self.策略列表)} 个策略")
     
     def 获取策略(self):
         return self.策略列表
