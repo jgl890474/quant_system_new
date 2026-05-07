@@ -26,7 +26,7 @@ def 显示():
     if st.button("🚀 开始回测", type="primary", use_container_width=True):
         with st.spinner("回测运行中..."):
             try:
-                # 生成模拟数据（避免yfinance错误）
+                # 生成模拟数据
                 日期列表 = pd.date_range(start=开始日期, end=结束日期, freq='D')
                 if len(日期列表) < 10:
                     日期列表 = pd.date_range(start=开始日期, end=结束日期, freq='W')
@@ -59,22 +59,28 @@ def 显示():
                 col_c.metric("最终资金", f"${最终资金:,.0f}")
                 col_d.metric("数据量", f"{len(df)}")
                 
-                # 净值曲线
-                fig = go.Figure()
+                # ========== 平滑曲线（spline） ==========
                 净值 = [初始资金 * (1 + 总收益率 * i / len(df)) for i in range(len(df))]
+                
+                fig = go.Figure()
                 fig.add_trace(go.Scatter(
                     x=df.index,
                     y=净值,
                     mode='lines',
                     name='净值',
-                    line=dict(color='#00d2ff', width=1.5)
+                    line=dict(color='#00d2ff', width=1.5, shape='spline'),  # shape='spline' 平滑曲线
+                    fill='tozeroy',
+                    opacity=0.2
                 ))
                 fig.update_layout(
-                    height=300,
-                    title="净值曲线",
+                    height=280,
+                    title="净值曲线（平滑）",
                     paper_bgcolor="#0a0c10",
                     plot_bgcolor="#15171a",
-                    font_color="#e6e6e6"
+                    font_color="#e6e6e6",
+                    xaxis_title="日期",
+                    yaxis_title="净值 (美元)",
+                    margin=dict(l=40, r=40, t=40, b=40)
                 )
                 st.plotly_chart(fig, use_container_width=True)
                 
