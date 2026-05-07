@@ -44,9 +44,11 @@ def 显示(引擎, 策略加载器, AI引擎):
                 st.success(f"📡 策略信号: {策略信号值.upper()}")
                 st.rerun()
         
-        # 安全显示策略信号
+        # 安全显示策略信号（修复 None 错误）
         if st.session_state['策略信号'] is not None:
             st.markdown(f"### 策略信号: **{st.session_state['策略信号'].upper()}**")
+        else:
+            st.info("ℹ️ 请先点击「运行策略信号」获取信号")
         
         # AI 分析按钮
         st.markdown("---")
@@ -62,6 +64,9 @@ def 显示(引擎, 策略加载器, AI引擎):
                     
                     # 调用 AI 引擎
                     结果 = AI引擎.分析(策略信息['品种'], 当前价格, 策略信号值)
+                    
+                    # 保存到 session_state
+                    st.session_state['AI原始数据'] = 结果
                     
                     # 显示 AI 决策
                     st.success(f"🤖 AI 决策: **{结果['最终信号'].upper()}**")
@@ -106,7 +111,7 @@ def 显示(引擎, 策略加载器, AI引擎):
     st.markdown("### 📋 AI 决策详情")
     
     # 选择查看方式
-    查看方式 = st.radio("选择查看方式", ["AI决策摘要", "AI原始返回JSON", "AI决策历史"], horizontal=True)
+    查看方式 = st.radio("选择查看方式", ["AI决策摘要", "AI决策历史"], horizontal=True)
     
     if 查看方式 == "AI决策摘要":
         if st.session_state.get('AI原始数据'):
@@ -123,12 +128,6 @@ def 显示(引擎, 策略加载器, AI引擎):
             })
         else:
             st.info("暂无AI决策数据，请先点击「AI 分析并执行」")
-    
-    elif 查看方式 == "AI原始返回JSON":
-        if st.session_state.get('AI原始返回'):
-            st.code(st.session_state['AI原始返回'], language="json")
-        else:
-            st.info("暂无AI原始返回数据，请先点击「AI 分析并执行」")
     
     else:  # AI决策历史
         try:
