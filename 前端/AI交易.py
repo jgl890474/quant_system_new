@@ -42,7 +42,7 @@ def 显示(引擎, 策略加载器, AI引擎):
         if 策略信号值 is not None:
             st.markdown(f"### 策略信号: **{策略信号值.upper()}**")
         else:
-            st.info("请先点击「运行策略信号」获取信号")
+            st.info("ℹ️ 请先点击「运行策略信号」获取信号")
         
         # AI 分析按钮
         st.markdown("---")
