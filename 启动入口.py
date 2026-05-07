@@ -31,10 +31,18 @@ if '成功消息' not in st.session_state:
 if '错误消息' not in st.session_state:
     st.session_state.错误消息 = None
 
+# ========== 初始化引擎变量 ==========
+引擎 = st.session_state.订单引擎
+策略加载器 = st.session_state.策略加载器
+AI引擎 = st.session_state.AI引擎
+策略信号 = st.session_state.策略信号
+
 # ========== 初始化风控引擎 ==========
 if '风控引擎' not in st.session_state:
     from 核心.风控引擎 import 风控引擎
     st.session_state.风控引擎 = 风控引擎()
+
+风控 = st.session_state.风控引擎
 
 # ========== 页面配置 ==========
 st.set_page_config(page_title="量化交易系统 v5.0", page_icon="📈", layout="wide", initial_sidebar_state="expanded")
@@ -42,16 +50,12 @@ st.set_page_config(page_title="量化交易系统 v5.0", page_icon="📈", layou
 # ========== 紧凑样式 ==========
 st.markdown("""
 <style>
-    /* 调整主容器位置，让标题显示 */
     .main .block-container {
         padding-top: 2rem !important;
     }
-    
-    /* 隐藏默认的页边距 */
     header {
         background-color: transparent !important;
     }
-    
     .stApp { font-size: 12px; }
     .stMetric label { font-size: 11px !important; }
     .stMetric value { font-size: 18px !important; }
@@ -100,16 +104,13 @@ with st.sidebar:
     自动风控 = st.checkbox("🔴 开启自动止损止盈监控", value=True, help="开启后会自动检查持仓并执行止损止盈")
     
     # 风控参数显示
-    if '风控引擎' in st.session_state:
-        风控 = st.session_state.风控引擎
+    if 风控:
         st.caption(f"止损: {风控.止损比例*100:.0f}% | 止盈: {风控.止盈比例*100:.0f}%")
         st.caption(f"移动止损: {'开启' if 风控.移动止损开关 else '关闭'} | 回撤: {风控.移动止损回撤*100:.0f}%")
     
     # ========== 自动监控执行 ==========
-    if 自动风控:
-        if '风控引擎' in st.session_state:
-            风控 = st.session_state.风控引擎
-            
+    if 自动风控 and 风控:
+        try:
             # 监控持仓
             触发 = 风控.监控持仓(引擎)
             
@@ -124,20 +125,15 @@ with st.sidebar:
                     for r in 平仓记录:
                         st.error(f"✅ 已自动平仓 {r['品种']} ({r['类型']})")
                     st.rerun()
-            else:
-                # 不显示任何内容，保持安静
-                pass
+        except Exception as e:
+            # 静默处理错误
+            pass
     
     st.markdown("---")
     st.caption(f"当前时间: {数据库.获取当前时间()}")
 
 # ========== Tab ==========
 tabs = st.tabs(["首页", "策略中心", "AI交易", "持仓管理", "资金曲线", "回测"])
-
-引擎 = st.session_state.订单引擎
-策略加载器 = st.session_state.策略加载器
-AI引擎 = st.session_state.AI引擎
-策略信号 = st.session_state.策略信号
 
 with tabs[0]:
     首页.显示(引擎)
