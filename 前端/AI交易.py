@@ -8,10 +8,6 @@ from 工具 import 数据库
 def 显示(引擎, 策略加载器, AI引擎):
     st.markdown("### 🤖 AI 智能交易")
     
-    # 初始化 session_state
-    if '策略信号' not in st.session_state:
-        st.session_state['策略信号'] = None
-    
     # 获取策略列表
     策略列表 = 策略加载器.获取策略()
     策略名称列表 = [s["名称"] for s in 策略列表]
@@ -36,14 +32,17 @@ def 显示(引擎, 策略加载器, AI引擎):
         # 运行策略获取信号
         if st.button("🎯 运行策略信号", use_container_width=True):
             with st.spinner("运行策略中..."):
-                策略信号 = 策略运行器.运行(策略信息, 行情数据)
-                st.session_state['策略信号'] = 策略信号
-                st.success(f"📡 策略信号: {策略信号.upper()}")
+                策略信号值 = 策略运行器.运行(策略信息, 行情数据)
+                st.session_state['策略信号'] = 策略信号值
+                st.success(f"📡 策略信号: {策略信号值.upper()}")
                 st.rerun()
         
-        # 显示策略信号
-        if st.session_state['策略信号'] is not None:
-            st.markdown(f"### 策略信号: **{st.session_state['策略信号'].upper()}**")
+        # 显示策略信号（安全访问）
+        策略信号值 = st.session_state.get('策略信号', None)
+        if 策略信号值 is not None:
+            st.markdown(f"### 策略信号: **{策略信号值.upper()}**")
+        else:
+            st.info("请先点击「运行策略信号」获取信号")
         
         # AI 分析按钮
         st.markdown("---")
