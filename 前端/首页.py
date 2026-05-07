@@ -40,22 +40,25 @@ def 显示(引擎):
     
     col1, col2 = st.columns(2)
     
-    # ========== 买入区域（从策略库获取可买品种） ==========
+    # ========== 买入区域（只从策略库获取品种） ==========
     with col1:
         st.markdown("#### 买入")
         
-        # 从策略库获取可买品种（所有策略覆盖的品种）
+        # 从策略库获取品种（只显示策略库中的）
         try:
             from 核心 import 策略加载器
             加载器 = 策略加载器()
             策略列表 = 加载器.获取策略()
             # 提取所有策略的品种（去重）
             可买品种列表 = list(set([s["品种"] for s in 策略列表]))
-            # 添加常用的品种
-            默认品种 = ["AAPL", "BTC-USD", "GC=F", "EURUSD", "TSLA", "NVDA"]
-            可买品种列表 = list(set(可买品种列表 + 默认品种))
-        except:
-            可买品种列表 = ["AAPL", "BTC-USD", "GC=F", "EURUSD", "TSLA", "NVDA"]
+            # 如果策略库没有品种，使用默认
+            if not 可买品种列表:
+                可买品种列表 = ["AAPL", "BTC-USD", "GC=F", "EURUSD"]
+        except Exception as e:
+            可买品种列表 = ["AAPL", "BTC-USD", "GC=F", "EURUSD"]
+        
+        # 显示策略库品种信息
+        st.caption(f"📊 策略库品种: {len(可买品种列表)}个")
         
         买入品种 = st.selectbox("选择品种", 可买品种列表, key="buy_symbol")
         
