@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
 from 核心 import 行情获取
 
 def 显示(引擎, 策略加载器=None, AI引擎=None):
@@ -11,28 +10,59 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         数据 = []
         for 品种, pos in 引擎.持仓.items():
             价格 = 行情获取.获取价格(品种).价格
-            盈亏 = (价格 - pos.平均成本) * pos.数量
+            pos.当前价格 = 价格
+            盈亏 = pos.数量 * (价格 - pos.平均成本)
             数据.append({
-                "品种": 品种, "数量": f"{pos.数量:.0f}",
-                "成本": f"{pos.平均成本:.2f}", "现价": f"{价格:.2f}",
-                "盈亏": f"${盈亏:+.2f}", "盈亏率": f"{(价格/pos.平均成本-1)*100:+.1f}%"
+                "品种": 品种,
+                "数量": f"{pos.数量:.0f}",
+                "成本": f"{pos.平均成本:.4f}",
+                "现价": f"{价格:.4f}",
+                "盈亏": f"${盈亏:+,.2f}"
             })
-        st.dataframe(pd.DataFrame(数据), use_container_width=True)
-        
-        if st.button("🗑️ 批量平仓", use_container_width=True):
-            for 品种 in list(引擎.持仓.keys()):
-                价格 = 行情获取.获取价格(品种).价格
-                引擎.卖出(品种, 价格)
-            st.rerun()
-        
-        # 饼图
-        df_pie = pd.DataFrame([{
-            "品种": d["品种"],
-            "市值": float(d["现价"]) * float(d["数量"])
-        } for d in 数据])
-        if not df_pie.empty:
-            fig = go.Figure(data=[go.Pie(labels=df_pie['品种'], values=df_pie['市值'], hole=0.4)])
-            fig.update_layout(height=350, paper_bgcolor="#0a0c10", plot_bgcolor="#15171a")
-            st.plotly_chart(fig, use_container_width=True)
+        st.dataframe(pd.DataFrame(数据), use_container_width=True, hide_index=True)
     else:
         st.info("暂无持仓")
+    
+    st.markdown("### 📜 交易记录")
+    if 引擎.交易记录:
+        df = pd.DataFrame(引擎.交易记录[-20:])
+        # 时间已经是字符串格式，直接显示
+        st.dataframe(df, use_container_width=True)
+    else:
+        st.info("暂无交易记录")
+    
+    # 数据库历史记录
+    with st.expander("📁 查看数据库历史记录"):
+        try:
+            from 工具 import 数据库
+            历史记录 = 数据库.获取交易记录(50)
+            if not 历史记录.empty:
+                st.dataframe(历史记录, use_container_width=True)
+            else:
+                st.info("数据库暂无交易记录")
+        except:
+            st.info("数据库未初始化")
+    
+    # 风控状态
+    st.markdown("### 🛡️ 风控状态")
+    if '风控引擎' in st.session_state:
+        风控 = st.session_state.风控引擎
+        总资金 = 引擎.获取总资产()
+        状态 = 风控.获取风控状态(引擎, 总资金)
+        
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("总仓位", 状态["总仓位比例"], delta=f"限制 {状态['最大总仓位限制']}")
+        col2.metric("单品种限制", 状态["单品种仓位限制"])
+        col3.metric("止损/止盈", f"{状态['止损线']} / {状态['止盈线']}")
+        col4.metric("今日盈亏", f"${风控.今日盈亏:+,.2f}", delta=f"上限 {状态['每日亏损上限']}")
+        
+        if st.button("🛡️ 立即执行风控平仓"):
+            平仓记录 = 风控.执行风控平仓(引擎)
+            if 平仓记录:
+                st.warning(f"已自动平仓 {len(平仓记录)} 个品种")
+                for 记录 in 平仓记录:
+                    st.write(f"- {记录['品种']}: {记录['原因']}, 盈亏 {记录['盈亏']:+.2f}")
+            else:
+                st.info("没有触发风控的持仓")
+    else:
+        st.info("风控引擎未初始化")
