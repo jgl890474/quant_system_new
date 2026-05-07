@@ -8,6 +8,10 @@ from 工具 import 数据库
 def 显示(引擎, 策略加载器, AI引擎):
     st.markdown("### 🤖 AI 智能交易")
     
+    # 初始化 session_state
+    if '策略信号' not in st.session_state:
+        st.session_state['策略信号'] = None
+    
     # 获取策略列表
     策略列表 = 策略加载器.获取策略()
     策略名称列表 = [s["名称"] for s in 策略列表]
@@ -35,9 +39,10 @@ def 显示(引擎, 策略加载器, AI引擎):
                 策略信号 = 策略运行器.运行(策略信息, 行情数据)
                 st.session_state['策略信号'] = 策略信号
                 st.success(f"📡 策略信号: {策略信号.upper()}")
+                st.rerun()
         
         # 显示策略信号
-        if '策略信号' in st.session_state:
+        if st.session_state['策略信号'] is not None:
             st.markdown(f"### 策略信号: **{st.session_state['策略信号'].upper()}**")
         
         # AI 分析按钮
@@ -48,10 +53,12 @@ def 显示(引擎, 策略加载器, AI引擎):
             with st.spinner("AI 正在分析中..."):
                 try:
                     # 获取策略信号
-                    策略信号 = st.session_state.get('策略信号', 'hold')
+                    策略信号值 = st.session_state.get('策略信号', 'hold')
+                    if 策略信号值 is None:
+                        策略信号值 = 'hold'
                     
                     # 调用 AI 引擎
-                    结果 = AI引擎.分析(策略信息['品种'], 当前价格, 策略信号)
+                    结果 = AI引擎.分析(策略信息['品种'], 当前价格, 策略信号值)
                     
                     # 显示 AI 决策
                     st.success(f"🤖 AI 决策: **{结果['最终信号'].upper()}**")
@@ -63,7 +70,7 @@ def 显示(引擎, 策略加载器, AI引擎):
                         数据库.保存AI决策(
                             策略信息['品种'], 
                             当前价格, 
-                            策略信号, 
+                            策略信号值, 
                             结果['最终信号'], 
                             结果['置信度'], 
                             结果['理由']
@@ -93,7 +100,6 @@ def 显示(引擎, 策略加载器, AI引擎):
     try:
         历史记录 = 数据库.获取AI决策历史(20)
         if not 历史记录.empty:
-            # 显示最近5条
             st.dataframe(历史记录.head(10), use_container_width=True)
         else:
             st.info("暂无 AI 决策记录")
@@ -106,10 +112,10 @@ def 显示(引擎, 策略加载器, AI引擎):
     
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("🔴 强制买入 AAPL", use_container_width=True):
+        if st.button("🔴 强制买入 100股 AAPL", use_container_width=True):
             try:
                 价格 = 行情获取.获取价格("AAPL").价格
-                引擎.买入("AAPL", 价格, 30)
+                引擎.买入("AAPL", 价格, 100)
                 st.rerun()
             except Exception as e:
                 st.error(f"买入失败: {e}")
