@@ -84,10 +84,51 @@ if st.session_state.错误消息:
 # ========== 侧边栏 ==========
 with st.sidebar:
     st.markdown("### 🛠️ 系统工具")
+    
+    # 清空数据按钮
     if st.button("🗑️ 清空所有持仓数据", use_container_width=True):
         数据库.清空所有持仓()
         st.success("✅ 已清空")
         st.rerun()
+    
+    st.markdown("---")
+    
+    # ========== 风控设置 ==========
+    st.markdown("### 🛡️ 风控设置")
+    
+    # 自动监控开关
+    自动风控 = st.checkbox("🔴 开启自动止损止盈监控", value=True, help="开启后会自动检查持仓并执行止损止盈")
+    
+    # 风控参数显示
+    if '风控引擎' in st.session_state:
+        风控 = st.session_state.风控引擎
+        st.caption(f"止损: {风控.止损比例*100:.0f}% | 止盈: {风控.止盈比例*100:.0f}%")
+        st.caption(f"移动止损: {'开启' if 风控.移动止损开关 else '关闭'} | 回撤: {风控.移动止损回撤*100:.0f}%")
+    
+    # ========== 自动监控执行 ==========
+    if 自动风控:
+        if '风控引擎' in st.session_state:
+            风控 = st.session_state.风控引擎
+            
+            # 监控持仓
+            触发 = 风控.监控持仓(引擎)
+            
+            if 触发:
+                st.markdown("### ⚠️ 风控警报")
+                for t in 触发:
+                    st.warning(f"{t['品种']}: {t['类型']} 触发 (盈亏率: {t['盈亏率']*100:.2f}%)")
+                
+                # 自动执行平仓
+                平仓记录 = 风控.执行自动平仓(引擎)
+                if 平仓记录:
+                    for r in 平仓记录:
+                        st.error(f"✅ 已自动平仓 {r['品种']} ({r['类型']})")
+                    st.rerun()
+            else:
+                # 不显示任何内容，保持安静
+                pass
+    
+    st.markdown("---")
     st.caption(f"当前时间: {数据库.获取当前时间()}")
 
 # ========== Tab ==========
