@@ -5,7 +5,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from 核心.策略基类 import 策略基类
 
-class AStockVolumePriceStrategy(策略基类):  # 类名必须包含 Strategy
+class AStockVolumePriceStrategy(策略基类):
     """A股量价策略"""
     
     def __init__(self, 名称, 品种, 初始资金, 短周期=5, 长周期=20):
