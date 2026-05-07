@@ -1,6 +1,11 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
+import sys
+import os
 from 核心 import 行情获取
+
+# 确保路径正确
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def 显示(引擎):
     # 计算资金指标
@@ -44,29 +49,50 @@ def 显示(引擎):
     with col1:
         st.markdown("#### 买入")
         
-        # 从策略加载器获取策略列表（策略库中的所有策略）
+        # 直接从策略库文件夹读取策略文件
         try:
-            from 核心 import 策略加载器
-            加载器 = 策略加载器()
-            策略列表 = 加载器.获取策略()
-            
-            # 提取策略对应的品种（去重）
+            策略库路径 = "策略库"
             可买品种列表 = []
-            for s in 策略列表:
-                品种代码 = s["品种"]
-                if 品种代码 not in 可买品种列表:
-                    可买品种列表.append(品种代码)
+            策略名称列表 = []
             
-            # 显示策略数量
-            st.caption(f"📊 策略库共 {len(策略列表)} 个策略，{len(可买品种列表)} 个品种")
+            # 遍历策略库文件夹
+            if os.path.exists(策略库路径):
+                for 文件夹 in os.listdir(策略库路径):
+                    文件夹路径 = os.path.join(策略库路径, 文件夹)
+                    if os.path.isdir(文件夹路径):
+                        # 读取每个策略文件夹下的py文件
+                        for py文件 in os.listdir(文件夹路径):
+                            if py文件.endswith(".py") and py文件 not in ["__init__.py", "__pycache__"]:
+                                # 根据文件夹名称确定品种
+                                if 文件夹 == "外汇策略":
+                                    品种 = "EURUSD"
+                                elif 文件夹 == "加密货币策略":
+                                    品种 = "BTC-USD"
+                                elif 文件夹 == "期货策略":
+                                    品种 = "GC=F"
+                                elif 文件夹 == "A股策略":
+                                    品种 = "000001.SS"
+                                elif 文件夹 == "美股策略":
+                                    品种 = "AAPL"
+                                elif 文件夹 == "港股策略":
+                                    品种 = "00700.HK"
+                                else:
+                                    品种 = "AAPL"
+                                
+                                if 品种 not in 可买品种列表:
+                                    可买品种列表.append(品种)
+                                    策略名称列表.append(py文件.replace(".py", ""))
+            
+            # 如果没有获取到，使用默认
+            if not 可买品种列表:
+                可买品种列表 = ["AAPL", "BTC-USD", "GC=F", "EURUSD"]
+                策略名称列表 = ["默认策略"]
+            
+            st.caption(f"📊 策略库: {len(策略名称列表)} 个策略, {len(可买品种列表)} 个品种")
             
         except Exception as e:
             可买品种列表 = ["AAPL", "BTC-USD", "GC=F", "EURUSD"]
-            st.caption(f"获取策略失败: {e}")
-        
-        # 如果没有获取到策略，使用默认
-        if not 可买品种列表:
-            可买品种列表 = ["AAPL", "BTC-USD", "GC=F", "EURUSD"]
+            st.caption(f"读取策略库失败: {e}")
         
         买入品种 = st.selectbox("选择品种", 可买品种列表, key="buy_symbol")
         
