@@ -117,6 +117,23 @@ def 初始化数据库():
     conn.commit()
     conn.close()
 
+# 清空所有持仓（修复数据用）
+def 清空所有持仓():
+    """清空持仓表（修复错误数据）"""
+    try:
+        conn = 获取连接()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM 持仓")
+        cursor.execute("DELETE FROM 资金曲线")
+        cursor.execute("DELETE FROM 持仓历史")
+        conn.commit()
+        conn.close()
+        print("✅ 已清空所有持仓数据")
+        return True
+    except Exception as e:
+        print(f"清空持仓失败: {e}")
+        return False
+
 # ========== 交易记录 ==========
 def 保存交易记录(动作, 品种, 价格, 数量, 盈亏=0, 策略名称=""):
     try:
