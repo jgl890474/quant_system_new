@@ -7,14 +7,6 @@ from 工具 import 数据库
 def 显示(引擎, 策略加载器, AI引擎):
     st.markdown("### 🤖 AI 智能交易")
     
-    # 初始化 session_state
-    if '策略信号' not in st.session_state:
-        st.session_state['策略信号'] = None
-    if 'AI原始返回' not in st.session_state:
-        st.session_state['AI原始返回'] = None
-    if 'AI原始数据' not in st.session_state:
-        st.session_state['AI原始数据'] = None
-    
     # 获取策略列表
     策略列表 = 策略加载器.获取策略()
     策略名称列表 = [s["名称"] for s in 策略列表]
@@ -44,11 +36,12 @@ def 显示(引擎, 策略加载器, AI引擎):
                 st.success(f"📡 策略信号: {策略信号值.upper()}")
                 st.rerun()
         
-        # 安全显示策略信号（修复 None 错误）
-        if st.session_state['策略信号'] is not None:
-            st.markdown(f"### 策略信号: **{st.session_state['策略信号'].upper()}**")
+        # 获取策略信号（安全方式）
+        策略信号值 = st.session_state.get('策略信号', None)
+        if 策略信号值 is not None:
+            st.markdown(f"### 策略信号: **{策略信号值.upper()}**")
         else:
-            st.info("ℹ️ 请先点击「运行策略信号」获取信号")
+            st.info("ℹ️ 请先点击「运行策略信号」")
         
         # AI 分析按钮
         st.markdown("---")
@@ -69,34 +62,38 @@ def 显示(引擎, 策略加载器, AI引擎):
                     st.session_state['AI原始数据'] = 结果
                     
                     # 显示 AI 决策
-                    st.success(f"🤖 AI 决策: **{结果['最终信号'].upper()}**")
-                    st.info(f"📊 置信度: {结果['置信度']}%")
-                    st.write(f"💡 分析理由: {结果['理由']}")
+                    st.success(f"🤖 AI 决策: **{结果.get('最终信号', 'hold').upper()}**")
+                    st.info(f"📊 置信度: {结果.get('置信度', 0)}%")
+                    st.write(f"💡 分析理由: {结果.get('理由', '无')}")
                     
                     # 显示额外信息
                     col1, col2, col3 = st.columns(3)
                     with col1:
                         st.metric("建议仓位", f"{结果.get('建议仓位', 'N/A')} ({结果.get('建议仓位比例', 0)}%)")
                     with col2:
-                        if 结果.get('止损价', 0) > 0:
-                            st.metric("建议止损", f"${结果['止损价']:.2f}")
+                        止损 = 结果.get('止损价', 0)
+                        if 止损 and 止损 > 0:
+                            st.metric("建议止损", f"${止损:.2f}")
                         else:
                             st.metric("建议止损", "N/A")
                     with col3:
-                        if 结果.get('止盈价', 0) > 0:
-                            st.metric("建议止盈", f"${结果['止盈价']:.2f}")
+                        止盈 = 结果.get('止盈价', 0)
+                        if 止盈 and 止盈 > 0:
+                            st.metric("建议止盈", f"${止盈:.2f}")
                         else:
                             st.metric("建议止盈", "N/A")
                     
-                    if 结果.get('风险提示'):
-                        st.warning(f"⚠️ {结果['风险提示']}")
+                    风险提示 = 结果.get('风险提示', '')
+                    if 风险提示:
+                        st.warning(f"⚠️ {风险提示}")
                     
                     # 根据 AI 决策显示执行按钮
-                    if 结果['最终信号'] == 'buy':
+                    最终信号 = 结果.get('最终信号', 'hold')
+                    if 最终信号 == 'buy':
                         if st.button("✅ 确认执行买入", use_container_width=True):
                             引擎.买入(策略信息['品种'], 当前价格)
                             st.rerun()
-                    elif 结果['最终信号'] == 'sell':
+                    elif 最终信号 == 'sell':
                         if st.button("✅ 确认执行卖出", use_container_width=True):
                             引擎.卖出(策略信息['品种'], 当前价格)
                             st.rerun()
@@ -106,40 +103,26 @@ def 显示(引擎, 策略加载器, AI引擎):
                 except Exception as e:
                     st.error(f"AI 分析失败: {e}")
     
-    # ========== 下拉框显示 AI 返回内容 ==========
+    # ========== AI 决策详情 ==========
     st.markdown("---")
     st.markdown("### 📋 AI 决策详情")
     
-    # 选择查看方式
-    查看方式 = st.radio("选择查看方式", ["AI决策摘要", "AI决策历史"], horizontal=True)
+    if st.session_state.get('AI原始数据'):
+        数据 = st.session_state['AI原始数据']
+        st.json({
+            "最终信号": 数据.get('最终信号', 'N/A'),
+            "置信度": f"{数据.get('置信度', 0)}%",
+            "理由": 数据.get('理由', 'N/A'),
+            "建议仓位": 数据.get('建议仓位', 'N/A'),
+            "建议仓位比例": f"{数据.get('建议仓位比例', 0)}%",
+            "止损价": f"${数据.get('止损价', 0):.2f}" if data.get('止损价', 0) > 0 else "N/A",
+            "止盈价": f"${数据.get('止盈价', 0):.2f}" if data.get('止盈价', 0) > 0 else "N/A",
+            "风险提示": 数据.get('风险提示', 'N/A')
+        })
+    else:
+        st.info("暂无AI决策数据，请先点击「AI 分析并执行」")
     
-    if 查看方式 == "AI决策摘要":
-        if st.session_state.get('AI原始数据'):
-            数据 = st.session_state['AI原始数据']
-            st.json({
-                "最终信号": 数据.get('最终信号', 'N/A'),
-                "置信度": f"{数据.get('置信度', 0)}%",
-                "理由": 数据.get('理由', 'N/A'),
-                "建议仓位": 数据.get('建议仓位', 'N/A'),
-                "建议仓位比例": f"{数据.get('建议仓位比例', 0)}%",
-                "止损价": f"${数据.get('止损价', 0):.2f}" if 数据.get('止损价', 0) > 0 else "N/A",
-                "止盈价": f"${数据.get('止盈价', 0):.2f}" if 数据.get('止盈价', 0) > 0 else "N/A",
-                "风险提示": 数据.get('风险提示', 'N/A')
-            })
-        else:
-            st.info("暂无AI决策数据，请先点击「AI 分析并执行」")
-    
-    else:  # AI决策历史
-        try:
-            历史记录 = 数据库.获取AI决策历史(20)
-            if not 历史记录.empty:
-                st.dataframe(历史记录[['时间', '品种', '策略信号', 'AI信号', '置信度']], use_container_width=True)
-            else:
-                st.info("暂无 AI 决策历史记录")
-        except:
-            st.info("暂无 AI 决策历史记录")
-    
-    # 强制买入测试按钮
+    # 快速测试
     st.markdown("---")
     st.markdown("### 🧪 快速测试")
     
