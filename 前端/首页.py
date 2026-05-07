@@ -40,7 +40,7 @@ def 显示(引擎):
     
     col1, col2 = st.columns(2)
     
-    # ========== 买入区域（从策略中心获取品种） ==========
+    # ========== 买入区域（从策略中心显示的策略获取品种） ==========
     with col1:
         st.markdown("#### 买入")
         
@@ -49,22 +49,27 @@ def 显示(引擎):
             from 核心 import 策略加载器
             加载器 = 策略加载器()
             策略列表 = 加载器.获取策略()
-            # 提取策略名称和品种
-            可买品种列表 = []
-            策略名称映射 = {}
+            
+            # 提取策略对应的品种（策略中心显示的7个策略）
+            策略品种列表 = []
             for s in 策略列表:
-                策略名称映射[s["名称"]] = s["品种"]
-                可买品种列表.append(s["品种"])
-            # 去重
-            可买品种列表 = list(set(可买品种列表))
+                品种代码 = s["品种"]
+                if 品种代码 not in 策略品种列表:
+                    策略品种列表.append(品种代码)
+            
+            # 策略中心显示的品种去重后应该是：EURUSD, BTC-USD, 000001.SS, AAPL
+            st.caption(f"📊 策略中心品种: {策略品种列表}")
+            
+            if 策略品种列表:
+                可买品种列表 = 策略品种列表
+            else:
+                可买品种列表 = ["AAPL", "BTC-USD", "GC=F", "EURUSD"]
+                
         except Exception as e:
             可买品种列表 = ["AAPL", "BTC-USD", "GC=F", "EURUSD"]
+            st.caption(f"获取策略失败: {e}")
         
-        if 可买品种列表:
-            st.caption(f"📊 策略中心共 {len(可买品种列表)} 个可交易品种")
-            买入品种 = st.selectbox("选择品种", 可买品种列表, key="buy_symbol")
-        else:
-            买入品种 = st.selectbox("选择品种", ["AAPL", "BTC-USD", "GC=F", "EURUSD"], key="buy_symbol")
+        买入品种 = st.selectbox("选择品种", 可买品种列表, key="buy_symbol")
         
         # 获取当前价格显示
         try:
