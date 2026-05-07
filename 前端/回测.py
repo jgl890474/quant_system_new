@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
-from 工具 import 数据库
+from scipy.interpolate import make_interp_spline  # 添加平滑插值
 
 def 显示():
     st.markdown("### ⚙️ 回测参数设置")
@@ -26,7 +26,7 @@ def 显示():
     if st.button("🚀 开始回测", type="primary", use_container_width=True):
         with st.spinner("回测运行中..."):
             try:
-                # 生成模拟数据
+                # 生成更多平滑的数据点
                 日期列表 = pd.date_range(start=开始日期, end=结束日期, freq='D')
                 if len(日期列表) < 10:
                     日期列表 = pd.date_range(start=开始日期, end=结束日期, freq='W')
@@ -35,11 +35,14 @@ def 显示():
                     st.error("日期范围太短")
                     return
                 
-                # 生成模拟价格序列
+                # 生成模拟价格序列（更平滑）
                 np.random.seed(42)
-                收益率 = np.random.randn(len(日期列表)) * 0.02
-                价格序列 = 100 * (1 + np.cumsum(收益率) / 50)
-                价格序列 = np.maximum(价格序列, 50)
+                n = len(日期列表)
+                # 使用更小的随机波动
+                收益率 = np.random.randn(n) * 0.01
+                价格序列 = 100 * (1 + np.cumsum(收益率) / 30)
+                价格序列 = np.maximum(价格序列, 70)
+                价格序列 = np.minimum(价格序列, 130)
                 
                 # 计算收益率
                 开盘价 = float(价格序列[0])
@@ -56,18 +59,19 @@ def 显示():
                 col_c.metric("最终资金", f"${最终资金:,.0f}")
                 col_d.metric("数据量", f"{len(日期列表)}")
                 
-                # ========== 净值曲线（优化版） ==========
+                # ========== 生成平滑曲线（使用插值） ==========
                 净值 = [初始资金 * (1 + 总收益率 * i / len(日期列表)) for i in range(len(日期列表))]
                 
+                # 方法1：使用 Plotly 的 spline
                 fig = go.Figure()
                 fig.add_trace(go.Scatter(
                     x=日期列表,
                     y=净值,
                     mode='lines',
                     name='净值',
-                    line=dict(color='#00d2ff', width=2, shape='spline'),  # 加粗到2，更明显
+                    line=dict(color='#00d2ff', width=2.5, shape='spline'),  # shape='spline' 平滑
                     fill='tozeroy',
-                    opacity=0.4  # 增加不透明度
+                    opacity=0.3
                 ))
                 
                 # 添加初始资金参考线
@@ -81,19 +85,30 @@ def 显示():
                 
                 fig.update_layout(
                     height=350,
-                    title="净值曲线",
+                    title="净值曲线（平滑）",
                     paper_bgcolor="#0a0c10",
                     plot_bgcolor="#15171a",
                     font_color="#e6e6e6",
                     xaxis_title="日期",
                     yaxis_title="净值 (美元)",
                     xaxis=dict(
-                        tickformat="%Y-%m-%d",  # 日期格式
-                        tickangle=-45  # 倾斜45度避免重叠
+                        tickformat="%Y-%m",
+                        tickangle=-45,
+                        showgrid=True,
+                        gridwidth=0.5,
+                        gridcolor='#2a2e3a'
+                    ),
+                    yaxis=dict(
+                        showgrid=True,
+                        gridwidth=0.5,
+                        gridcolor='#2a2e3a'
                     ),
                     margin=dict(l=50, r=40, t=50, b=80)
                 )
                 st.plotly_chart(fig, use_container_width=True)
+                
+                # 提示
+                st.caption("💡 提示：曲线使用 spline 平滑算法，展示净值变化趋势")
                 
             except Exception as e:
                 st.error(f"回测出错: {str(e)}")
