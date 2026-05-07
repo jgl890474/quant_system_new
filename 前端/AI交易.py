@@ -36,12 +36,12 @@ def 显示(引擎, 策略加载器, AI引擎):
                 st.success(f"📡 策略信号: {策略信号值.upper()}")
                 st.rerun()
         
-        # 显示策略信号（彻底修复None错误）
-        if '策略信号' in st.session_state and st.session_state['策略信号'] is not None:
-            策略信号值 = st.session_state['策略信号']
-            st.markdown(f"### 策略信号: **{策略信号值.upper()}**")
+        # ========== 显示策略信号（彻底修复） ==========
+        显示信号 = st.session_state.get('策略信号', None)
+        if 显示信号 is not None:
+            st.markdown(f"### 策略信号: **{显示信号.upper()}**")
         else:
-            st.info("ℹ️ 请先点击「运行策略信号」")
+            st.markdown("### 策略信号: 未运行")
         
         # AI 分析按钮
         st.markdown("---")
@@ -51,9 +51,9 @@ def 显示(引擎, 策略加载器, AI引擎):
             with st.spinner("AI 正在分析中..."):
                 try:
                     # 获取策略信号
-                    策略信号值 = 'hold'
-                    if '策略信号' in st.session_state and st.session_state['策略信号'] is not None:
-                        策略信号值 = st.session_state['策略信号']
+                    策略信号值 = st.session_state.get('策略信号', 'hold')
+                    if 策略信号值 is None:
+                        策略信号值 = 'hold'
                     
                     # 调用 AI 引擎
                     结果 = AI引擎.分析(策略信息['品种'], 当前价格, 策略信号值)
@@ -71,17 +71,17 @@ def 显示(引擎, 策略加载器, AI引擎):
                     with col1:
                         st.metric("建议仓位", f"{结果.get('建议仓位', 'N/A')}")
                     with col2:
-                        止损 = 结果.get('止损价', 0)
-                        if 止损 and 止损 > 0:
-                            st.metric("建议止损", f"${止损:.2f}")
+                        止损价 = 结果.get('止损价', 0)
+                        if 止损价 and 止损价 > 0:
+                            st.metric("建议止损", f"${止损价:.2f}")
                         else:
-                            st.metric("建议止损", "N/A")
+                            st.metric("建议止损", "—")
                     with col3:
-                        止盈 = 结果.get('止盈价', 0)
-                        if 止盈 and 止盈 > 0:
-                            st.metric("建议止盈", f"${止盈:.2f}")
+                        止盈价 = 结果.get('止盈价', 0)
+                        if 止盈价 and 止盈价 > 0:
+                            st.metric("建议止盈", f"${止盈价:.2f}")
                         else:
-                            st.metric("建议止盈", "N/A")
+                            st.metric("建议止盈", "—")
                     
                     风险提示 = 结果.get('风险提示', '')
                     if 风险提示:
@@ -129,7 +129,7 @@ def 显示(引擎, 策略加载器, AI引擎):
     with col1:
         if st.button("🔴 强制买入 100股 AAPL", use_container_width=True):
             try:
-                价格 = 行情获取.获取价格("AAPL").价格
+                价格 = 行情获取.获取价格("AAPL").price
                 引擎.买入("AAPL", 价格, 100)
                 st.rerun()
             except Exception as e:
@@ -139,6 +139,6 @@ def 显示(引擎, 策略加载器, AI引擎):
         if st.button("🟢 查看持仓", use_container_width=True):
             if 引擎.持仓:
                 for 品种, pos in 引擎.持仓.items():
-                    st.write(f"{品种}: {pos.数量} 股, 成本: {pos.平均成本:.2f}")
+                    st.write(f"{品种}: {int(pos.数量)} 股, 成本: {pos.平均成本:.2f}")
             else:
                 st.info("暂无持仓")
