@@ -19,10 +19,9 @@ def 显示(引擎):
     with col3:
         st.metric("持仓市值", f"¥{持仓市值:,.0f}")
     with col4:
-        盈亏颜色 = "normal" if 总盈亏 >= 0 else "inverse"
-        st.metric("总盈亏", f"¥{总盈亏:+,.0f}", delta=f"{(总盈亏/引擎.初始资金)*100:.1f}%", delta_color=盈亏颜色)
+        st.metric("总盈亏", f"¥{总盈亏:+,.0f}", delta=f"{(总盈亏/引擎.初始资金)*100:.1f}%")
     
-    # 实时行情滚动条
+    # 实时行情
     st.markdown("### 📈 实时行情")
     
     行情品种 = ["AAPL", "BTC-USD", "GC=F", "EURUSD", "TSLA", "NVDA"]
@@ -44,7 +43,7 @@ def 显示(引擎):
     with col1:
         st.markdown("#### 买入")
         买入品种 = st.selectbox("选择品种", ["AAPL", "BTC-USD", "GC=F", "EURUSD", "TSLA", "NVDA"], key="buy")
-        买入数量 = st.number_input("数量", min_value=1, value=100, step=100, key="buy_qty")
+        买入数量 = st.number_input("数量", min_value=1, value=30, step=10, key="buy_qty")
         if st.button("买入", type="primary", use_container_width=True):
             try:
                 价格 = 行情获取.获取价格(买入品种).价格
@@ -55,7 +54,7 @@ def 显示(引擎):
     with col2:
         st.markdown("#### 卖出")
         卖品种 = st.selectbox("选择品种", ["AAPL", "BTC-USD", "GC=F", "EURUSD", "TSLA", "NVDA"], key="sell")
-        卖出数量 = st.number_input("数量", min_value=1, value=100, step=100, key="sell_qty")
+        卖出数量 = st.number_input("数量", min_value=1, value=30, step=10, key="sell_qty")
         if st.button("卖出", use_container_width=True):
             try:
                 价格 = 行情获取.获取价格(卖品种).价格
