@@ -40,36 +40,35 @@ def 显示(引擎):
     
     col1, col2 = st.columns(2)
     
-    # ========== 买入区域（从AI交易获取策略品种） ==========
+    # ========== 买入区域 ==========
     with col1:
         st.markdown("#### 买入")
         
-        # 从AI交易获取策略列表（AI交易页面显示的策略）
+        # 从策略加载器获取策略列表（策略库中的所有策略）
         try:
             from 核心 import 策略加载器
             加载器 = 策略加载器()
             策略列表 = 加载器.获取策略()
             
-            # 提取策略名称和品种，用于显示
+            # 提取策略对应的品种（去重）
             可买品种列表 = []
             for s in 策略列表:
                 品种代码 = s["品种"]
                 if 品种代码 not in 可买品种列表:
                     可买品种列表.append(品种代码)
             
-            # AI交易页面显示的策略品种
-            st.caption(f"🤖 AI交易策略品种: {可买品种列表}")
+            # 显示策略数量
+            st.caption(f"📊 策略库共 {len(策略列表)} 个策略，{len(可买品种列表)} 个品种")
             
-            if 可买品种列表:
-                可买品种选项 = 可买品种列表
-            else:
-                可买品种选项 = ["AAPL", "BTC-USD", "GC=F", "EURUSD"]
-                
         except Exception as e:
-            可买品种选项 = ["AAPL", "BTC-USD", "GC=F", "EURUSD"]
-            st.caption(f"获取AI策略失败: {e}")
+            可买品种列表 = ["AAPL", "BTC-USD", "GC=F", "EURUSD"]
+            st.caption(f"获取策略失败: {e}")
         
-        买入品种 = st.selectbox("选择品种", 可买品种选项, key="buy_symbol")
+        # 如果没有获取到策略，使用默认
+        if not 可买品种列表:
+            可买品种列表 = ["AAPL", "BTC-USD", "GC=F", "EURUSD"]
+        
+        买入品种 = st.selectbox("选择品种", 可买品种列表, key="buy_symbol")
         
         # 获取当前价格显示
         try:
@@ -90,7 +89,7 @@ def 显示(引擎):
             except Exception as e:
                 st.error(f"买入失败: {e}")
     
-    # ========== 卖出区域（只显示持仓品种） ==========
+    # ========== 卖出区域 ==========
     with col2:
         st.markdown("#### 卖出")
         
