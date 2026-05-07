@@ -39,13 +39,9 @@ if '风控引擎' not in st.session_state:
 # ========== 页面配置 ==========
 st.set_page_config(page_title="量化交易系统 v5.0", page_icon="📈", layout="wide", initial_sidebar_state="expanded")
 
-# ========== 主标题 ==========
-st.markdown("""
-<div style="text-align:center; padding:0.3rem 0;">
-    <h1 style="color:#3b82f6; font-size:26px; margin:0;">📊 量化交易系统 v5.0</h1>
-    <p style="color:#94a3b8; font-size:12px; margin:0;">多类目 · 多策略 · AI自动交易 | 云端部署</p>
-</div>
-""", unsafe_allow_html=True)
+# ========== 主标题（确保显示） ==========
+st.title("📊 量化交易系统 v5.0")
+st.markdown('<p style="text-align:center; color:#94a3b8; font-size:14px; margin-top:-20px;">多类目 · 多策略 · AI自动交易 | 云端部署</p>', unsafe_allow_html=True)
 
 # ========== 紧凑样式 ==========
 st.markdown("""
@@ -61,6 +57,7 @@ st.markdown("""
     hr { margin: 4px 0 !important; }
     .stAlert, .stInfo { font-size: 11px !important; padding: 4px !important; }
     .stSelectbox label, .stNumberInput label { font-size: 11px !important; }
+    h1 { text-align: center !important; color: #3b82f6 !important; font-size: 26px !important; }
 </style>
 """, unsafe_allow_html=True)
 
