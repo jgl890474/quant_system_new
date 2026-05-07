@@ -2,6 +2,7 @@
 import streamlit as st
 from datetime import datetime
 from 工具 import 数据库
+from 核心 import 行情获取
 
 def 获取当前时间():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -28,7 +29,12 @@ class 订单引擎:
             for 品种, 数据 in 持仓数据.items():
                 pos = 持仓类(品种, 数据['数量'], 数据['平均成本'])
                 pos.已实现盈亏 = data.get('已实现盈亏', 0)
-                pos.当前价格 = pos.平均成本
+                # 获取实时价格
+                try:
+                    现价 = 行情获取.获取价格(品种).价格
+                    pos.当前价格 = 现价
+                except:
+                    pos.当前价格 = pos.平均成本
                 self.持仓[品种] = pos
                 self.已实现盈亏 += pos.已实现盈亏
             
@@ -37,13 +43,23 @@ class 订单引擎:
         except Exception as e:
             print(f"恢复持仓失败: {e}")
     
+    def 更新所有持仓价格(self):
+        """更新所有持仓的当前价格"""
+        for 品种, pos in self.持仓.items():
+            try:
+                现价 = 行情获取.获取价格(品种).价格
+                pos.当前价格 = 现价
+            except:
+                pass
+    
     def _保存持仓到数据库(self):
         """保存所有持仓到数据库"""
         for 品种, pos in self.持仓.items():
             数据库.保存持仓(品种, pos.数量, pos.平均成本, pos.已实现盈亏)
     
     def 获取总资产(self):
-        """计算总资产"""
+        """计算总资产（先更新价格）"""
+        self.更新所有持仓价格()
         总值 = self.初始资金
         for pos in self.持仓.values():
             总值 += pos.已实现盈亏
