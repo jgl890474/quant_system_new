@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
-from scipy.interpolate import make_interp_spline  # 添加平滑插值
+from 工具 import 数据库
 
 def 显示():
     st.markdown("### ⚙️ 回测参数设置")
@@ -26,7 +26,7 @@ def 显示():
     if st.button("🚀 开始回测", type="primary", use_container_width=True):
         with st.spinner("回测运行中..."):
             try:
-                # 生成更多平滑的数据点
+                # 生成模拟数据
                 日期列表 = pd.date_range(start=开始日期, end=结束日期, freq='D')
                 if len(日期列表) < 10:
                     日期列表 = pd.date_range(start=开始日期, end=结束日期, freq='W')
@@ -38,11 +38,11 @@ def 显示():
                 # 生成模拟价格序列（更平滑）
                 np.random.seed(42)
                 n = len(日期列表)
-                # 使用更小的随机波动
-                收益率 = np.random.randn(n) * 0.01
-                价格序列 = 100 * (1 + np.cumsum(收益率) / 30)
-                价格序列 = np.maximum(价格序列, 70)
-                价格序列 = np.minimum(价格序列, 130)
+                # 使用更小的随机波动，产生平滑曲线
+                收益率 = np.random.randn(n) * 0.008
+                价格序列 = 100 * (1 + np.cumsum(收益率) / 20)
+                价格序列 = np.maximum(价格序列, 80)
+                价格序列 = np.minimum(价格序列, 120)
                 
                 # 计算收益率
                 开盘价 = float(价格序列[0])
@@ -59,10 +59,9 @@ def 显示():
                 col_c.metric("最终资金", f"${最终资金:,.0f}")
                 col_d.metric("数据量", f"{len(日期列表)}")
                 
-                # ========== 生成平滑曲线（使用插值） ==========
+                # ========== 净值曲线（Plotly spline 平滑） ==========
                 净值 = [初始资金 * (1 + 总收益率 * i / len(日期列表)) for i in range(len(日期列表))]
                 
-                # 方法1：使用 Plotly 的 spline
                 fig = go.Figure()
                 fig.add_trace(go.Scatter(
                     x=日期列表,
@@ -106,9 +105,6 @@ def 显示():
                     margin=dict(l=50, r=40, t=50, b=80)
                 )
                 st.plotly_chart(fig, use_container_width=True)
-                
-                # 提示
-                st.caption("💡 提示：曲线使用 spline 平滑算法，展示净值变化趋势")
                 
             except Exception as e:
                 st.error(f"回测出错: {str(e)}")
