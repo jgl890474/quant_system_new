@@ -35,7 +35,7 @@ def 显示():
                     st.error("日期范围太短")
                     return
                 
-                # 生成模拟价格序列（更平滑，产生净值曲线）
+                # 生成模拟价格序列
                 np.random.seed(42)
                 n = len(日期列表)
                 收益率 = np.random.randn(n) * 0.012
@@ -43,15 +43,18 @@ def 显示():
                 价格序列 = np.maximum(价格序列, 80)
                 价格序列 = np.minimum(价格序列, 120)
                 
-                # 计算累计净值（资产净值曲线）
-                累计净值 = 初始资金 * (价格序列 / 价格序列[0])
+                # 转换为 pandas Series（便于计算）
+                价格序列_series = pd.Series(价格序列, index=日期列表)
+                
+                # 计算累计净值
+                累计净值 = 初始资金 * (价格序列_series / 价格序列_series.iloc[0])
                 
                 # 计算收益率
-                最终净值 = 累计净值[-1]
+                最终净值 = 累计净值.iloc[-1]
                 总收益率 = (最终净值 - 初始资金) / 初始资金
                 
                 # 计算最大回撤
-                累计最大值 = np.maximum.accumulate(累计净值)
+                累计最大值 = 累计净值.cummax()
                 回撤 = (累计最大值 - 累计净值) / 累计最大值 * 100
                 
                 # 显示结果
@@ -64,13 +67,11 @@ def 显示():
                 col_c.metric("最终净值", f"${最终净值:,.0f}")
                 col_d.metric("最大回撤", f"{回撤.max():.2f}%")
                 
-                # ========== 累计净值曲线（资产净值曲线） ==========
+                # ========== 累计净值曲线 ==========
                 fig = go.Figure()
-                
-                # 累计净值曲线
                 fig.add_trace(go.Scatter(
-                    x=日期列表,
-                    y=累计净值,
+                    x=累计净值.index,
+                    y=累计净值.values,
                     mode='lines',
                     name='累计净值',
                     line=dict(color='#00d2ff', width=2.5, shape='spline'),
@@ -87,7 +88,7 @@ def 显示():
                     annotation_font_color="#e6e6e6"
                 )
                 
-                # 添加最高净值线
+                # 最高净值线
                 最高净值 = 累计净值.max()
                 fig.add_hline(
                     y=最高净值,
@@ -126,22 +127,20 @@ def 显示():
                 # ========== 资产净值数据表 ==========
                 with st.expander("📋 资产净值数据"):
                     净值数据 = pd.DataFrame({
-                        "日期": 日期列表,
-                        "资产净值": 累计净值,
-                        "净值变化": 累计净值.diff().fillna(0),
-                        "累计收益率": (累计净值 - 初始资金) / 初始资金 * 100
+                        "日期": 累计净值.index,
+                        "资产净值": 累计净值.values,
+                        "累计收益率": (累计净值.values - 初始资金) / 初始资金 * 100
                     })
-                    净值数据["资产净值"] =净值数据["资产净值"].apply(lambda x: f"${x:,.0f}")
-                    净值数据["净值变化"] =净值数据["净值变化"].apply(lambda x: f"${x:+,.0f}")
-                    净值数据["累计收益率"] =净值数据["累计收益率"].apply(lambda x: f"{x:+.2f}%")
+                    净值数据["资产净值"] = 净值数据["资产净值"].apply(lambda x: f"${x:,.0f}")
+                    净值数据["累计收益率"] = 净值数据["累计收益率"].apply(lambda x: f"{x:+.2f}%")
                     st.dataframe(净值数据.tail(20), use_container_width=True)
                 
                 # ========== 回撤曲线 ==========
                 st.markdown("### 📉 回撤曲线")
                 fig2 = go.Figure()
                 fig2.add_trace(go.Scatter(
-                    x=日期列表,
-                    y=回撤,
+                    x=回撤.index,
+                    y=回撤.values,
                     mode='lines',
                     name='回撤',
                     line=dict(color='#ef4444', width=1.5),
