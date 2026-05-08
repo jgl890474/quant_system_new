@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
-import pandas as pd
 from 核心 import 行情获取
 
 def 显示(引擎, 策略加载器, AI引擎):
@@ -33,11 +32,12 @@ def 显示(引擎, 策略加载器, AI引擎):
                     st.markdown("### 📈 AI 推荐买入")
                     for 股票 in 推荐列表:
                         with st.container():
-                            col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+                            col1, col2, col3, col4 = st.columns([2, 1.5, 1, 1.5])
                             with col1:
                                 st.markdown(f"**{股票.get('名称', '未知')}** ({股票.get('代码', '')})")
                             with col2:
-                                st.markdown(f"价格: ${股票.get('价格', 0):.2f}")
+                                价格 = 股票.get('价格', 0)
+                                st.markdown(f"价格: ${价格:.2f}")
                             with col3:
                                 趋势 = 股票.get('趋势', '未知')
                                 if 趋势 == "上涨":
@@ -45,13 +45,17 @@ def 显示(引擎, 策略加载器, AI引擎):
                                 else:
                                     st.markdown("🔴 趋势向下")
                             with col4:
-                                if st.button(f"买入", key=f"buy_{股票['代码']}"):
+                                # 买入按钮 - 直接调用引擎.买入
+                                if st.button(f"买入", key=f"buy_{股票['代码']}_{股票.get('价格', 0)}"):
                                     价格 = 股票.get('价格', 0)
-                                    if 价格 > 0:
-                                        引擎.买入(股票['代码'], 价格, 100)
+                                    代码 = 股票.get('代码', '')
+                                    if 价格 > 0 and 代码:
+                                        st.info(f"正在买入 {代码} @ ${价格:.2f}")
+                                        引擎.买入(代码, 价格, 100)
+                                        st.success(f"✅ 已执行买入 {代码}")
                                         st.rerun()
                                     else:
-                                        st.error(f"无法获取{股票['名称']}的实时价格")
+                                        st.error(f"无法买入: 价格或代码无效")
                             
                             if 股票.get('理由'):
                                 st.caption(f"📝 {股票['理由']}")
@@ -61,12 +65,34 @@ def 显示(引擎, 策略加载器, AI引擎):
                     
             except Exception as e:
                 st.error(f"AI 分析失败: {e}")
+                st.exception(e)
     
     # 显示当前持仓
     st.markdown("---")
     st.markdown("### 📊 当前持仓")
+    
     if 引擎.持仓:
+        持仓数据 = []
         for 品种, pos in 引擎.持仓.items():
-            st.write(f"{品种}: {int(pos.数量)} 股, 成本: {pos.平均成本:.2f}")
+            持仓数据.append({
+                "品种": 品种,
+                "数量": int(pos.数量),
+                "成本": f"{pos.平均成本:.2f}",
+                "市值": f"{pos.数量 * pos.当前价格:.2f}"
+            })
+        st.dataframe(持仓数据, use_container_width=True)
     else:
         st.info("暂无持仓")
+    
+    # 手动测试买入按钮
+    st.markdown("---")
+    st.markdown("### 🧪 手动测试买入")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🔴 测试买入 AAPL 100股", use_container_width=True):
+            引擎.买入("AAPL", 287.44, 100)
+            st.rerun()
+    with col2:
+        if st.button("🟢 测试买入 贵州茅台 100股", use_container_width=True):
+            引擎.买入("600519.SS", 1372.99, 100)
+            st.rerun()
