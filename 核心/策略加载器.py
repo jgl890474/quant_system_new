@@ -13,7 +13,7 @@ class 策略加载器:
             print(f"路径不存在: {路径}")
             return
         
-        # 只保留你需要的策略类别（去掉了期货和港股）
+        # 只保留你需要的策略类别
         类别配置 = {
             "外汇策略": {"品种": "EURUSD", "显示": "💰 外汇"},
             "加密货币策略": {"品种": "BTC-USD", "显示": "₿ 加密货币"},
@@ -28,6 +28,7 @@ class 策略加载器:
                 continue
             
             print(f"📁 扫描: {文件夹名}")
+            print(f"   品种配置: {配置['品种']}")  # 调试：显示配置的品种
             
             for py文件 in glob.glob(os.path.join(文件夹路径, "*.py")):
                 文件名 = os.path.basename(py文件)
@@ -46,7 +47,6 @@ class 策略加载器:
                     for 属性名 in dir(模块):
                         属性 = getattr(模块, 属性名)
                         if isinstance(属性, type):
-                            # 检查类名包含 Strategy 或 策略
                             if "Strategy" in 属性.__name__ or "策略" in 属性.__name__:
                                 self.策略列表.append({
                                     "名称": 策略名,
@@ -54,7 +54,7 @@ class 策略加载器:
                                     "品种": 配置["品种"],
                                     "类别": 配置["显示"],
                                 })
-                                print(f"   ✅ 加载成功: {策略名}")
+                                print(f"   ✅ 加载成功: {策略名} -> 品种: {配置['品种']}")
                                 找到 = True
                                 break
                     
@@ -64,6 +64,10 @@ class 策略加载器:
                 except Exception as e:
                     print(f"   ❌ 加载失败 {文件名}: {e}")
         
+        # 打印最终加载结果
+        print(f"\n📊 最终加载策略列表:")
+        for s in self.策略列表:
+            print(f"   {s['名称']} -> {s['品种']} ({s['类别']})")
         print(f"\n📊 共加载 {len(self.策略列表)} 个策略")
     
     def 获取策略(self):
