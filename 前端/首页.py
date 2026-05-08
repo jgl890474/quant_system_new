@@ -45,14 +45,7 @@ def 显示(引擎):
     with col1:
         st.markdown("#### 买入")
         
-        # 手动定义策略库中的品种（根据你的策略库）
-        # 外汇策略 -> EURUSD
-        # 加密货币策略 -> BTC-USD
-        # 期货策略 -> GC=F
-        # A股策略 -> 000001.SS
-        # 美股策略 -> AAPL
-        # 港股策略 -> 00700.HK
-        
+        # 策略库品种列表（根据你的策略库）
         可买品种列表 = [
             "EURUSD",      # 外汇策略
             "BTC-USD",     # 加密货币策略
@@ -61,45 +54,56 @@ def 显示(引擎):
             "AAPL"         # 美股策略
         ]
         
-        # 可选：从策略库文件夹动态读取
-        try:
-            策略库路径 = "策略库"
-            if os.path.exists(策略库路径):
-                动态品种 = []
-                for 文件夹名 in os.listdir(策略库路径):
-                    文件夹路径 = os.path.join(策略库路径, 文件夹名)
-                    if os.path.isdir(文件夹路径):
-                        if "外汇" in 文件夹名:
-                            动态品种.append("EURUSD")
-                        elif "加密" in 文件夹名:
-                            动态品种.append("BTC-USD")
-                        elif "期货" in 文件夹名:
-                            动态品种.append("GC=F")
-                        elif "A股" in 文件夹名:
-                            动态品种.append("000001.SS")
-                        elif "美股" in 文件夹名:
-                            动态品种.append("AAPL")
-                        elif "港股" in 文件夹名:
-                            动态品种.append("00700.HK")
-                if 动态品种:
-                    可买品种列表 = list(set(动态品种))
-        except:
-            pass
-        
-        st.caption(f"📊 策略库品种: {可买品种列表}")
+        st.caption(f"📊 可交易品种: {可买品种列表}")
         
         买入品种 = st.selectbox("选择品种", 可买品种列表, key="buy_symbol")
         
         # 获取当前价格显示
         try:
             当前买入价 = 行情获取.获取价格(买入品种).价格
-            st.caption(f"当前价格: ${当前买入价:.2f}")
+            st.caption(f"当前价格: ${当前买入价:.4f}")
         except:
             当前买入价 = 0
+            st.caption("获取价格失败")
         
-        买入数量 = st.number_input("数量", min_value=1, value=30, step=10, key="buy_qty")
-        预计花费 = 当前买入价 * 买入数量
-        st.caption(f"预计花费: ¥{预计花费:,.0f}")
+        # 根据品种类型显示不同的单位
+        if 买入品种 == "000001.SS":
+            单位提示 = "手 (1手=100股)"
+            默认数量 = 1
+            步长 = 1
+        elif 买入品种 == "EURUSD":
+            单位提示 = "手 (1手=10000单位)"
+            默认数量 = 1
+            步长 = 1
+        elif 买入品种 == "BTC-USD":
+            单位提示 = "个"
+            默认数量 = 1
+            步长 = 1
+        else:
+            单位提示 = "股"
+            默认数量 = 100
+            步长 = 10
+        
+        买入数量 = st.number_input(
+            f"数量 ({单位提示})", 
+            min_value=1, 
+            value=默认数量, 
+            step=步长, 
+            key="buy_qty"
+        )
+        
+        # 计算预计花费
+        if 买入品种 == "000001.SS":
+            实际股数 = 买入数量 * 100
+            预计花费 = 当前买入价 * 实际股数
+            st.caption(f"预计花费: ¥{预计花费:,.0f} (实际股数: {实际股数}股)")
+        elif 买入品种 == "EURUSD":
+            实际单位 = 买入数量 * 10000
+            预计花费 = 当前买入价 * 实际单位
+            st.caption(f"预计花费: ¥{预计花费:,.0f} (实际单位: {实际单位})")
+        else:
+            预计花费 = 当前买入价 * 买入数量
+            st.caption(f"预计花费: ¥{预计花费:,.0f}")
         
         if st.button("买入", type="primary", use_container_width=True):
             try:
@@ -118,7 +122,7 @@ def 显示(引擎):
         
         if 持仓品种列表:
             # 构建显示选项
-            卖出选项 = [f"{品种} (持仓: {int(引擎.持仓[品种].数量)}股)" for 品种 in 持仓品种列表]
+            卖出选项 = [f"{品种} (持仓: {int(引擎.持仓[品种].数量)}股/单位)" for 品种 in 持仓品种列表]
             卖出选项索引 = st.selectbox(
                 "选择持仓品种", 
                 range(len(卖出选项)), 
@@ -128,11 +132,11 @@ def 显示(引擎):
             卖品种 = 持仓品种列表[卖出选项索引]
             最大可卖数量 = int(引擎.持仓[卖品种].数量)
             
-            st.caption(f"持仓成本: ${引擎.持仓[卖品种].平均成本:.2f}")
+            st.caption(f"持仓成本: ${引擎.持仓[卖品种].平均成本:.4f}")
             
             try:
                 当前卖出价 = 行情获取.获取价格(卖品种).价格
-                st.caption(f"当前价格: ${当前卖出价:.2f}")
+                st.caption(f"当前价格: ${当前卖出价:.4f}")
             except:
                 当前卖出价 = 0
             
@@ -140,7 +144,7 @@ def 显示(引擎):
                 "数量", 
                 min_value=1, 
                 max_value=最大可卖数量, 
-                value=min(30, 最大可卖数量), 
+                value=min(100, 最大可卖数量), 
                 step=10, 
                 key="sell_qty"
             )
@@ -158,5 +162,5 @@ def 显示(引擎):
         else:
             st.info("暂无持仓")
             st.selectbox("选择持仓品种", ["无持仓"], disabled=True, key="sell_symbol_disabled")
-            st.number_input("数量", min_value=1, value=30, disabled=True, key="sell_qty_disabled")
+            st.number_input("数量", min_value=1, value=100, disabled=True, key="sell_qty_disabled")
             st.button("卖出", disabled=True, use_container_width=True)
