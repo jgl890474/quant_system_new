@@ -30,38 +30,36 @@ def 显示(引擎, 策略加载器, AI引擎):
                 
                 if 推荐列表:
                     st.markdown("### 📈 AI 推荐买入")
-                    for idx, 股票 in enumerate(推荐列表):
-                        # 使用唯一的key，避免变量覆盖
-                        股票代码 = 股票.get('代码', '')
-                        股票名称 = 股票.get('名称', '未知')
-                        股票价格 = 股票.get('价格', 0)
+                    for 股票 in 推荐列表:
+                        # 提取数据
+                        代码 = 股票.get("代码", "")
+                        名称 = 股票.get("名称", "未知")
+                        价格 = 股票.get("价格", 0)
+                        趋势 = 股票.get("趋势", "未知")
                         
                         with st.container():
                             col1, col2, col3, col4 = st.columns([2, 1.5, 1, 1.5])
                             with col1:
-                                st.markdown(f"**{股票名称}** ({股票代码})")
+                                st.markdown(f"**{名称}** ({代码})")
                             with col2:
-                                st.markdown(f"价格: ${股票价格:.2f}")
+                                st.markdown(f"价格: ${价格:.2f}")
                             with col3:
-                                趋势 = 股票.get('趋势', '未知')
                                 if 趋势 == "上涨":
                                     st.markdown("🟢 趋势向上")
                                 else:
                                     st.markdown("🔴 趋势向下")
                             with col4:
-                                # 使用唯一的key，确保每个按钮独立
-                                button_key = f"buy_{股票代码}_{idx}"
-                                if st.button(f"买入", key=button_key):
-                                    if 股票价格 > 0 and 股票代码:
-                                        st.info(f"正在买入 {股票名称}({股票代码}) @ ${股票价格:.2f}")
-                                        # 直接传入正确的代码
-                                        引擎.买入(股票代码, 股票价格, 100)
-                                        st.success(f"✅ 已执行买入 {股票名称}")
+                                # 使用正确的代码
+                                if st.button(f"买入", key=f"buy_{代码}"):
+                                    if 价格 > 0 and 代码:
+                                        st.info(f"正在买入 {名称}({代码}) @ ${价格:.2f}")
+                                        引擎.买入(代码, 价格, 100)
+                                        st.success(f"✅ 已执行买入 {名称}")
                                         st.rerun()
                                     else:
-                                        st.error(f"无法买入: 价格或代码无效")
+                                        st.error("无法买入")
                             
-                            if 股票.get('理由'):
+                            if 股票.get("理由"):
                                 st.caption(f"📝 {股票['理由']}")
                             st.divider()
                 else:
