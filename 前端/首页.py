@@ -45,18 +45,19 @@ def 显示(引擎):
     with col1:
         st.markdown("#### 买入")
         
-        # 策略库品种列表（根据你的策略库）
+        # 策略库品种列表
         可买品种列表 = [
-            "EURUSD",      # 外汇策略
-            "BTC-USD",     # 加密货币策略
-            "GC=F",        # 期货策略
-            "000001.SS",   # A股策略
-            "AAPL"         # 美股策略
+            "EURUSD",
+            "BTC-USD",
+            "GC=F",
+            "000001.SS",
+            "AAPL"
         ]
         
         st.caption(f"📊 可交易品种: {可买品种列表}")
         
-        买入品种 = st.selectbox("选择品种", 可买品种列表, key="buy_symbol")
+        # 使用独立的 key 避免冲突
+        买入品种 = st.selectbox("选择品种", 可买品种列表, key="buy_symbol_select")
         
         # 获取当前价格显示
         try:
@@ -89,7 +90,7 @@ def 显示(引擎):
             min_value=1, 
             value=默认数量, 
             step=步长, 
-            key="buy_qty"
+            key="buy_qty_input"
         )
         
         # 计算预计花费
@@ -105,9 +106,11 @@ def 显示(引擎):
             预计花费 = 当前买入价 * 买入数量
             st.caption(f"预计花费: ¥{预计花费:,.0f}")
         
-        if st.button("买入", type="primary", use_container_width=True):
+        # 使用独立的按钮 key
+        if st.button("买入", type="primary", use_container_width=True, key="buy_button"):
             try:
                 价格 = 行情获取.获取价格(买入品种).价格
+                st.info(f"正在买入: {买入品种} {买入数量}手 @ {价格:.4f}")
                 引擎.买入(买入品种, 价格, 买入数量)
                 st.rerun()
             except Exception as e:
@@ -127,7 +130,7 @@ def 显示(引擎):
                 "选择持仓品种", 
                 range(len(卖出选项)), 
                 format_func=lambda i: 卖出选项[i], 
-                key="sell_symbol"
+                key="sell_symbol_select"
             )
             卖品种 = 持仓品种列表[卖出选项索引]
             最大可卖数量 = int(引擎.持仓[卖品种].数量)
@@ -146,13 +149,13 @@ def 显示(引擎):
                 max_value=最大可卖数量, 
                 value=min(100, 最大可卖数量), 
                 step=10, 
-                key="sell_qty"
+                key="sell_qty_input"
             )
             
             预计收入 = 当前卖出价 * 卖出数量
             st.caption(f"预计收入: ¥{预计收入:,.0f}")
             
-            if st.button("卖出", use_container_width=True):
+            if st.button("卖出", use_container_width=True, key="sell_button"):
                 try:
                     价格 = 行情获取.获取价格(卖品种).价格
                     引擎.卖出(卖品种, 价格, 卖出数量)
@@ -163,4 +166,4 @@ def 显示(引擎):
             st.info("暂无持仓")
             st.selectbox("选择持仓品种", ["无持仓"], disabled=True, key="sell_symbol_disabled")
             st.number_input("数量", min_value=1, value=100, disabled=True, key="sell_qty_disabled")
-            st.button("卖出", disabled=True, use_container_width=True)
+            st.button("卖出", disabled=True, use_container_width=True, key="sell_button_disabled")
