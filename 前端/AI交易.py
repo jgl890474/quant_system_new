@@ -1,150 +1,85 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
-from 核心 import 行情获取, 策略运行器
-from 工具 import 数据库
+from 核心 import 行情获取
 
 def 显示(引擎, 策略加载器, AI引擎):
     st.markdown("### 🤖 AI 智能交易")
     
-    # 获取策略列表
-    策略列表 = 策略加载器.获取策略()
-    策略名称列表 = [s["名称"] for s in 策略列表]
+    # 市场选择
+    市场 = st.selectbox("选择市场", ["A股", "美股", "外汇", "加密货币", "期货"])
     
-    if not 策略名称列表:
-        st.warning("没有找到策略，请检查策略库")
-        return
+    # 根据市场显示可用策略
+    策略映射 = {
+        "A股": ["量价策略", "双均线策略", "隔夜套利策略"],
+        "美股": ["量价策略", "双均线策略", "动量策略"],
+        "外汇": ["外汇利差策略", "趋势策略"],
+        "加密货币": ["加密双均线", "波动率策略"],
+        "期货": ["期货趋势策略"]
+    }
     
-    # 选择策略
-    选中策略 = st.selectbox("选择策略", 策略名称列表)
+    策略列表 = 策略映射.get(市场, ["默认策略"])
+    策略类型 = st.selectbox("选择策略", 策略列表)
     
-    # 获取策略信息
-    策略信息 = 策略加载器.根据名称获取(选中策略)
-    
-    if 策略信息:
-        # 显示当前行情
-        行情数据 = 行情获取.获取价格(策略信息['品种'])
-        当前价格 = 行情数据.价格
-        
-        st.info(f"📊 当前行情: {策略信息['品种']} = ${当前价格:.4f}")
-        
-        # 运行策略获取信号
-        if st.button("🎯 运行策略信号", use_container_width=True):
-            with st.spinner("运行策略中..."):
-                策略信号值 = 策略运行器.运行(策略信息, 行情数据)
-                st.session_state['策略信号'] = 策略信号值
-                st.success(f"📡 策略信号: {策略信号值.upper()}")
-                st.rerun()
-        
-        # 显示策略信号
-        if '策略信号' in st.session_state and st.session_state['策略信号']:
-            st.markdown(f"### 📡 策略信号: **{st.session_state['策略信号'].upper()}**")
-        else:
-            st.info("ℹ️ 请先点击「运行策略信号」")
-        
-        # AI 分析按钮
-        st.markdown("---")
-        st.markdown("### 🧠 AI 深度分析")
-        
-        if st.button("🚀 AI 分析并执行", type="primary", use_container_width=True):
-            with st.spinner("AI 正在分析中..."):
-                try:
-                    # 获取策略信号
-                    策略信号值 = st.session_state.get('策略信号', 'hold')
-                    if not 策略信号值:
-                        策略信号值 = 'hold'
+    if st.button("🚀 AI 分析", type="primary", use_container_width=True):
+        with st.spinner(f"AI 正在分析{市场}..."):
+            try:
+                结果 = AI引擎.AI推荐(市场, 策略类型)
+                
+                if 结果.get("类型") == "股票池":
+                    st.success(f"✅ AI 推荐完成！置信度: {结果.get('置信度', 0)}%")
+                    推荐列表 = 结果.get("推荐", [])
                     
-                    # 调用 AI 引擎
-                    结果 = AI引擎.分析(策略信息['品种'], 当前价格, 策略信号值)
-                    
-                    # 保存到 session_state
-                    st.session_state['AI结果'] = 结果
-                    st.session_state['AI分析时间'] = pd.Timestamp.now()
-                    
-                    # 显示 AI 决策
-                    st.success(f"🤖 AI 决策: **{结果.get('最终信号', 'hold').upper()}**")
-                    st.info(f"📊 置信度: {结果.get('置信度', 0)}%")
-                    st.write(f"💡 分析理由: {结果.get('理由', '无')}")
-                    
-                    # 显示额外信息
-                    col_a, col_b, col_c = st.columns(3)
-                    with col_a:
-                        st.metric("建议仓位", f"{结果.get('建议仓位', '轻仓')}")
-                    with col_b:
-                        止损 = 结果.get('止损价', 0)
-                        if 止损 and 止损 > 0:
-                            st.metric("建议止损", f"${止损:.2f}")
-                        else:
-                            st.metric("建议止损", "—")
-                    with col_c:
-                        止盈 = 结果.get('止盈价', 0)
-                        if 止盈 and 止盈 > 0:
-                            st.metric("建议止盈", f"${止盈:.2f}")
-                        else:
-                            st.metric("建议止盈", "—")
-                    
-                    风险提示 = 结果.get('风险提示', '')
-                    if 风险提示:
-                        st.warning(f"⚠️ 风险提示: {风险提示}")
-                    
-                    # 根据 AI 决策显示执行按钮
-                    最终信号 = 结果.get('最终信号', 'hold')
-                    if 最终信号 == 'buy':
-                        # 根据策略品种显示买入按钮，不是硬编码AAPL
-                        品种 = 策略信息['品种']
-                        if st.button(f"✅ 确认执行买入 {品种}", use_container_width=True):
-                            引擎.买入(品种, 当前价格, 1)
-                            st.rerun()
-                    elif 最终信号 == 'sell':
-                        品种 = 策略信息['品种']
-                        if st.button(f"✅ 确认执行卖出 {品种}", use_container_width=True):
-                            引擎.卖出(品种, 当前价格, 1)
-                            st.rerun()
+                    if 推荐列表:
+                        st.markdown("### 📈 AI 推荐买入")
+                        for 股票 in 推荐列表:
+                            with st.container():
+                                col1, col2, col3 = st.columns([2, 1, 1])
+                                with col1:
+                                    st.markdown(f"**{股票.get('名称', '未知')}** ({股票.get('代码', '')})")
+                                with col2:
+                                    st.markdown(f"价格: ${股票.get('价格', 0):.2f}")
+                                with col3:
+                                    if st.button(f"买入", key=f"buy_{股票['代码']}"):
+                                        引擎.买入(股票['代码'], 股票.get('价格', 0), 100)
+                                        st.rerun()
+                                if 股票.get('理由'):
+                                    st.caption(f"📝 {股票['理由']}")
+                                st.divider()
                     else:
-                        st.info("⏸️ AI 建议观望，暂不执行交易")
-                    
-                except Exception as e:
-                    st.error(f"AI 分析失败: {e}")
-    
-    # ========== AI 决策详情 ==========
-    st.markdown("---")
-    st.markdown("### 📋 AI 决策详情")
-    
-    if 'AI结果' in st.session_state and st.session_state['AI结果']:
-        数据 = st.session_state['AI结果']
-        st.json({
-            "分析时间": str(st.session_state.get('AI分析时间', '')),
-            "最终信号": 数据.get('最终信号', 'N/A'),
-            "置信度": f"{数据.get('置信度', 0)}%",
-            "理由": 数据.get('理由', 'N/A'),
-            "建议仓位": 数据.get('建议仓位', 'N/A'),
-            "止损价": f"${数据.get('止损价', 0):.2f}" if 数据.get('止损价', 0) > 0 else "N/A",
-            "止盈价": f"${数据.get('止盈价', 0):.2f}" if 数据.get('止盈价', 0) > 0 else "N/A",
-            "风险提示": 数据.get('风险提示', 'N/A')
-        })
-    else:
-        st.info("暂无AI决策数据，请先点击「AI 分析并执行」")
-    
-    # ========== 快速测试（根据策略品种） ==========
-    st.markdown("---")
-    st.markdown("### 🧪 快速测试")
-    
-    if 策略信息:
-        测试品种 = 策略信息['品种']
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button(f"🔴 强制买入 {测试品种}", use_container_width=True):
-                try:
-                    价格 = 行情获取.获取价格(测试品种).价格
-                    引擎.买入(测试品种, 价格, 1)
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"买入失败: {e}")
-        
-        with col2:
-            if st.button("🟢 查看持仓", use_container_width=True):
-                if 引擎.持仓:
-                    for 品种, pos in 引擎.持仓.items():
-                        st.write(f"{品种}: {int(pos.数量)} 股, 成本: {pos.平均成本:.2f}")
+                        st.warning("暂无推荐股票")
+                
                 else:
-                    st.info("暂无持仓")
+                    # 固定品种分析结果
+                    分析列表 = 结果.get("分析", [])
+                    st.markdown("### 📊 品种分析")
+                    for 品种 in 分析列表:
+                        with st.container():
+                            col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+                            with col1:
+                                st.markdown(f"**{品种.get('名称', '未知')}**")
+                            with col2:
+                                st.markdown(f"价格: ${品种.get('价格', 0):.4f}")
+                            with col3:
+                                信号 = 品种.get('信号', 'hold')
+                                if 信号 == 'buy':
+                                    st.markdown("🟢 信号: BUY")
+                                elif 信号 == 'sell':
+                                    st.markdown("🔴 信号: SELL")
+                                else:
+                                    st.markdown("🟡 信号: HOLD")
+                            with col4:
+                                if 信号 == 'buy':
+                                    if st.button(f"买入", key=f"buy_{品种['代码']}"):
+                                        引擎.买入(品种['代码'], 品种.get('价格', 0), 1000)
+                                        st.rerun()
+                                elif 信号 == 'sell':
+                                    if st.button(f"卖出", key=f"sell_{品种['代码']}"):
+                                        引擎.卖出(品种['代码'], 品种.get('价格', 0), 1000)
+                                        st.rerun()
+                            if 品种.get('RSI'):
+                                st.caption(f"RSI: {品种['RSI']} | 趋势: {品种.get('趋势', '未知')}")
+                            st.divider()
+                            
+            except Exception as e:
+                st.error(f"AI 分析失败: {e}")
