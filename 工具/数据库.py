@@ -1,226 +1,94 @@
 # -*- coding: utf-8 -*-
-import sqlite3
-import json
-import pandas as pd
-from datetime import datetime
+import streamlit as st
+from 核心 import 行情获取
 
-数据库路径 = "quant_system.db"
-
-def 获取连接():
-    return sqlite3.connect(数据库路径, check_same_thread=False)
-
-def 初始化数据库():
-    conn = 获取连接()
-    cursor = conn.cursor()
+def 显示(引擎, 策略加载器, AI引擎):
+    st.markdown("### 🤖 AI 智能交易")
     
-    # 交易记录表
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS 交易记录 (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            时间 TEXT,
-            动作 TEXT,
-            品种 TEXT,
-            价格 REAL,
-            数量 REAL,
-            盈亏 REAL DEFAULT 0,
-            策略名称 TEXT
-        )
-    """)
+    # 市场选择
+    市场 = st.selectbox("选择市场", ["A股", "美股", "外汇", "加密货币", "期货"])
     
-    # 持仓表
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS 持仓 (
-            品种 TEXT PRIMARY KEY,
-            数量 REAL,
-            平均成本 REAL,
-            已实现盈亏 REAL DEFAULT 0,
-            更新时间 TEXT
-        )
-    """)
+    # 策略映射
+    策略映射 = {
+        "A股": ["量价策略", "双均线策略", "隔夜套利策略"],
+        "美股": ["量价策略", "双均线策略", "动量策略"],
+        "外汇": ["外汇利差策略"],
+        "加密货币": ["加密双均线"],
+        "期货": ["期货趋势策略"]
+    }
     
-    # 资金曲线表
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS 资金曲线 (
-            日期 TEXT PRIMARY KEY,
-            总资产 REAL,
-            总盈亏 REAL,
-            持仓市值 REAL,
-            可用资金 REAL
-        )
-    """)
+    策略列表 = 策略映射.get(市场, ["默认策略"])
+    策略类型 = st.selectbox("选择策略", 策略列表)
     
-    # 持仓历史表
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS 持仓历史 (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            时间 TEXT,
-            品种 TEXT,
-            数量 REAL,
-            成本 REAL,
-            现价 REAL,
-            盈亏 REAL,
-            市值 REAL
-        )
-    """)
+    # 存储推荐结果的session
+    if 'ai_recommendations' not in st.session_state:
+        st.session_state.ai_recommendations = []
     
-    # 系统参数表
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS 系统参数 (
-            参数名 TEXT PRIMARY KEY,
-            参数值 TEXT,
-            更新时间 TEXT
-        )
-    """)
+    if st.button("🚀 AI 分析", type="primary", use_container_width=True):
+        with st.spinner(f"AI 正在分析{市场}..."):
+            try:
+                结果 = AI引擎.AI推荐(市场, 策略类型)
+                st.session_state.ai_recommendations = 结果.get("推荐", [])
+                st.success(f"✅ AI 推荐完成！共 {len(st.session_state.ai_recommendations)} 只")
+                st.rerun()
+            except Exception as e:
+                st.error(f"AI 分析失败: {e}")
     
-    conn.commit()
-    conn.close()
-
-def 清空所有持仓():
-    """清空所有持仓数据"""
-    try:
-        conn = 获取连接()
-        cursor = conn.cursor()
+    # 显示推荐结果
+    if st.session_state.ai_recommendations:
+        st.markdown("### 📈 AI 推荐列表")
         
-        # 删除所有持仓
-        cursor.execute("DELETE FROM 持仓")
-        
-        # 删除所有资金曲线
-        cursor.execute("DELETE FROM 资金曲线")
-        
-        # 删除所有持仓历史
-        cursor.execute("DELETE FROM 持仓历史")
-        
-        # 可选：删除交易记录（注释掉则保留）
-        # cursor.execute("DELETE FROM 交易记录")
-        
-        conn.commit()
-        conn.close()
-        
-        print("✅ 已清空所有持仓数据")
-        return True
-    except Exception as e:
-        print(f"清空持仓失败: {e}")
-        return False
-
-def 保存持仓(品种, 数量, 平均成本, 已实现盈亏=0):
-    try:
-        conn = 获取连接()
-        cursor = conn.cursor()
-        更新时间 = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        cursor.execute("""
-            INSERT OR REPLACE INTO 持仓 (品种, 数量, 平均成本, 已实现盈亏, 更新时间)
-            VALUES (?, ?, ?, ?, ?)
-        """, (品种, 数量, 平均成本, 已实现盈亏, 更新时间))
-        conn.commit()
-        conn.close()
-        return True
-    except:
-        return False
-
-def 删除持仓(品种):
-    try:
-        conn = 获取连接()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM 持仓 WHERE 品种 = ?", (品种,))
-        conn.commit()
-        conn.close()
-        return True
-    except:
-        return False
-
-def 获取所有持仓():
-    try:
-        conn = 获取连接()
-        df = pd.read_sql_query("SELECT * FROM 持仓", conn)
-        conn.close()
-        持仓字典 = {}
-        for _, row in df.iterrows():
-            持仓字典[row['品种']] = {
-                '数量': row['数量'],
-                '平均成本': row['平均成本'],
-                '已实现盈亏': row['已实现盈亏']
-            }
-        return 持仓字典
-    except:
-        return {}
-
-def 保存交易记录(动作, 品种, 价格, 数量, 盈亏=0, 策略名称=""):
-    try:
-        conn = 获取连接()
-        cursor = conn.cursor()
-        时间 = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        cursor.execute("""
-            INSERT INTO 交易记录 (时间, 动作, 品种, 价格, 数量, 盈亏, 策略名称)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (时间, 动作, 品种, 价格, 数量, 盈亏, 策略名称))
-        conn.commit()
-        conn.close()
-        return True
-    except:
-        return False
-
-def 获取交易记录(限制数量=100):
-    try:
-        conn = 获取连接()
-        query = f"SELECT * FROM 交易记录 ORDER BY 时间 DESC LIMIT {限制数量}"
-        df = pd.read_sql_query(query, conn)
-        conn.close()
-        return df
-    except:
-        return pd.DataFrame()
-
-def 保存资金快照(总资产, 总盈亏, 持仓市值, 可用资金):
-    try:
-        conn = 获取连接()
-        cursor = conn.cursor()
-        日期 = datetime.now().strftime("%Y-%m-%d")
-        cursor.execute("""
-            INSERT OR REPLACE INTO 资金曲线 (日期, 总资产, 总盈亏, 持仓市值, 可用资金)
-            VALUES (?, ?, ?, ?, ?)
-        """, (日期, 总资产, 总盈亏, 持仓市值, 可用资金))
-        conn.commit()
-        conn.close()
-        return True
-    except:
-        return False
-
-def 获取资金曲线(天数=90):
-    try:
-        conn = 获取连接()
-        query = f"SELECT * FROM 资金曲线 ORDER BY 日期 DESC LIMIT {天数}"
-        df = pd.read_sql_query(query, conn)
-        conn.close()
-        return df.sort_values('日期')
-    except:
-        return pd.DataFrame()
-
-def 保存系统参数(参数名, 参数值):
-    try:
-        conn = 获取连接()
-        cursor = conn.cursor()
-        更新时间 = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        cursor.execute("""
-            INSERT OR REPLACE INTO 系统参数 (参数名, 参数值, 更新时间)
-            VALUES (?, ?, ?)
-        """, (参数名, json.dumps(参数值), 更新时间))
-        conn.commit()
-        conn.close()
-        return True
-    except:
-        return False
-
-def 获取系统参数(参数名):
-    try:
-        conn = 获取连接()
-        cursor = conn.cursor()
-        cursor.execute("SELECT 参数值 FROM 系统参数 WHERE 参数名 = ?", (参数名,))
-        row = cursor.fetchone()
-        conn.close()
-        if row:
-            return json.loads(row[0])
-        return None
-    except:
-        return None
-
-def 获取当前时间():
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        for idx, 股票 in enumerate(st.session_state.ai_recommendations):
+            代码 = 股票.get("代码", "")
+            名称 = 股票.get("名称", "未知")
+            价格 = 股票.get("价格", 0)
+            
+            with st.container():
+                col1, col2, col3 = st.columns([2, 1, 1])
+                with col1:
+                    st.markdown(f"**{名称}** ({代码})")
+                    st.caption(f"价格: ${价格:.2f}")
+                with col2:
+                    if 价格 > 0:
+                        # 使用独立的表单来确保按钮触发
+                        with st.form(key=f"buy_form_{代码}_{idx}"):
+                            if st.form_submit_button(f"💰 买入 {名称}", use_container_width=True):
+                                st.info(f"正在买入 {名称}...")
+                                引擎.买入(代码, 价格, 100)
+                                st.success(f"✅ 已买入 {名称} 100股")
+                                st.rerun()
+                    else:
+                        st.warning("价格无效")
+                with col3:
+                    st.caption(f"推荐")
+                st.divider()
+    
+    # 显示当前持仓
+    st.markdown("---")
+    st.markdown("### 📊 当前持仓")
+    
+    if 引擎.持仓:
+        持仓数据 = []
+        for 品种, pos in 引擎.持仓.items():
+            持仓数据.append({
+                "品种": 品种,
+                "数量": int(pos.数量),
+                "成本": f"{pos.平均成本:.2f}",
+                "现价": f"{pos.当前价格:.2f}"
+            })
+        st.dataframe(持仓数据, use_container_width=True)
+    else:
+        st.info("暂无持仓")
+    
+    # 手动测试按钮
+    st.markdown("---")
+    st.markdown("### 🧪 快速测试")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("测试买入 AAPL", use_container_width=True):
+            引擎.买入("AAPL", 287.44, 100)
+            st.rerun()
+    with col2:
+        if st.button("测试买入 贵州茅台", use_container_width=True):
+            引擎.买入("600519.SS", 1372.99, 100)
+            st.rerun()
