@@ -13,8 +13,9 @@ from 工具 import 数据库
 数据库.初始化数据库()
 
 # ========== 初始化 session_state ==========
+# 修改初始资金为 100万
 if '订单引擎' not in st.session_state:
-    st.session_state.订单引擎 = 订单引擎()
+    st.session_state.订单引擎 = 订单引擎(初始资金=1000000)
 
 if '策略加载器' not in st.session_state:
     st.session_state.策略加载器 = 策略加载器()
@@ -165,4 +166,4 @@ with tabs[4]:
     资金曲线.显示(引擎)
 
 with tabs[5]:
-    回测.显示(引擎)  # 修复：添加引擎参数
+    回测.显示(引擎)
