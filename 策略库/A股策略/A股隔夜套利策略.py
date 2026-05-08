@@ -8,8 +8,8 @@ from datetime import datetime, time
 
 class AStockOvernightStrategy(策略基类):
     """
-    A股隔夜套利策略
-    尾盘买入，早盘卖出，捕捉隔夜收益
+    A股隔夜套利策略（测试版）
+    强制返回买入信号，用于测试AI交易功能
     """
     
     def __init__(self, 名称, 品种, 初始资金,
@@ -38,9 +38,9 @@ class AStockOvernightStrategy(策略基类):
         if len(self.价格历史) < 20:
             return 'hold'
         
-        # 简单示例：直接返回买入信号用于测试
-        # 实际使用时可以根据时间和条件判断
+        # ========== 测试模式：强制返回买入信号 ==========
+        # 无论什么情况，只要没有持仓就返回BUY
         if self.持仓 == 0:
-            return 'buy'
+            return 'buy'   # 强制买入
         else:
             return 'hold'
