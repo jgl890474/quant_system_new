@@ -8,6 +8,17 @@ class AI引擎:
     def __init__(self):
         self.api_key = st.secrets.get("DEEPSEEK_API_KEY", "")
     
+    def 获取实时价格(self, 品种代码):
+        """获取单个品种的实时价格"""
+        try:
+            股票 = yf.Ticker(品种代码)
+            数据 = 股票.history(period="1d")
+            if not 数据.empty:
+                return round(数据['Close'].iloc[-1], 2)
+        except:
+            pass
+        return None
+    
     def 计算技术指标(self, 品种代码):
         """计算RSI和均线"""
         try:
@@ -39,7 +50,7 @@ class AI引擎:
             return {"RSI": 50, "趋势": "未知"}
     
     def AI推荐(self, 市场, 策略类型):
-        """AI推荐股票/品种（新方法）"""
+        """AI推荐股票/品种（带实时价格）"""
         # 定义各市场的品种列表
         市场品种 = {
             "A股": [
@@ -73,16 +84,19 @@ class AI引擎:
         
         for 品种 in 品种列表:
             try:
+                实时价格 = self.获取实时价格(品种["代码"])
                 指标 = self.计算技术指标(品种["代码"])
-                推荐列表.append({
-                    "代码": 品种["代码"],
-                    "名称": 品种["名称"],
-                    "价格": 0,
-                    "涨跌幅": 0,
-                    "RSI": 指标.get("RSI", 50),
-                    "趋势": 指标.get("趋势", "未知"),
-                    "理由": f"RSI={指标.get('RSI', 50)}, 趋势={指标.get('趋势', '未知')}"
-                })
+                
+                if 实时价格:
+                    推荐列表.append({
+                        "代码": 品种["代码"],
+                        "名称": 品种["名称"],
+                        "价格": 实时价格,
+                        "涨跌幅": 0,
+                        "RSI": 指标.get("RSI", 50),
+                        "趋势": 指标.get("趋势", "未知"),
+                        "理由": f"价格: ${实时价格:.2f}, RSI={指标.get('RSI', 50)}, 趋势={指标.get('趋势', '未知')}"
+                    })
             except:
                 continue
         
@@ -93,7 +107,7 @@ class AI引擎:
         }
     
     def 分析(self, 品种, 价格, 策略信号):
-        """AI分析（旧方法）"""
+        """AI分析"""
         指标 = self.计算技术指标(品种)
         
         结果 = {
