@@ -5,3 +5,4 @@ from .AI交易 import 显示 as 显示AI交易
 from .持仓管理 import 显示 as 显示持仓管理
 from .资金曲线 import 显示 as 显示资金曲线
 from .回测 import 显示 as 显示回测
+from .交易记录 import 显示 as 显示交易记录   # ✅ 新增
