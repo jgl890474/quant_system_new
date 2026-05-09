@@ -13,9 +13,11 @@ from 工具 import 数据库
 数据库.初始化数据库()
 
 # ========== 初始化 session_state ==========
-# 修改初始资金为 100万
+# 初始资金可根据需要修改（单位：元）
+INITIAL_CAPITAL = 1000000  # 100万，可修改为 50000、200000 等
+
 if '订单引擎' not in st.session_state:
-    st.session_state.订单引擎 = 订单引擎(初始资金=1000000)
+    st.session_state.订单引擎 = 订单引擎(初始资金=INITIAL_CAPITAL)
 
 if '策略加载器' not in st.session_state:
     st.session_state.策略加载器 = 策略加载器()
@@ -37,12 +39,6 @@ if '错误消息' not in st.session_state:
 策略加载器 = st.session_state.策略加载器
 AI引擎 = st.session_state.AI引擎
 策略信号 = st.session_state.策略信号
-
-# ✅ 调试：显示从数据库恢复的持仓数量
-st.info(f"🔍 调试信息: 从数据库恢复 {len(引擎.持仓)} 个持仓")
-if 引擎.持仓:
-    for 品种, pos in 引擎.持仓.items():
-        st.write(f"   {品种}: {pos.数量}股, 成本{pos.平均成本:.2f}")
 
 # ========== 初始化风控引擎 ==========
 if '风控引擎' not in st.session_state:
@@ -105,11 +101,9 @@ with st.sidebar:
     # 刷新策略列表按钮
     if st.button("🔄 刷新策略列表", use_container_width=True):
         try:
-            # 清除策略缓存
             if '策略加载器' in st.session_state:
                 del st.session_state['策略加载器']
             st.session_state.策略加载器 = 策略加载器()
-            # 更新变量
             策略加载器 = st.session_state.策略加载器
             st.success("✅ 策略列表已刷新")
             st.rerun()
@@ -121,33 +115,25 @@ with st.sidebar:
     # ========== 风控设置 ==========
     st.markdown("### 🛡️ 风控设置")
     
-    # 自动监控开关
     自动风控 = st.checkbox("🔴 开启自动止损止盈监控", value=True, help="开启后会自动检查持仓并执行止损止盈")
     
-    # 风控参数显示
     if 风控:
         st.caption(f"止损: {风控.止损比例*100:.0f}% | 止盈: {风控.止盈比例*100:.0f}%")
         st.caption(f"移动止损: {'开启' if 风控.移动止损开关 else '关闭'} | 回撤: {风控.移动止损回撤*100:.0f}%")
     
-    # ========== 自动监控执行 ==========
     if 自动风控 and 风控:
         try:
-            # 监控持仓
             触发 = 风控.监控持仓(引擎)
-            
             if 触发:
                 st.markdown("### ⚠️ 风控警报")
                 for t in 触发:
                     st.warning(f"{t['品种']}: {t['类型']} 触发 (盈亏率: {t['盈亏率']*100:.2f}%)")
-                
-                # 自动执行平仓
                 平仓记录 = 风控.执行自动平仓(引擎)
                 if 平仓记录:
                     for r in 平仓记录:
                         st.error(f"✅ 已自动平仓 {r['品种']} ({r['类型']})")
                     st.rerun()
-        except Exception as e:
-            # 静默处理错误
+        except:
             pass
     
     st.markdown("---")
