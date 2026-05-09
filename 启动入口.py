@@ -14,7 +14,7 @@ from 工具 import 数据库
 
 # ========== 初始化 session_state ==========
 # 初始资金可根据需要修改（单位：元）
-INITIAL_CAPITAL = 1000000  # 100万，可修改为 50000、200000 等
+INITIAL_CAPITAL = 1000000  # 100万
 
 if '订单引擎' not in st.session_state:
     st.session_state.订单引擎 = 订单引擎(初始资金=INITIAL_CAPITAL)
@@ -101,9 +101,8 @@ with st.sidebar:
     # 刷新策略列表按钮
     if st.button("🔄 刷新策略列表", use_container_width=True):
         try:
-            if '策略加载器' in st.session_state:
-                del st.session_state['策略加载器']
-            st.session_state.策略加载器 = 策略加载器()
+            from 核心.策略加载器 import 策略加载器 as 策略加载器类
+            st.session_state.策略加载器 = 策略加载器类()
             策略加载器 = st.session_state.策略加载器
             st.success("✅ 策略列表已刷新")
             st.rerun()
@@ -120,10 +119,13 @@ with st.sidebar:
         
         # 显示持仓明细
         for 品种, pos in 引擎.持仓.items():
+            # 计算当前盈亏
+            现价 = pos.当前价格
+            盈亏 = (现价 - pos.平均成本) * pos.数量
             st.metric(
                 label=f"{品种}",
                 value=f"{pos.数量}股",
-                delta=f"成本: ¥{pos.平均成本:.2f}"
+                delta=f"成本: ¥{pos.平均成本:.2f} | 盈亏: ¥{盈亏:+.2f}"
             )
         
         # 显示总资产和可用资金
