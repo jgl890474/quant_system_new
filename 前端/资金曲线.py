@@ -119,7 +119,6 @@ def 显示(引擎):
                 盈亏 = (现价 - pos.平均成本) * pos.数量
                 盈亏率 = (现价 / pos.平均成本 - 1) * 100
                 
-                # ✅ 格式化盈亏显示
                 if abs(盈亏) < 0.01:
                     盈亏显示 = "¥0.00"
                 else:
@@ -151,7 +150,6 @@ def 显示(引擎):
         st.markdown("### 📊 策略收益对比")
         st.markdown("---")
         
-        # 分两列显示
         half = len(策略名称列表) // 2 + (len(策略名称列表) % 2)
         左列策略 = 策略名称列表[:half]
         右列策略 = 策略名称列表[half:]
@@ -210,10 +208,9 @@ def 显示(引擎):
                 st.markdown("#### 盈亏柱状图")
                 df_bar = pd.DataFrame(持仓数据)
                 
-                # 设置颜色
                 colors = ['#10b981' if x >= 0 else '#ef4444' for x in df_bar['盈亏']]
                 
-                # 自动Y轴范围
+                # ✅ 修复：自动计算Y轴范围，为数字留出空间
                 y_min = min(df_bar['盈亏']) if min(df_bar['盈亏']) < 0 else -10
                 y_max = max(df_bar['盈亏']) if max(df_bar['盈亏']) > 0 else 10
                 
@@ -226,14 +223,14 @@ def 显示(引擎):
                     textposition='outside'
                 ))
                 fig_bar.update_layout(
-                    height=350,
-                    margin=dict(l=30, r=30, t=30, b=30),
+                    height=420,  # 增加高度
+                    margin=dict(l=30, r=30, t=50, b=30),  # 顶部留空间
                     paper_bgcolor="#0a0c10",
                     plot_bgcolor="#15171a",
                     font_color="#e6e6e6",
                     xaxis_title="品种",
                     yaxis_title="盈亏 (¥)",
-                    yaxis=dict(range=[y_min - 10, y_max + 10])
+                    yaxis=dict(range=[y_min - 15, y_max + 50])  # ✅ 顶部留50px空间给数字
                 )
                 st.plotly_chart(fig_bar, use_container_width=True)
             
@@ -252,7 +249,7 @@ def 显示(引擎):
                     textposition='outside'
                 ))
                 fig_bar_h.update_layout(
-                    height=350,
+                    height=420,
                     margin=dict(l=30, r=80, t=30, b=30),
                     paper_bgcolor="#0a0c10",
                     plot_bgcolor="#15171a",
@@ -269,3 +266,6 @@ def 显示(引擎):
                 <span style='font-size:24px; color:#00d2ff;'>¥{总市值:,.0f}</span>
             </div>
             """, unsafe_allow_html=True)
+    
+    if not 引擎.持仓:
+        st.info("暂无持仓，请在首页或策略中心买入")
