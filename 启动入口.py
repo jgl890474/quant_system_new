@@ -112,6 +112,29 @@ with st.sidebar:
     
     st.markdown("---")
     
+    # ========== 持仓监控显示 ==========
+    st.markdown("### 💼 持仓监控")
+    
+    if 引擎.持仓:
+        st.caption(f"📊 当前持仓数量: {len(引擎.持仓)}")
+        
+        # 显示持仓明细
+        for 品种, pos in 引擎.持仓.items():
+            st.metric(
+                label=f"{品种}",
+                value=f"{pos.数量}股",
+                delta=f"成本: ¥{pos.平均成本:.2f}"
+            )
+        
+        # 显示总资产和可用资金
+        st.markdown("---")
+        st.metric("💰 总资产", f"¥{引擎.获取总资产():,.0f}")
+        st.metric("💵 可用资金", f"¥{引擎.获取可用资金():,.0f}")
+    else:
+        st.info("暂无持仓")
+    
+    st.markdown("---")
+    
     # ========== 风控设置 ==========
     st.markdown("### 🛡️ 风控设置")
     
