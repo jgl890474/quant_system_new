@@ -74,6 +74,7 @@ def 初始化数据库():
     
     conn.commit()
     conn.close()
+    print("✅ 数据库初始化完成")
 
 def 清空所有持仓():
     """清空所有持仓数据"""
@@ -89,9 +90,6 @@ def 清空所有持仓():
         
         # 删除所有持仓历史
         cursor.execute("DELETE FROM 持仓历史")
-        
-        # 可选：删除交易记录（注释掉则保留）
-        # cursor.execute("DELETE FROM 交易记录")
         
         conn.commit()
         conn.close()
@@ -113,8 +111,10 @@ def 保存持仓(品种, 数量, 平均成本, 已实现盈亏=0):
         """, (品种, 数量, 平均成本, 已实现盈亏, 更新时间))
         conn.commit()
         conn.close()
+        print(f"💾 保存持仓: {品种}, 数量={数量}, 成本={平均成本}")
         return True
-    except:
+    except Exception as e:
+        print(f"保存持仓失败: {e}")
         return False
 
 def 删除持仓(品种):
@@ -124,15 +124,21 @@ def 删除持仓(品种):
         cursor.execute("DELETE FROM 持仓 WHERE 品种 = ?", (品种,))
         conn.commit()
         conn.close()
+        print(f"🗑️ 删除持仓: {品种}")
         return True
-    except:
+    except Exception as e:
+        print(f"删除持仓失败: {e}")
         return False
 
 def 获取所有持仓():
+    """从数据库加载所有持仓"""
     try:
         conn = 获取连接()
         df = pd.read_sql_query("SELECT * FROM 持仓", conn)
         conn.close()
+        
+        print(f"📂 数据库查询到 {len(df)} 条持仓记录")
+        
         持仓字典 = {}
         for _, row in df.iterrows():
             持仓字典[row['品种']] = {
@@ -140,8 +146,11 @@ def 获取所有持仓():
                 '平均成本': row['平均成本'],
                 '已实现盈亏': row['已实现盈亏']
             }
+            print(f"   品种: {row['品种']}, 数量={row['数量']}, 成本={row['平均成本']}")
+        
         return 持仓字典
-    except:
+    except Exception as e:
+        print(f"获取持仓失败: {e}")
         return {}
 
 def 保存交易记录(动作, 品种, 价格, 数量, 盈亏=0, 策略名称=""):
@@ -155,8 +164,10 @@ def 保存交易记录(动作, 品种, 价格, 数量, 盈亏=0, 策略名称=""
         """, (时间, 动作, 品种, 价格, 数量, 盈亏, 策略名称))
         conn.commit()
         conn.close()
+        print(f"📝 保存交易记录: {动作} {品种} {数量}股 @ {价格}")
         return True
-    except:
+    except Exception as e:
+        print(f"保存交易记录失败: {e}")
         return False
 
 def 获取交易记录(限制数量=100):
