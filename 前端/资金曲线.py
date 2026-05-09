@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from 工具 import 数据库
 from 核心 import 行情获取
 
+
 def 显示(引擎):
     st.markdown("### 📈 资金曲线")
     
@@ -115,33 +116,66 @@ def 显示(引擎):
         明细数据 = []
         for 品种, pos in 引擎.持仓.items():
             try:
-                现价 = 行情获取.获取价格(品种).价格
-                盈亏 = (现价 - pos.平均成本) * pos.数量
-                盈亏率 = (现价 / pos.平均成本 - 1) * 100
+                # 获取实时价格（带容错）
+                价格结果 = 行情获取.获取价格(品种)
                 
-                if abs(盈亏) < 0.01:
-                    盈亏显示 = "¥0.00"
+                # 兼容不同的返回格式
+                if hasattr(价格结果, '价格'):
+                    现价 = 价格结果.价格
+                elif hasattr(价格结果, 'price'):
+                    现价 = 价格结果.price
+                elif isinstance(价格结果, (int, float)):
+                    现价 = 价格结果
                 else:
-                    盈亏显示 = f"¥{盈亏:+.2f}"
+                    现价 = pos.平均成本  # 失败时使用成本价
                 
-                if abs(盈亏率) < 0.01:
-                    盈亏率显示 = "0.00%"
+                # 确保成本价存在
+                成本价 = getattr(pos, '平均成本', 0)
+                if 成本价 == 0:
+                    成本价 = getattr(pos, '成本', 0)
+                
+                # 计算盈亏
+                if 成本价 > 0:
+                    盈亏 = (现价 - 成本价) * pos.数量
+                    盈亏率 = (现价 / 成本价 - 1) * 100
                 else:
-                    盈亏率显示 = f"{盈亏率:+.2f}%"
+                    盈亏 = 0
+                    盈亏率 = 0
+                
+                # 更新持仓当前价格
+                pos.当前价格 = 现价
                 
                 明细数据.append({
                     "品种": 品种,
                     "数量": f"{pos.数量:.0f}",
-                    "成本": f"{pos.平均成本:.2f}",
+                    "成本": f"{成本价:.2f}",
                     "现价": f"{现价:.2f}",
-                    "盈亏": 盈亏显示,
-                    "盈亏率": 盈亏率显示
+                    "盈亏": f"¥{盈亏:+,.2f}",
+                    "盈亏率": f"{盈亏率:+.2f}%"
                 })
             except Exception as e:
                 st.error(f"获取 {品种} 行情失败: {e}")
+                明细数据.append({
+                    "品种": 品种,
+                    "数量": f"{pos.数量:.0f}",
+                    "成本": f"{getattr(pos, '平均成本', 0):.2f}",
+                    "现价": "获取失败",
+                    "盈亏": "---",
+                    "盈亏率": "---"
+                })
         
         if 明细数据:
             st.dataframe(pd.DataFrame(明细数据), use_container_width=True, hide_index=True)
+            
+            # 显示盈亏汇总
+            total_profit = 0
+            for item in 明细数据:
+                if item["盈亏"] != "---":
+                    try:
+                        total_profit += float(item["盈亏"].replace("¥", "").replace(",", ""))
+                    except:
+                        pass
+            st.caption(f"📊 持仓总盈亏: ¥{total_profit:+,.2f}")
     else:
         st.info("暂无持仓")
     
@@ -187,43 +221,76 @@ def 显示(引擎):
         
         持仓数据 = []
         总市值 = 0
+        总盈亏_实时 = 0
+        
         for 品种, pos in 引擎.持仓.items():
             try:
-                现价 = 行情获取.获取价格(品种).价格
-                盈亏 = (现价 - pos.平均成本) * pos.数量
+                # 获取实时价格
+                价格结果 = 行情获取.获取价格(品种)
+                
+                if hasattr(价格结果, '价格'):
+                    现价 = 价格结果.价格
+                elif hasattr(价格结果, 'price'):
+                    现价 = 价格结果.price
+                elif isinstance(价格结果, (int, float)):
+                    现价 = 价格结果
+                else:
+                    现价 = getattr(pos, '平均成本', 0)
+                
+                成本价 = getattr(pos, '平均成本', 0)
+                if 成本价 == 0:
+                    成本价 = getattr(pos, '成本', 0)
+                
+                # 正确计算盈亏
+                if 成本价 > 0:
+                    盈亏 = (现价 - 成本价) * pos.数量
+                else:
+                    盈亏 = 0
+                
                 市值 = pos.数量 * 现价
                 总市值 += 市值
+                总盈亏_实时 += 盈亏
+                
                 持仓数据.append({
                     "品种": 品种,
                     "盈亏": 盈亏,
-                    "市值": 市值
+                    "市值": 市值,
+                    "成本价": 成本价,
+                    "现价": 现价,
+                    "数量": pos.数量
                 })
-            except:
-                pass
+            except Exception as e:
+                st.warning(f"获取 {品种} 数据失败: {e}")
         
         if 持仓数据:
             col_a, col_b = st.columns(2)
             
-            # ========== 盈亏柱状图（彩色） ==========
+            # ========== 盈亏柱状图（彩色）- 修复版 ==========
             with col_a:
                 st.markdown("#### 盈亏柱状图")
                 df_bar = pd.DataFrame(持仓数据)
                 
-                # ✅ 彩色颜色列表
-                彩色列表 = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec489a', '#06b6d4', '#f97316', '#14b8a6', '#ef4444', '#6366f1']
-                colors = [彩色列表[i % len(彩色列表)] for i in range(len(df_bar))]
+                # 按盈亏排序
+                df_bar = df_bar.sort_values('盈亏', ascending=False)
                 
-                y_min = min(df_bar['盈亏']) if min(df_bar['盈亏']) < 0 else -10
-                y_max = max(df_bar['盈亏']) if max(df_bar['盈亏']) > 0 else 10
+                # 动态颜色：盈利绿色，亏损红色
+                盈亏颜色 = ['#ef4444' if x < 0 else '#10b981' for x in df_bar['盈亏']]
                 
                 fig_bar = go.Figure()
                 fig_bar.add_trace(go.Bar(
                     x=df_bar['品种'],
                     y=df_bar['盈亏'],
-                    marker_color=colors,
-                    text=df_bar['盈亏'].apply(lambda x: f"¥{x:+.0f}"),
+                    marker_color=盈亏颜色,
+                    text=df_bar['盈亏'].apply(lambda x: f"¥{x:+,.0f}"),
                     textposition='outside'
                 ))
+                
+                # 添加零线
+                fig_bar.add_hline(y=0, line_dash="dash", line_color="#94a3b8")
+                
+                y_min = df_bar['盈亏'].min() if len(df_bar) > 0 else -100
+                y_max = df_bar['盈亏'].max() if len(df_bar) > 0 else 100
+                
                 fig_bar.update_layout(
                     height=420,
                     margin=dict(l=30, r=30, t=50, b=30),
@@ -232,7 +299,7 @@ def 显示(引擎):
                     font_color="#e6e6e6",
                     xaxis_title="品种",
                     yaxis_title="盈亏 (¥)",
-                    yaxis=dict(range=[y_min - 15, y_max + 50])
+                    yaxis=dict(range=[y_min - 50, y_max + 50])
                 )
                 st.plotly_chart(fig_bar, use_container_width=True)
             
@@ -242,16 +309,15 @@ def 显示(引擎):
                 df_bar_h = pd.DataFrame(持仓数据)
                 df_bar_h = df_bar_h.sort_values('市值', ascending=True)
                 
-                # ✅ 彩色颜色列表
-                彩色列表_h = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec489a', '#06b6d4', '#f97316', '#14b8a6', '#ef4444', '#6366f1']
-                colors_h = [彩色列表_h[i % len(彩色列表_h)] for i in range(len(df_bar_h))]
+                # 动态颜色
+                市值颜色 = ['#3b82f6' for _ in range(len(df_bar_h))]
                 
                 fig_bar_h = go.Figure()
                 fig_bar_h.add_trace(go.Bar(
                     y=df_bar_h['品种'],
                     x=df_bar_h['市值'],
                     orientation='h',
-                    marker_color=colors_h,
+                    marker_color=市值颜色,
                     text=df_bar_h['市值'].apply(lambda x: f"¥{x:,.0f}"),
                     textposition='outside'
                 ))
@@ -266,13 +332,23 @@ def 显示(引擎):
                 )
                 st.plotly_chart(fig_bar_h, use_container_width=True)
             
-            # 总市值卡片
+            # 总市值和总盈亏卡片
             st.markdown(f"""
-            <div style='text-align:center; padding:15px; background:#1e293b; border-radius:10px; margin-top:10px;'>
-                <span style='color:#94a3b8'>总市值</span><br>
-                <span style='font-size:24px; color:#00d2ff;'>¥{总市值:,.0f}</span>
+            <div style='display:flex; justify-content:space-between; gap:10px; margin-top:10px;'>
+                <div style='flex:1; text-align:center; padding:15px; background:#1e293b; border-radius:10px;'>
+                    <span style='color:#94a3b8'>总市值</span><br>
+                    <span style='font-size:24px; color:#00d2ff;'>¥{总市值:,.0f}</span>
+                </div>
+                <div style='flex:1; text-align:center; padding:15px; background:#1e293b; border-radius:10px;'>
+                    <span style='color:#94a3b8'>总盈亏（实时）</span><br>
+                    <span style='font-size:24px; color:{ "#10b981" if 总盈亏_实时 >= 0 else "#ef4444" };'>¥{总盈亏_实时:+,.0f}</span>
+                </div>
             </div>
             """, unsafe_allow_html=True)
     
     if not 引擎.持仓:
         st.info("暂无持仓，请在首页或策略中心买入")
+    
+    # 显示最后更新时间
+    st.markdown("---")
+    st.caption(f"最后更新: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
