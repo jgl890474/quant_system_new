@@ -121,29 +121,19 @@ def 显示(引擎):
                 
                 # 兼容不同的返回格式
                 if hasattr(价格结果, '价格'):
-                    现价 = 价格结果.价格
+                    现价 = float(价格结果.价格)
                 elif hasattr(价格结果, 'price'):
-                    现价 = 价格结果.price
+                    现价 = float(价格结果.price)
                 elif isinstance(价格结果, (int, float)):
-                    现价 = 价格结果
+                    现价 = float(价格结果)
                 else:
-                    现价 = pos.平均成本  # 失败时使用成本价
+                    现价 = float(pos.平均成本)
                 
-                # 确保成本价存在
-                成本价 = getattr(pos, '平均成本', 0)
-                if 成本价 == 0:
-                    成本价 = getattr(pos, '成本', 0)
+                成本价 = float(pos.平均成本)
                 
                 # 计算盈亏
-                if 成本价 > 0:
-                    盈亏 = (现价 - 成本价) * pos.数量
-                    盈亏率 = (现价 / 成本价 - 1) * 100
-                else:
-                    盈亏 = 0
-                    盈亏率 = 0
-                
-                # 更新持仓当前价格
-                pos.当前价格 = 现价
+                盈亏 = (现价 - 成本价) * pos.数量
+                盈亏率 = (现价 / 成本价 - 1) * 100 if 成本价 > 0 else 0
                 
                 明细数据.append({
                     "品种": 品种,
@@ -154,11 +144,10 @@ def 显示(引擎):
                     "盈亏率": f"{盈亏率:+.2f}%"
                 })
             except Exception as e:
-                st.error(f"获取 {品种} 行情失败: {e}")
                 明细数据.append({
                     "品种": 品种,
                     "数量": f"{pos.数量:.0f}",
-                    "成本": f"{getattr(pos, '平均成本', 0):.2f}",
+                    "成本": f"{pos.平均成本:.2f}",
                     "现价": "获取失败",
                     "盈亏": "---",
                     "盈亏率": "---"
@@ -220,8 +209,8 @@ def 显示(引擎):
         st.markdown("---")
         
         持仓数据 = []
-        总市值 = 0
-        总盈亏_实时 = 0
+        总市值 = 0.0
+        总盈亏_实时 = 0.0
         
         for 品种, pos in 引擎.持仓.items():
             try:
@@ -229,24 +218,18 @@ def 显示(引擎):
                 价格结果 = 行情获取.获取价格(品种)
                 
                 if hasattr(价格结果, '价格'):
-                    现价 = 价格结果.价格
+                    现价 = float(价格结果.价格)
                 elif hasattr(价格结果, 'price'):
-                    现价 = 价格结果.price
+                    现价 = float(价格结果.price)
                 elif isinstance(价格结果, (int, float)):
-                    现价 = 价格结果
+                    现价 = float(价格结果)
                 else:
-                    现价 = getattr(pos, '平均成本', 0)
+                    现价 = float(pos.平均成本)
                 
-                成本价 = getattr(pos, '平均成本', 0)
-                if 成本价 == 0:
-                    成本价 = getattr(pos, '成本', 0)
+                成本价 = float(pos.平均成本)
                 
                 # 正确计算盈亏
-                if 成本价 > 0:
-                    盈亏 = (现价 - 成本价) * pos.数量
-                else:
-                    盈亏 = 0
-                
+                盈亏 = (现价 - 成本价) * pos.数量
                 市值 = pos.数量 * 现价
                 总市值 += 市值
                 总盈亏_实时 += 盈亏
@@ -254,10 +237,7 @@ def 显示(引擎):
                 持仓数据.append({
                     "品种": 品种,
                     "盈亏": 盈亏,
-                    "市值": 市值,
-                    "成本价": 成本价,
-                    "现价": 现价,
-                    "数量": pos.数量
+                    "市值": 市值
                 })
             except Exception as e:
                 st.warning(f"获取 {品种} 数据失败: {e}")
@@ -265,12 +245,10 @@ def 显示(引擎):
         if 持仓数据:
             col_a, col_b = st.columns(2)
             
-            # ========== 盈亏柱状图（彩色）- 修复版 ==========
+            # ========== 盈亏柱状图 ==========
             with col_a:
                 st.markdown("#### 盈亏柱状图")
                 df_bar = pd.DataFrame(持仓数据)
-                
-                # 按盈亏排序
                 df_bar = df_bar.sort_values('盈亏', ascending=False)
                 
                 # 动态颜色：盈利绿色，亏损红色
@@ -288,9 +266,6 @@ def 显示(引擎):
                 # 添加零线
                 fig_bar.add_hline(y=0, line_dash="dash", line_color="#94a3b8")
                 
-                y_min = df_bar['盈亏'].min() if len(df_bar) > 0 else -100
-                y_max = df_bar['盈亏'].max() if len(df_bar) > 0 else 100
-                
                 fig_bar.update_layout(
                     height=420,
                     margin=dict(l=30, r=30, t=50, b=30),
@@ -298,26 +273,22 @@ def 显示(引擎):
                     plot_bgcolor="#15171a",
                     font_color="#e6e6e6",
                     xaxis_title="品种",
-                    yaxis_title="盈亏 (¥)",
-                    yaxis=dict(range=[y_min - 50, y_max + 50])
+                    yaxis_title="盈亏 (¥)"
                 )
                 st.plotly_chart(fig_bar, use_container_width=True)
             
-            # ========== 持仓市值条形图（彩色） ==========
+            # ========== 持仓市值条形图 ==========
             with col_b:
                 st.markdown("#### 持仓市值条形图")
                 df_bar_h = pd.DataFrame(持仓数据)
                 df_bar_h = df_bar_h.sort_values('市值', ascending=True)
-                
-                # 动态颜色
-                市值颜色 = ['#3b82f6' for _ in range(len(df_bar_h))]
                 
                 fig_bar_h = go.Figure()
                 fig_bar_h.add_trace(go.Bar(
                     y=df_bar_h['品种'],
                     x=df_bar_h['市值'],
                     orientation='h',
-                    marker_color=市值颜色,
+                    marker_color='#3b82f6',
                     text=df_bar_h['市值'].apply(lambda x: f"¥{x:,.0f}"),
                     textposition='outside'
                 ))
@@ -341,7 +312,7 @@ def 显示(引擎):
                 </div>
                 <div style='flex:1; text-align:center; padding:15px; background:#1e293b; border-radius:10px;'>
                     <span style='color:#94a3b8'>总盈亏（实时）</span><br>
-                    <span style='font-size:24px; color:{ "#10b981" if 总盈亏_实时 >= 0 else "#ef4444" };'>¥{总盈亏_实时:+,.0f}</span>
+                    <span style='font-size:24px; color:{"#10b981" if 总盈亏_实时 >= 0 else "#ef4444"};'>¥{总盈亏_实时:+,.0f}</span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
