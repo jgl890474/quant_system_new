@@ -119,7 +119,7 @@ def 显示(引擎):
                 盈亏 = (现价 - pos.平均成本) * pos.数量
                 盈亏率 = (现价 / pos.平均成本 - 1) * 100
                 
-                # ✅ 修复：正确显示盈亏（包括负数）
+                # ✅ 格式化盈亏显示
                 if abs(盈亏) < 0.01:
                     盈亏显示 = "¥0.00"
                 else:
@@ -139,18 +139,19 @@ def 显示(引擎):
                     "盈亏率": 盈亏率显示
                 })
             except Exception as e:
-                print(f"处理持仓 {品种} 失败: {e}")
+                st.error(f"获取 {品种} 行情失败: {e}")
         
         if 明细数据:
             st.dataframe(pd.DataFrame(明细数据), use_container_width=True, hide_index=True)
     else:
         st.info("暂无持仓")
     
-    # ========== 策略收益对比（两列布局） ==========
+    # ========== 策略收益对比 ==========
     if 策略名称列表:
         st.markdown("### 📊 策略收益对比")
         st.markdown("---")
         
+        # 分两列显示
         half = len(策略名称列表) // 2 + (len(策略名称列表) % 2)
         左列策略 = 策略名称列表[:half]
         右列策略 = 策略名称列表[half:]
@@ -161,9 +162,9 @@ def 显示(引擎):
             for 策略名 in 左列策略:
                 收益率 = 策略收益率.get(策略名, 0)
                 颜色 = 策略颜色.get(策略名, "#94a3b8")
-                if 收益率 > 0:
+                if 收益率 > 0.1:
                     箭头 = "▲"
-                elif 收益率 < 0:
+                elif 收益率 < -0.1:
                     箭头 = "▼"
                 else:
                     箭头 = "●"
@@ -173,9 +174,9 @@ def 显示(引擎):
             for 策略名 in 右列策略:
                 收益率 = 策略收益率.get(策略名, 0)
                 颜色 = 策略颜色.get(策略名, "#94a3b8")
-                if 收益率 > 0:
+                if 收益率 > 0.1:
                     箭头 = "▲"
-                elif 收益率 < 0:
+                elif 收益率 < -0.1:
                     箭头 = "▼"
                 else:
                     箭头 = "●"
@@ -209,10 +210,10 @@ def 显示(引擎):
                 st.markdown("#### 盈亏柱状图")
                 df_bar = pd.DataFrame(持仓数据)
                 
-                # ✅ 设置颜色：盈利绿色，亏损红色
+                # 设置颜色
                 colors = ['#10b981' if x >= 0 else '#ef4444' for x in df_bar['盈亏']]
                 
-                # ✅ 自动调整Y轴范围
+                # 自动Y轴范围
                 y_min = min(df_bar['盈亏']) if min(df_bar['盈亏']) < 0 else -10
                 y_max = max(df_bar['盈亏']) if max(df_bar['盈亏']) > 0 else 10
                 
@@ -261,7 +262,7 @@ def 显示(引擎):
                 )
                 st.plotly_chart(fig_bar_h, use_container_width=True)
             
-            # 总市值
+            # 总市值卡片
             st.markdown(f"""
             <div style='text-align:center; padding:15px; background:#1e293b; border-radius:10px; margin-top:10px;'>
                 <span style='color:#94a3b8'>总市值</span><br>
