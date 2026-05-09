@@ -166,4 +166,4 @@ def 显示(引擎):
             st.info("暂无持仓")
             st.selectbox("选择持仓品种", ["无持仓"], disabled=True, key="sell_symbol_disabled")
             st.number_input("数量", min_value=1, value=100, disabled=True, key="sell_qty_disabled")
-            st.button("卖出", disabled=True, use_container_width=True, key="sell_button_disabled")
+            st.button("卖出", disabled=True, use_container_width=True, key="sell_button_disabled") 
