@@ -5,7 +5,7 @@ import os
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from 前端 import 首页, 策略中心, AI交易, 持仓管理, 资金曲线, 回测
+from 前端 import 首页, 策略中心, AI交易, 持仓管理, 资金曲线, 回测, 交易记录  # ✅ 新增交易记录
 from 核心 import 订单引擎, 策略加载器, AI引擎
 
 # ========== 初始化数据库 ==========
@@ -148,7 +148,8 @@ with st.sidebar:
     st.caption(f"当前时间: {数据库.获取当前时间()}")
 
 # ========== Tab ==========
-tabs = st.tabs(["首页", "策略中心", "AI交易", "持仓管理", "资金曲线", "回测"])
+# ✅ 新增"交易记录"Tab
+tabs = st.tabs(["首页", "策略中心", "AI交易", "持仓管理", "资金曲线", "回测", "交易记录"])
 
 with tabs[0]:
     首页.显示(引擎)
@@ -167,3 +168,6 @@ with tabs[4]:
 
 with tabs[5]:
     回测.显示(引擎)
+
+with tabs[6]:
+    交易记录.显示()  # ✅ 新增
