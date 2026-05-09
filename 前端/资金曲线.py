@@ -118,15 +118,28 @@ def 显示(引擎):
                 现价 = 行情获取.获取价格(品种).价格
                 盈亏 = (现价 - pos.平均成本) * pos.数量
                 盈亏率 = (现价 / pos.平均成本 - 1) * 100
+                
+                # ✅ 修复：避免显示 -0 和 +0
+                if abs(盈亏) < 0.01:
+                    盈亏显示 = "¥0.00"
+                else:
+                    盈亏显示 = f"¥{盈亏:+,.2f}"
+                
+                if abs(盈亏率) < 0.01:
+                    盈亏率显示 = "0.0%"
+                else:
+                    盈亏率显示 = f"{盈亏率:+.1f}%"
+                
                 明细数据.append({
                     "品种": 品种,
                     "数量": f"{pos.数量:.0f}",
                     "成本": f"{pos.平均成本:.2f}",
                     "现价": f"{现价:.2f}",
-                    "盈亏": f"¥{盈亏:+,.2f}",
-                    "盈亏率": f"{盈亏率:+.1f}%"
+                    "盈亏": 盈亏显示,
+                    "盈亏率": 盈亏率显示
                 })
-            except:
+            except Exception as e:
+                print(f"处理持仓 {品种} 失败: {e}")
                 pass
         
         if 明细数据:
@@ -137,7 +150,6 @@ def 显示(引擎):
     st.markdown("---")
     
     # 两列布局显示策略收益
-    # 将策略分成两列显示
     half = len(策略名称列表) // 2 + (len(策略名称列表) % 2)
     左列策略 = 策略名称列表[:half]
     右列策略 = 策略名称列表[half:]
@@ -150,13 +162,10 @@ def 显示(引擎):
             颜色 = 策略颜色.get(策略名, "#94a3b8")
             if 收益率 > 0:
                 箭头 = "▲"
-                箭头颜色 = "#10b981"
             elif 收益率 < 0:
                 箭头 = "▼"
-                箭头颜色 = "#ef4444"
             else:
                 箭头 = "●"
-                箭头颜色 = "#94a3b8"
             st.markdown(f"<span style='color:{颜色}; font-size:14px;'>{箭头}</span> **{策略名}** : {收益率:+.1f}%", unsafe_allow_html=True)
     
     with col_right:
@@ -165,16 +174,13 @@ def 显示(引擎):
             颜色 = 策略颜色.get(策略名, "#94a3b8")
             if 收益率 > 0:
                 箭头 = "▲"
-                箭头颜色 = "#10b981"
             elif 收益率 < 0:
                 箭头 = "▼"
-                箭头颜色 = "#ef4444"
             else:
                 箭头 = "●"
-                箭头颜色 = "#94a3b8"
             st.markdown(f"<span style='color:{颜色}; font-size:14px;'>{箭头}</span> **{策略名}** : {收益率:+.1f}%", unsafe_allow_html=True)
     
-    # ========== 持仓图表（全宽，放在最后） ==========
+    # ========== 持仓图表 ==========
     if 引擎.持仓:
         st.markdown("### 📊 持仓分析")
         st.markdown("---")
@@ -206,6 +212,10 @@ def 显示(引擎):
                 df_bar = pd.DataFrame(持仓数据)
                 colors = ['#10b981' if x >= 0 else '#ef4444' for x in df_bar['盈亏']]
                 
+                # ✅ 设置Y轴范围，确保负数显示
+                y_min = min(df_bar['盈亏']) if min(df_bar['盈亏']) < 0 else -10
+                y_max = max(df_bar['盈亏']) if max(df_bar['盈亏']) > 0 else 10
+                
                 fig_bar = go.Figure()
                 fig_bar.add_trace(go.Bar(
                     x=df_bar['品种'],
@@ -221,7 +231,8 @@ def 显示(引擎):
                     plot_bgcolor="#15171a",
                     font_color="#e6e6e6",
                     xaxis_title="品种",
-                    yaxis_title="盈亏 (¥)"
+                    yaxis_title="盈亏 (¥)",
+                    yaxis=dict(range=[y_min - 10, y_max + 10])  # 自动调整Y轴范围
                 )
                 st.plotly_chart(fig_bar, use_container_width=True)
             
