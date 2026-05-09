@@ -204,13 +204,15 @@ def 显示(引擎):
         if 持仓数据:
             col_a, col_b = st.columns(2)
             
+            # ========== 盈亏柱状图（彩色） ==========
             with col_a:
                 st.markdown("#### 盈亏柱状图")
                 df_bar = pd.DataFrame(持仓数据)
                 
-                colors = ['#10b981' if x >= 0 else '#ef4444' for x in df_bar['盈亏']]
+                # ✅ 彩色颜色列表
+                彩色列表 = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec489a', '#06b6d4', '#f97316', '#14b8a6', '#ef4444', '#6366f1']
+                colors = [彩色列表[i % len(彩色列表)] for i in range(len(df_bar))]
                 
-                # ✅ 修复：自动计算Y轴范围，为数字留出空间
                 y_min = min(df_bar['盈亏']) if min(df_bar['盈亏']) < 0 else -10
                 y_max = max(df_bar['盈亏']) if max(df_bar['盈亏']) > 0 else 10
                 
@@ -223,28 +225,33 @@ def 显示(引擎):
                     textposition='outside'
                 ))
                 fig_bar.update_layout(
-                    height=420,  # 增加高度
-                    margin=dict(l=30, r=30, t=50, b=30),  # 顶部留空间
+                    height=420,
+                    margin=dict(l=30, r=30, t=50, b=30),
                     paper_bgcolor="#0a0c10",
                     plot_bgcolor="#15171a",
                     font_color="#e6e6e6",
                     xaxis_title="品种",
                     yaxis_title="盈亏 (¥)",
-                    yaxis=dict(range=[y_min - 15, y_max + 50])  # ✅ 顶部留50px空间给数字
+                    yaxis=dict(range=[y_min - 15, y_max + 50])
                 )
                 st.plotly_chart(fig_bar, use_container_width=True)
             
+            # ========== 持仓市值条形图（彩色） ==========
             with col_b:
                 st.markdown("#### 持仓市值条形图")
                 df_bar_h = pd.DataFrame(持仓数据)
                 df_bar_h = df_bar_h.sort_values('市值', ascending=True)
+                
+                # ✅ 彩色颜色列表
+                彩色列表_h = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec489a', '#06b6d4', '#f97316', '#14b8a6', '#ef4444', '#6366f1']
+                colors_h = [彩色列表_h[i % len(彩色列表_h)] for i in range(len(df_bar_h))]
                 
                 fig_bar_h = go.Figure()
                 fig_bar_h.add_trace(go.Bar(
                     y=df_bar_h['品种'],
                     x=df_bar_h['市值'],
                     orientation='h',
-                    marker_color='#3b82f6',
+                    marker_color=colors_h,
                     text=df_bar_h['市值'].apply(lambda x: f"¥{x:,.0f}"),
                     textposition='outside'
                 ))
