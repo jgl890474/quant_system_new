@@ -5,7 +5,7 @@ import os
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from 前端 import 首页, 策略中心, AI交易, 持仓管理, 资金曲线, 回测, 交易记录  # ✅ 新增交易记录
+from 前端 import 首页, 策略中心, AI交易, 持仓管理, 资金曲线, 回测, 交易记录
 from 核心 import 订单引擎, 策略加载器, AI引擎
 
 # ========== 初始化数据库 ==========
@@ -37,6 +37,12 @@ if '错误消息' not in st.session_state:
 策略加载器 = st.session_state.策略加载器
 AI引擎 = st.session_state.AI引擎
 策略信号 = st.session_state.策略信号
+
+# ✅ 调试：显示从数据库恢复的持仓数量
+st.info(f"🔍 调试信息: 从数据库恢复 {len(引擎.持仓)} 个持仓")
+if 引擎.持仓:
+    for 品种, pos in 引擎.持仓.items():
+        st.write(f"   {品种}: {pos.数量}股, 成本{pos.平均成本:.2f}")
 
 # ========== 初始化风控引擎 ==========
 if '风控引擎' not in st.session_state:
@@ -148,7 +154,6 @@ with st.sidebar:
     st.caption(f"当前时间: {数据库.获取当前时间()}")
 
 # ========== Tab ==========
-# ✅ 新增"交易记录"Tab
 tabs = st.tabs(["首页", "策略中心", "AI交易", "持仓管理", "资金曲线", "回测", "交易记录"])
 
 with tabs[0]:
@@ -170,4 +175,4 @@ with tabs[5]:
     回测.显示(引擎)
 
 with tabs[6]:
-    交易记录.显示()  # ✅ 新增
+    交易记录.显示()
