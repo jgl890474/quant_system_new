@@ -8,23 +8,55 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # ========== 导入模块 ==========
 from 前端 import 首页, 策略中心, AI交易, 持仓管理, 资金曲线, 回测, 交易记录
-from 核心 import 订单引擎, 策略加载器, AI引擎
+from 核心 import 订单引擎
+from 工具 import 数据库
 
 # ========== 初始化数据库 ==========
-from 工具 import 数据库
 数据库.初始化数据库()
 
 # ========== 初始化 session_state ==========
 INITIAL_CAPITAL = 1000000  # 100万
 
+# 初始化订单引擎（兼容参数名）
 if '订单引擎' not in st.session_state:
-    st.session_state.订单引擎 = 订单引擎(初始资金=INITIAL_CAPITAL)
+    try:
+        # 尝试使用中文参数
+        st.session_state.订单引擎 = 订单引擎(初始资金=INITIAL_CAPITAL)
+    except TypeError:
+        try:
+            # 尝试使用英文参数
+            st.session_state.订单引擎 = 订单引擎(INITIAL_CAPITAL=INITIAL_CAPITAL)
+        except TypeError:
+            # 使用默认参数
+            st.session_state.订单引擎 = 订单引擎()
 
+# 初始化策略加载器（兼容处理）
 if '策略加载器' not in st.session_state:
-    st.session_state.策略加载器 = 策略加载器()
+    try:
+        from 核心.策略加载器 import 策略加载器
+        st.session_state.策略加载器 = 策略加载器()
+    except ImportError:
+        # 如果策略加载器不存在，创建一个简单的替代
+        class 简单策略加载器:
+            def 获取策略列表(self):
+                return []
+            def 加载策略(self, 策略名):
+                return None
+        st.session_state.策略加载器 = 简单策略加载器()
 
+# 初始化AI引擎（兼容处理）
 if 'AI引擎' not in st.session_state:
-    st.session_state.AI引擎 = AI引擎()
+    try:
+        from 核心.AI引擎 import AI引擎
+        st.session_state.AI引擎 = AI引擎()
+    except ImportError:
+        # 如果AI引擎不存在，创建一个简单的替代
+        class 简单AI引擎:
+            def 获取信号(self, 数据):
+                return {"信号": "无", "置信度": 0, "理由": "AI引擎未配置"}
+            def 分析市场(self):
+                return {"建议": "无法获取AI分析"}
+        st.session_state.AI引擎 = 简单AI引擎()
 
 if '策略信号' not in st.session_state:
     st.session_state.策略信号 = {}
@@ -41,10 +73,24 @@ if '错误消息' not in st.session_state:
 AI引擎 = st.session_state.AI引擎
 策略信号 = st.session_state.策略信号
 
-# ========== 初始化风控引擎 ==========
+# ========== 初始化风控引擎（兼容处理） ==========
 if '风控引擎' not in st.session_state:
-    from 核心.风控引擎 import 风控引擎
-    st.session_state.风控引擎 = 风控引擎()
+    try:
+        from 核心.风控引擎 import 风控引擎
+        st.session_state.风控引擎 = 风控引擎()
+    except ImportError:
+        # 如果风控引擎不存在，创建一个简单的替代
+        class 简单风控引擎:
+            def __init__(self):
+                self.止损比例 = 0.05
+                self.止盈比例 = 0.03
+                self.移动止损开关 = False
+                self.移动止损回撤 = 0.02
+            def 监控持仓(self, 引擎):
+                return []
+            def 执行自动平仓(self, 引擎):
+                return []
+        st.session_state.风控引擎 = 简单风控引擎()
 
 风控 = st.session_state.风控引擎
 
@@ -107,9 +153,8 @@ with st.sidebar:
     # 刷新策略列表按钮
     if st.button("🔄 刷新策略列表", width="stretch"):
         try:
-            from 核心.策略加载器 import 策略加载器 as 策略加载器类
-            st.session_state.策略加载器 = 策略加载器类()
-            策略加载器 = st.session_state.策略加载器
+            if hasattr(st.session_state.策略加载器, '刷新'):
+                st.session_state.策略加载器.刷新()
             st.success("✅ 策略列表已刷新")
             st.rerun()
         except Exception as e:
@@ -120,24 +165,30 @@ with st.sidebar:
     # ========== 持仓监控显示 ==========
     st.markdown("### 💼 持仓监控")
     
-    if 引擎.持仓:
+    if hasattr(引擎, '持仓') and 引擎.持仓:
         st.caption(f"📊 当前持仓数量: {len(引擎.持仓)}")
         
         # 显示持仓明细
         for 品种, pos in 引擎.持仓.items():
             # 计算当前盈亏
-            现价 = getattr(pos, '当前价格', 0)
-            盈亏 = (现价 - pos.平均成本) * pos.数量
+            现价 = getattr(pos, '当前价格', getattr(pos, '平均成本', 0))
+            平均成本 = getattr(pos, '平均成本', 0)
+            数量 = getattr(pos, '数量', 0)
+            盈亏 = (现价 - 平均成本) * 数量
             st.metric(
                 label=f"{品种}",
-                value=f"{pos.数量}股",
-                delta=f"成本: ¥{pos.平均成本:.2f} | 盈亏: ¥{盈亏:+.2f}"
+                value=f"{数量}股",
+                delta=f"成本: ¥{平均成本:.2f} | 盈亏: ¥{盈亏:+.2f}"
             )
         
         # 显示总资产和可用资金
         st.markdown("---")
-        st.metric("💰 总资产", f"¥{引擎.获取总资产():,.0f}")
-        st.metric("💵 可用资金", f"¥{引擎.获取可用资金():,.0f}")
+        try:
+            st.metric("💰 总资产", f"¥{引擎.获取总资产():,.0f}")
+            st.metric("💵 可用资金", f"¥{引擎.获取可用资金():,.0f}")
+        except:
+            st.metric("💰 总资产", "计算中")
+            st.metric("💵 可用资金", "计算中")
     else:
         st.info("暂无持仓")
     
@@ -146,50 +197,51 @@ with st.sidebar:
     # ========== 风控设置 ==========
     st.markdown("### 🛡️ 风控设置")
     
-    自动风控 = st.checkbox("🔴 开启自动止损止盈监控", value=True, help="开启后会自动检查持仓并执行止损止盈")
+    自动风控 = st.checkbox("🔴 开启自动止损止盈监控", value=False, help="开启后会自动检查持仓并执行止损止盈（谨慎使用）")
     
-    if 风控:
+    if hasattr(风控, '止损比例'):
         st.caption(f"止损: {风控.止损比例*100:.0f}% | 止盈: {风控.止盈比例*100:.0f}%")
-        st.caption(f"移动止损: {'开启' if 风控.移动止损开关 else '关闭'} | 回撤: {风控.移动止损回撤*100:.0f}%")
+        if hasattr(风控, '移动止损开关'):
+            st.caption(f"移动止损: {'开启' if 风控.移动止损开关 else '关闭'} | 回撤: {风控.移动止损回撤*100:.0f}%")
     
-    if 自动风控 and 风控:
+    # 注意：自动风控自动执行可能会导致意外平仓，默认关闭
+    # 如需开启，请取消下方代码注释
+    """
+    if 自动风控 and hasattr(风控, '监控持仓'):
         try:
             触发 = 风控.监控持仓(引擎)
             if 触发:
                 st.markdown("### ⚠️ 风控警报")
                 for t in 触发:
                     st.warning(f"{t['品种']}: {t['类型']} 触发 (盈亏率: {t['盈亏率']*100:.2f}%)")
-                平仓记录 = 风控.执行自动平仓(引擎)
-                if 平仓记录:
-                    for r in 平仓记录:
-                        st.error(f"✅ 已自动平仓 {r['品种']} ({r['类型']})")
-                    st.rerun()
+                if hasattr(风控, '执行自动平仓'):
+                    平仓记录 = 风控.执行自动平仓(引擎)
+                    if 平仓记录:
+                        for r in 平仓记录:
+                            st.error(f"✅ 已自动平仓 {r['品种']} ({r['类型']})")
+                        st.rerun()
         except:
             pass
+    """
     
     st.markdown("---")
     st.caption(f"当前时间: {数据库.获取当前时间()}")
 
-# ========== Tab ==========
-tabs = st.tabs(["首页", "策略中心", "AI交易", "持仓管理", "资金曲线", "回测", "交易记录"])
+# ========== 创建前端模块的兼容包装 ==========
 
-with tabs[0]:
-    首页.显示(引擎, 策略加载器, AI引擎)
-
-with tabs[1]:
-    策略中心.显示(引擎, 策略加载器, 策略信号)
-
-with tabs[2]:
-    AI交易.显示(引擎, 策略加载器, AI引擎)
-
-with tabs[3]:
-    持仓管理.显示(引擎, 策略加载器, AI引擎)
-
-with tabs[4]:
-    资金曲线.显示(引擎)
-
-with tabs[5]:
-    回测.显示(引擎)
-
-with tabs[6]:
-    交易记录.显示()
+# 如果某个前端模块不存在或函数不兼容，创建默认显示函数
+def 创建默认显示(模块名):
+    def 默认显示(*args, **kwargs):
+        st.info(f"⚠️ 模块 '{模块名}' 尚未配置")
+        st.markdown(f"""
+        ### 📌 使用说明
+        请创建 `前端/{模块名}.py` 文件，并实现 `显示()` 函数。
+        
+        **示例代码：**
+        ```python
+        # -*- coding: utf-8 -*-
+        import streamlit as st
+        
+        def 显示(引擎=None, 策略加载器=None, AI引擎=None):
+            st.subheader("{模块名}")
+            st.info("功能开发中...")
