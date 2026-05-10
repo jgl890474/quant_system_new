@@ -17,11 +17,11 @@ except ImportError:
 
 def 显示(引擎=None):
     """
-    显示回测页面 - 动态多策略净值曲线
+    显示回测页面 - 持仓动态回测
     参数:
         引擎: 订单引擎实例（可选，用于获取实盘数据）
     """
-    st.subheader("📈 动态多策略回测")
+    st.subheader("📈 持仓动态回测")
     
     # ==================== 侧边栏参数设置 ====================
     with st.sidebar:
@@ -35,74 +35,60 @@ def 显示(引擎=None):
         手续费率 = st.number_input("手续费率", value=0.0003, step=0.0001, format="%.4f", help="默认万分之三")
         
         st.markdown("---")
-        st.markdown("### 📊 选择策略")
+        st.markdown("### 📊 策略参数")
         
-        # 多策略选择
-        启用双均线 = st.checkbox("双均线策略", value=True)
-        启用买入持有 = st.checkbox("买入持有策略", value=True)
-        启用隔夜套利 = st.checkbox("隔夜套利策略", value=True)
-        启用布林带 = st.checkbox("布林带策略", value=False)
-        启用RSI = st.checkbox("RSI超买超卖策略", value=False)
+        # 均线策略参数
+        短期均线 = st.slider("短期均线（买入信号）", 3, 30, 5, 1)
+        长期均线 = st.slider("长期均线（卖出信号）", 10, 60, 20, 1)
         
         st.markdown("---")
+        st.markdown("### 🎯 止盈止损")
         
-        # 策略参数（仅在启用时显示）
-        if 启用双均线:
-            with st.expander("双均线参数"):
-                短期均线 = st.selectbox("短期均线", [5, 10, 20], index=0)
-                长期均线 = st.selectbox("长期均线", [20, 30, 60], index=1)
-        
-        if 启用布林带:
-            with st.expander("布林带参数"):
-                布林带周期 = st.number_input("周期", value=20, min_value=5, max_value=50)
-                布林带标准差 = st.number_input("标准差倍数", value=2.0, min_value=1.0, max_value=3.0, step=0.5)
-        
-        if 启用RSI:
-            with st.expander("RSI参数"):
-                RSI周期 = st.number_input("RSI周期", value=14, min_value=5, max_value=30)
-                RSI超卖 = st.number_input("超卖阈值", value=30, min_value=10, max_value=40)
-                RSI超买 = st.number_input("超买阈值", value=70, min_value=60, max_value=90)
+        止盈百分比 = st.number_input("止盈目标 (%)", value=5.0, step=1.0, min_value=0.0, max_value=50.0)
+        止损百分比 = st.number_input("止损目标 (%)", value=-3.0, step=0.5, min_value=-30.0, max_value=0.0)
         
         st.markdown("---")
         运行按钮 = st.button("🚀 开始回测", type="primary", use_container_width=True)
     
     # 主界面提示
     st.markdown("""
-    > 💡 **使用说明**：在左侧选择策略并设置参数，点击「开始回测」查看多策略净值曲线对比。
+    > 💡 **使用说明**：在左侧设置回测参数，点击「开始回测」查看持仓回测结果。
     > 
-    > **策略说明**：
-    > - 双均线策略：金叉买入，死叉卖出
-    > - 买入持有策略：一次性买入并持有到回测结束
-    > - 隔夜套利策略：每日尾盘买入，次日尾盘卖出
-    > - 布林带策略：触及下轨买入，触及上轨卖出
-    > - RSI策略：超卖区域买入，超买区域卖出
+    > **策略说明**：双均线交叉策略（金叉买入，死叉卖出），支持止盈止损控制。
     """)
     
     if not 运行按钮:
         # 显示示例图表
-        st.info("👈 请在左侧选择策略并点击「开始回测」")
+        st.info("👈 请在左侧设置参数并点击「开始回测」")
         
-        # 显示示例多策略曲线
-        with st.expander("📈 示例：多策略净值曲线对比（点击展开）"):
-            dates = pd.date_range("2024-01-01", periods=252)
-            demo_df = pd.DataFrame({"日期": dates})
-            demo_df["双均线策略"] = np.cumprod(1 + np.random.randn(252) * 0.01 + 0.0003)
-            demo_df["买入持有"] = np.cumprod(1 + np.random.randn(252) * 0.008 + 0.0002)
-            demo_df["隔夜套利"] = np.cumprod(1 + np.random.randn(252) * 0.012 + 0.0005)
-            demo_df["基准"] = np.cumprod(1 + np.random.randn(252) * 0.01)
+        # 显示示例回测曲线
+        with st.expander("📈 示例：持仓回测曲线（点击展开）"):
+            dates = pd.date_range("2024-01-01", periods=100)
+            demo_df = pd.DataFrame({
+                "日期": dates,
+                "净值": 1000000 * np.cumprod(1 + np.random.randn(100) * 0.01)
+            })
             
-            # 归一化到初始资金
-            for col in demo_df.columns:
-                if col != "日期":
-                    demo_df[col] = 1000000 * demo_df[col] / demo_df[col].iloc[0]
-            
-            fig = 绘制多策略曲线(demo_df, "示例：多策略净值曲线对比")
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=demo_df['日期'], y=demo_df['净值'],
+                mode='lines', name='资金曲线',
+                line=dict(color='#FF6B6B', width=2),
+                fill='tozeroy', fillcolor='rgba(255,107,107,0.1)'
+            ))
+            fig.update_layout(
+                title="示例：资金曲线",
+                xaxis_title="日期",
+                yaxis_title="资产净值 (¥)",
+                hovermode='x unified',
+                height=450
+            )
             st.plotly_chart(fig, use_container_width=True)
             st.caption("注：此为演示数据，实际回测请点击「开始回测」")
         return
     
     # ==================== 执行回测 ====================
-    with st.spinner("正在获取数据并进行多策略回测，请稍候..."):
+    with st.spinner("正在获取数据并执行回测，请稍候..."):
         try:
             # 获取股票历史数据
             df = 获取股票历史数据(股票代码, 开始日期, 结束日期)
@@ -112,63 +98,26 @@ def 显示(引擎=None):
                 st.info("请检查股票代码是否正确，或更换其他股票代码（如：000001、600036、000858）")
                 return
             
-            st.success(f"✅ 成功获取 {len(df)} 条历史数据（{df['日期'].iloc[0].strftime('%Y-%m-%d')} 至 {df['日期'].iloc[-1].strftime('%Y-%m-%d')}）")
+            st.success(f"✅ 成功获取 {len(df)} 条历史数据")
+            st.caption(f"📅 回测区间：{df['日期'].iloc[0].strftime('%Y-%m-%d')} 至 {df['日期'].iloc[-1].strftime('%Y-%m-%d')}")
             
-            # 存储各策略结果
-            策略结果 = {}
-            策略净值曲线 = pd.DataFrame()
-            策略净值曲线['日期'] = df['日期']
-            策略净值曲线['基准'] = df['收盘'] / df['收盘'].iloc[0] * 初始资金
+            # 计算技术指标
+            df = 计算均线(df, 短期均线, 长期均线)
             
-            # 执行各策略
-            if 启用双均线:
-                with st.spinner("正在计算双均线策略..."):
-                    df_ma = 计算均线(df.copy(), 短期均线, 长期均线)
-                    结果 = 执行双均线回测(df_ma, 初始资金, 手续费率)
-                    策略结果['双均线策略'] = 结果
-                    策略净值曲线['双均线策略'] = 结果['总资产曲线'][1:] if len(结果['总资产曲线']) > len(df) else 结果['总资产曲线']
+            # 执行回测
+            回测结果 = 执行持仓回测(
+                df, 初始资金, 手续费率, 
+                止盈百分比 / 100, 止损百分比 / 100
+            )
             
-            if 启用买入持有:
-                with st.spinner("正在计算买入持有策略..."):
-                    结果 = 执行买入持有回测(df.copy(), 初始资金, 手续费率)
-                    策略结果['买入持有'] = 结果
-                    策略净值曲线['买入持有'] = 结果['总资产曲线']
-            
-            if 启用隔夜套利:
-                with st.spinner("正在计算隔夜套利策略..."):
-                    结果 = 执行隔夜套利回测(df.copy(), 初始资金, 手续费率)
-                    策略结果['隔夜套利'] = 结果
-                    策略净值曲线['隔夜套利'] = 结果['总资产曲线']
-            
-            if 启用布林带:
-                with st.spinner("正在计算布林带策略..."):
-                    df_bb = 计算布林带(df.copy(), 布林带周期, 布林带标准差)
-                    结果 = 执行布林带回测(df_bb, 初始资金, 手续费率)
-                    策略结果['布林带策略'] = 结果
-                    策略净值曲线['布林带策略'] = 结果['总资产曲线']
-            
-            if 启用RSI:
-                with st.spinner("正在计算RSI策略..."):
-                    df_rsi = 计算RSI(df.copy(), RSI周期)
-                    结果 = 执行RSI回测(df_rsi, 初始资金, 手续费率, RSI超卖, RSI超买)
-                    策略结果['RSI策略'] = 结果
-                    策略净值曲线['RSI策略'] = 结果['总资产曲线']
-            
-            # 确保所有列长度一致
-            min_len = len(df)
-            for col in 策略净值曲线.columns:
-                if col != '日期' and len(策略净值曲线[col]) > min_len:
-                    策略净值曲线[col] = 策略净值曲线[col].iloc[:min_len]
-                elif col != '日期' and len(策略净值曲线[col]) < min_len:
-                    策略净值曲线[col] = 策略净值曲线[col].reindex(range(min_len), method='ffill')
-            
-            # 显示多策略对比结果
-            显示多策略结果(策略结果, 策略净值曲线, 股票代码, 初始资金)
+            # 显示回测结果
+            显示回测结果(回测结果, 股票代码, 短期均线, 长期均线, 止盈百分比, 止损百分比)
             
         except Exception as e:
             st.error(f"回测失败: {str(e)}")
             import traceback
-            st.code(traceback.format_exc())
+            with st.expander("详细错误信息"):
+                st.code(traceback.format_exc())
 
 
 def 获取股票历史数据(股票代码, 开始日期, 结束日期):
@@ -234,294 +183,469 @@ def 获取股票历史数据(股票代码, 开始日期, 结束日期):
 
 def 计算均线(df, 短期均线, 长期均线):
     """计算移动平均线"""
-    df['MA_短期'] = df['收盘'].rolling(window=短期均线).mean()
-    df['MA_长期'] = df['收盘'].rolling(window=长期均线).mean()
-    df['信号'] = 0
-    df['信号'] = np.where(
-        (df['MA_短期'] > df['MA_长期']) & (df['MA_短期'].shift(1) <= df['MA_长期'].shift(1)), 1, 0)
-    df['信号'] = np.where(
-        (df['MA_短期'] < df['MA_长期']) & (df['MA_短期'].shift(1) >= df['MA_长期'].shift(1)), -1, df['信号'])
-    return df
+    df_copy = df.copy()
+    df_copy['MA_短期'] = df_copy['收盘'].rolling(window=短期均线).mean()
+    df_copy['MA_长期'] = df_copy['收盘'].rolling(window=长期均线).mean()
+    df_copy['持仓'] = 0
+    df_copy['信号'] = 0
+    
+    # 金叉：短期上穿长期 -> 买入信号 (1)
+    # 死叉：短期下穿长期 -> 卖出信号 (-1)
+    for i in range(1, len(df_copy)):
+        if df_copy['MA_短期'].iloc[i] > df_copy['MA_长期'].iloc[i]:
+            if df_copy['MA_短期'].iloc[i-1] <= df_copy['MA_长期'].iloc[i-1]:
+                df_copy.loc[df_copy.index[i], '信号'] = 1  # 金叉买入
+        elif df_copy['MA_短期'].iloc[i] < df_copy['MA_长期'].iloc[i]:
+            if df_copy['MA_短期'].iloc[i-1] >= df_copy['MA_长期'].iloc[i-1]:
+                df_copy.loc[df_copy.index[i], '信号'] = -1  # 死叉卖出
+    
+    return df_copy
 
 
-def 计算布林带(df, 周期, 标准差倍数):
-    """计算布林带"""
-    df['中轨'] = df['收盘'].rolling(window=周期).mean()
-    df['标准差'] = df['收盘'].rolling(window=周期).std()
-    df['上轨'] = df['中轨'] + 标准差倍数 * df['标准差']
-    df['下轨'] = df['中轨'] - 标准差倍数 * df['标准差']
-    df['信号'] = 0
-    # 触及下轨买入信号
-    df.loc[df['收盘'] <= df['下轨'], '信号'] = 1
-    # 触及上轨卖出信号
-    df.loc[df['收盘'] >= df['上轨'], '信号'] = -1
-    return df
-
-
-def 计算RSI(df, 周期):
-    """计算RSI指标"""
-    delta = df['收盘'].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=周期).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=周期).mean()
-    rs = gain / loss
-    df['RSI'] = 100 - (100 / (1 + rs))
-    df['信号'] = 0
-    return df
-
-
-def 执行双均线回测(df, 初始资金, 手续费率):
-    """执行双均线回测"""
-    持仓 = 0
+def 执行持仓回测(df, 初始资金, 手续费率, 止盈率, 止损率):
+    """执行持仓回测 - 包含止盈止损"""
+    
     资金 = 初始资金
-    总资产 = [初始资金]
+    持仓数量 = 0
+    持仓成本 = 0
+    持仓记录 = []
     交易记录 = []
+    每日资产 = []
+    每日持仓市值 = []
+    每日现金 = []
     
-    for i in range(1, len(df)):
-        当前收盘 = df.iloc[i]['收盘']
-        
-        if df.iloc[i]['信号'] == 1 and 持仓 == 0:
-            买入量 = int(资金 / 当前收盘 / 100) * 100
-            if 买入量 > 0:
-                手续费 = 买入量 * 当前收盘 * 手续费率
-                资金 -= (买入量 * 当前收盘 + 手续费)
-                持仓 = 买入量
-                交易记录.append({'日期': df.iloc[i]['日期'], '动作': '买入', '价格': 当前收盘, '数量': 买入量})
-                
-        elif df.iloc[i]['信号'] == -1 and 持仓 > 0:
-            手续费 = 持仓 * 当前收盘 * 手续费率
-            资金 += (持仓 * 当前收盘 - 手续费)
-            交易记录.append({'日期': df.iloc[i]['日期'], '动作': '卖出', '价格': 当前收盘, '数量': 持仓})
-            持仓 = 0
-            
-        当前总资产 = 资金 + (持仓 * 当前收盘 if 持仓 > 0 else 0)
-        总资产.append(当前总资产)
+    买入价 = 0
     
-    if 持仓 > 0:
-        最后价格 = df.iloc[-1]['收盘']
-        手续费 = 持仓 * 最后价格 * 手续费率
-        资金 += (持仓 * 最后价格 - 手续费)
-        交易记录.append({'日期': df.iloc[-1]['日期'], '动作': '清仓', '价格': 最后价格, '数量': 持仓})
-        总资产[-1] = 资金
-    
-    return {'初始资金': 初始资金, '最终资金': 资金, '总资产曲线': 总资产, '交易记录': 交易记录, '数据': df}
-
-
-def 执行买入持有回测(df, 初始资金, 手续费率):
-    """执行买入持有策略"""
-    首日价格 = df.iloc[0]['收盘']
-    末日价格 = df.iloc[-1]['收盘']
-    买入量 = int(初始资金 / 首日价格 / 100) * 100
-    买入手续费 = 买入量 * 首日价格 * 手续费率
-    资金 = 初始资金 - (买入量 * 首日价格 + 买入手续费)
-    持仓 = 买入量
-    
-    总资产 = []
     for i in range(len(df)):
-        当前总资产 = 资金 + (持仓 * df.iloc[i]['收盘'])
-        总资产.append(当前总资产)
-    
-    卖出手续费 = 持仓 * 末日价格 * 手续费率
-    最终资金 = 资金 + (持仓 * 末日价格 - 卖出手续费)
-    总资产[-1] = 最终资金
-    
-    return {'初始资金': 初始资金, '最终资金': 最终资金, '总资产曲线': 总资产, '交易记录': [], '数据': df}
-
-
-def 执行隔夜套利回测(df, 初始资金, 手续费率):
-    """执行隔夜套利策略"""
-    资金 = 初始资金
-    持仓 = 0
-    总资产 = [初始资金]
-    交易记录 = []
-    
-    for i in range(len(df) - 1):
-        今日收盘 = df.iloc[i]['收盘']
-        次日收盘 = df.iloc[i + 1]['收盘']
+        当前日期 = df['日期'].iloc[i]
+        当前收盘 = df['收盘'].iloc[i]
         
-        if 持仓 == 0:
-            买入量 = int(资金 / 今日收盘 / 100) * 100
-            if 买入量 > 0:
-                手续费 = 买入量 * 今日收盘 * 手续费率
-                资金 -= (买入量 * 今日收盘 + 手续费)
-                持仓 = 买入量
-                交易记录.append({'日期': df.iloc[i]['日期'], '动作': '买入', '价格': 今日收盘, '数量': 买入量})
+        # 检查持仓中的止盈止损
+        止盈触发 = False
+        止损触发 = False
         
-        if 持仓 > 0:
-            手续费 = 持仓 * 次日收盘 * 手续费率
-            资金 += (持仓 * 次日收盘 - 手续费)
-            交易记录.append({'日期': df.iloc[i + 1]['日期'], '动作': '卖出', '价格': 次日收盘, '数量': 持仓})
-            持仓 = 0
+        if 持仓数量 > 0 and 买入价 > 0:
+            当前盈亏率 = (当前收盘 - 买入价) / 买入价
+            if 止盈率 > 0 and 当前盈亏率 >= 止盈率:
+                止盈触发 = True
+            if 止损率 < 0 and 当前盈亏率 <= 止损率:
+                止损触发 = True
         
-        总资产.append(资金)
-    
-    return {'初始资金': 初始资金, '最终资金': 资金, '总资产曲线': 总资产, '交易记录': 交易记录, '数据': df}
-
-
-def 执行布林带回测(df, 初始资金, 手续费率):
-    """执行布林带策略回测"""
-    持仓 = 0
-    资金 = 初始资金
-    总资产 = [初始资金]
-    交易记录 = []
-    
-    for i in range(1, len(df)):
-        当前收盘 = df.iloc[i]['收盘']
-        
-        if df.iloc[i]['信号'] == 1 and 持仓 == 0:
-            买入量 = int(资金 / 当前收盘 / 100) * 100
-            if 买入量 > 0:
-                手续费 = 买入量 * 当前收盘 * 手续费率
-                资金 -= (买入量 * 当前收盘 + 手续费)
-                持仓 = 买入量
-                交易记录.append({'日期': df.iloc[i]['日期'], '动作': '买入', '价格': 当前收盘, '数量': 买入量})
-                
-        elif df.iloc[i]['信号'] == -1 and 持仓 > 0:
-            手续费 = 持仓 * 当前收盘 * 手续费率
-            资金 += (持仓 * 当前收盘 - 手续费)
-            交易记录.append({'日期': df.iloc[i]['日期'], '动作': '卖出', '价格': 当前收盘, '数量': 持仓})
-            持仓 = 0
+        # 止盈止损卖出
+        if (止盈触发 or 止损触发) and 持仓数量 > 0:
+            卖出金额 = 持仓数量 * 当前收盘
+            手续费 = 卖出金额 * 手续费率
+            实际收入 = 卖出金额 - 手续费
+            资金 += 实际收入
+            盈亏 = (当前收盘 - 买入价) * 持仓数量 - 手续费
             
-        当前总资产 = 资金 + (持仓 * 当前收盘 if 持仓 > 0 else 0)
-        总资产.append(当前总资产)
-    
-    return {'初始资金': 初始资金, '最终资金': 资金, '总资产曲线': 总资产, '交易记录': 交易记录, '数据': df}
-
-
-def 执行RSI回测(df, 初始资金, 手续费率, 超卖阈值=30, 超买阈值=70):
-    """执行RSI策略回测"""
-    持仓 = 0
-    资金 = 初始资金
-    总资产 = [初始资金]
-    交易记录 = []
-    
-    for i in range(1, len(df)):
-        当前收盘 = df.iloc[i]['收盘']
-        rsi = df.iloc[i]['RSI'] if 'RSI' in df.columns else 50
-        
-        if rsi < 超卖阈值 and 持仓 == 0:
-            买入量 = int(资金 / 当前收盘 / 100) * 100
-            if 买入量 > 0:
-                手续费 = 买入量 * 当前收盘 * 手续费率
-                资金 -= (买入量 * 当前收盘 + 手续费)
-                持仓 = 买入量
-                交易记录.append({'日期': df.iloc[i]['日期'], '动作': '买入', '价格': 当前收盘, '数量': 买入量})
-                
-        elif rsi > 超买阈值 and 持仓 > 0:
-            手续费 = 持仓 * 当前收盘 * 手续费率
-            资金 += (持仓 * 当前收盘 - 手续费)
-            交易记录.append({'日期': df.iloc[i]['日期'], '动作': '卖出', '价格': 当前收盘, '数量': 持仓})
-            持仓 = 0
+            交易记录.append({
+                '日期': 当前日期,
+                '行动': '止盈卖出' if 止盈触发 else '止损卖出',
+                '价格': 当前收盘,
+                '数量': 持仓数量,
+                '手续费': round(手续费, 2),
+                '资金变动': round(实际收入, 2),
+                '盈亏': round(盈亏, 2)
+            })
             
-        当前总资产 = 资金 + (持仓 * 当前收盘 if 持仓 > 0 else 0)
-        总资产.append(当前总资产)
+            持仓记录.append({
+                '品种': df.get('代码', ['未知'])[0] if '代码' in df else '未知',
+                '买入价': 买入价,
+                '卖出价': 当前收盘,
+                '数量': 持仓数量,
+                '盈亏': round(盈亏, 2)
+            })
+            
+            持仓数量 = 0
+            持仓成本 = 0
+            买入价 = 0
+        
+        # 检查买入信号
+        elif df['信号'].iloc[i] == 1 and 持仓数量 == 0:
+            # 买入
+            可用资金 = 资金
+            买入数量 = int(可用资金 / 当前收盘 / 100) * 100
+            
+            if 买入数量 > 0:
+                买入金额 = 买入数量 * 当前收盘
+                手续费 = 买入金额 * 手续费率
+                资金 -= (买入金额 + 手续费)
+                持仓数量 = 买入数量
+                持仓成本 = 当前收盘
+                买入价 = 当前收盘
+                
+                交易记录.append({
+                    '日期': 当前日期,
+                    '行动': '买入',
+                    '价格': 当前收盘,
+                    '数量': 持仓数量,
+                    '手续费': round(手续费, 2),
+                    '资金变动': round(-(买入金额 + 手续费), 2),
+                    '盈亏': 0
+                })
+        
+        # 检查卖出信号
+        elif df['信号'].iloc[i] == -1 and 持仓数量 > 0:
+            卖出金额 = 持仓数量 * 当前收盘
+            手续费 = 卖出金额 * 手续费率
+            实际收入 = 卖出金额 - 手续费
+            资金 += 实际收入
+            盈亏 = (当前收盘 - 买入价) * 持仓数量 - 手续费
+            
+            交易记录.append({
+                '日期': 当前日期,
+                '行动': '卖出(信号)',
+                '价格': 当前收盘,
+                '数量': 持仓数量,
+                '手续费': round(手续费, 2),
+                '资金变动': round(实际收入, 2),
+                '盈亏': round(盈亏, 2)
+            })
+            
+            持仓记录.append({
+                '品种': df.get('代码', ['未知'])[0] if '代码' in df else '未知',
+                '买入价': 买入价,
+                '卖出价': 当前收盘,
+                '数量': 持仓数量,
+                '盈亏': round(盈亏, 2)
+            })
+            
+            持仓数量 = 0
+            持仓成本 = 0
+            买入价 = 0
+        
+        # 计算每日资产
+        当前持仓市值 = 持仓数量 * 当前收盘
+        当日总资产 = 资金 + 当前持仓市值
+        每日资产.append(当日总资产)
+        每日持仓市值.append(当前持仓市值)
+        每日现金.append(资金)
     
-    return {'初始资金': 初始资金, '最终资金': 资金, '总资产曲线': 总资产, '交易记录': 交易记录, '数据': df}
-
-
-def 绘制多策略曲线(df, 标题="多策略净值曲线对比"):
-    """使用Plotly绘制多策略净值曲线"""
-    fig = go.Figure()
+    # 回测结束 - 如果还有持仓，强制平仓
+    if 持仓数量 > 0:
+        最后价格 = df['收盘'].iloc[-1]
+        卖出金额 = 持仓数量 * 最后价格
+        手续费 = 卖出金额 * 手续费率
+        实际收入 = 卖出金额 - 手续费
+        资金 += 实际收入
+        盈亏 = (最后价格 - 买入价) * 持仓数量 - 手续费
+        
+        交易记录.append({
+            '日期': df['日期'].iloc[-1],
+            '行动': '强制平仓',
+            '价格': 最后价格,
+            '数量': 持仓数量,
+            '手续费': round(手续费, 2),
+            '资金变动': round(实际收入, 2),
+            '盈亏': round(盈亏, 2)
+        })
+        
+        持仓记录.append({
+            '品种': df.get('代码', ['未知'])[0] if '代码' in df else '未知',
+            '买入价': 买入价,
+            '卖出价': 最后价格,
+            '数量': 持仓数量,
+            '盈亏': round(盈亏, 2)
+        })
+        
+        每日资产[-1] = 资金
+        每日持仓市值[-1] = 0
+        每日现金[-1] = 资金
     
-    colors = {
-        '双均线策略': '#FF6B6B',
-        '买入持有': '#4ECDC4',
-        '隔夜套利': '#45B7D1',
-        '布林带策略': '#96CEB4',
-        'RSI策略': '#FFEAA7',
-        '基准': '#DFE6E9'
+    return {
+        '初始资金': 初始资金,
+        '最终资金': 资金,
+        '总盈亏': 资金 - 初始资金,
+        '总收益率': (资金 - 初始资金) / 初始资金 * 100,
+        '每日资产': 每日资产,
+        '每日持仓市值': 每日持仓市值,
+        '每日现金': 每日现金,
+        '交易记录': 交易记录,
+        '持仓记录': 持仓记录,
+        '数据': df,
+        '手续费率': 手续费率
     }
+
+
+def 绘制动态净值曲线(df, 回测结果, 股票代码):
+    """使用Plotly绘制动态交互式净值曲线"""
     
-    for col in df.columns:
-        if col != '日期':
-            color = colors.get(col, '#74B9FF')
-            fig.add_trace(go.Scatter(
-                x=df['日期'],
-                y=df[col],
-                mode='lines',
-                name=col,
-                line=dict(width=2, color=color),
-                hovertemplate='%{x|%Y-%m-%d}<br>%{y:,.0f}<extra></extra>'
-            ))
-    
-    fig.update_layout(
-        title=dict(text=标题, x=0.5, font=dict(size=20)),
-        xaxis=dict(title='日期', gridcolor='#E8E8E8'),
-        yaxis=dict(title='资产净值 (¥)', gridcolor='#E8E8E8', tickformat=',.0f'),
-        hovermode='x unified',
-        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
-        plot_bgcolor='white',
-        height=500
+    # 创建子图：资金曲线 + 持仓量
+    fig = make_subplots(
+        rows=2, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.08,
+        subplot_titles=('资产净值曲线', '持仓量'),
+        row_heights=[0.7, 0.3]
     )
+    
+    # 资金曲线
+    fig.add_trace(
+        go.Scatter(
+            x=df['日期'],
+            y=回测结果['每日资产'],
+            mode='lines',
+            name='总资产',
+            line=dict(color='#FF6B6B', width=2),
+            fill='tozeroy',
+            fillcolor='rgba(255,107,107,0.1)',
+            hovertemplate='%{x|%Y-%m-%d}<br>总资产: ¥%{y:,.0f}<extra></extra>'
+        ),
+        row=1, col=1
+    )
+    
+    # 现金曲线
+    fig.add_trace(
+        go.Scatter(
+            x=df['日期'],
+            y=回测结果['每日现金'],
+            mode='lines',
+            name='可用资金',
+            line=dict(color='#4ECDC4', width=1.5, dash='dash'),
+            hovertemplate='%{x|%Y-%m-%d}<br>可用资金: ¥%{y:,.0f}<extra></extra>'
+        ),
+        row=1, col=1
+    )
+    
+    # 基准曲线（买入持有）
+    基准曲线 = 回测结果['初始资金'] * df['收盘'] / df['收盘'].iloc[0]
+    fig.add_trace(
+        go.Scatter(
+            x=df['日期'],
+            y=基准曲线,
+            mode='lines',
+            name='买入持有(基准)',
+            line=dict(color='#95A5A6', width=1.5, dash='dot'),
+            hovertemplate='%{x|%Y-%m-%d}<br>基准: ¥%{y:,.0f}<extra></extra>'
+        ),
+        row=1, col=1
+    )
+    
+    # 持仓市值（填充区域）
+    fig.add_trace(
+        go.Scatter(
+            x=df['日期'],
+            y=回测结果['每日持仓市值'],
+            mode='lines',
+            name='持仓市值',
+            line=dict(color='#45B7D1', width=1.5),
+            fill='tozeroy',
+            fillcolor='rgba(69,183,209,0.15)',
+            hovertemplate='%{x|%Y-%m-%d}<br>持仓市值: ¥%{y:,.0f}<extra></extra>'
+        ),
+        row=1, col=1
+    )
+    
+    # 持仓量（第二子图）
+    持仓量数据 = []
+    当前持仓 = 0
+    for i in range(len(df)):
+        if i < len(回测结果['交易记录']):
+            # 简化：根据交易记录计算持仓量（实际需要更复杂的逻辑）
+            pass
+        # 从每日持仓市值反推持仓量（粗略）
+        持仓量 = 回测结果['每日持仓市值'][i] / df['收盘'].iloc[i] if df['收盘'].iloc[i] > 0 else 0
+        持仓量数据.append(持仓量)
+    
+    fig.add_trace(
+        go.Scatter(
+            x=df['日期'],
+            y=持仓量数据,
+            mode='lines',
+            name='持仓数量',
+            line=dict(color='#F39C12', width=2),
+            fill='tozeroy',
+            fillcolor='rgba(243,156,18,0.1)',
+            hovertemplate='%{x|%Y-%m-%d}<br>持仓: %{y:.0f}股<extra></extra>'
+        ),
+        row=2, col=1
+    )
+    
+    # 添加买卖点标记
+    买入点 = 回测结果['数据'][回测结果['数据']['信号'] == 1]
+    卖出点 = 回测结果['数据'][回测结果['数据']['信号'] == -1]
+    
+    if not 买入点.empty:
+        fig.add_trace(
+            go.Scatter(
+                x=买入点['日期'],
+                y=回测结果['每日资产'][买入点.index] if max(买入点.index) < len(回测结果['每日资产']) else [],
+                mode='markers',
+                name='买入信号',
+                marker=dict(symbol='triangle-up', size=12, color='#2ECC71'),
+                hovertemplate='买入信号<br>%{x|%Y-%m-%d}<extra></extra>'
+            ),
+            row=1, col=1
+        )
+    
+    if not 卖出点.empty:
+        fig.add_trace(
+            go.Scatter(
+                x=卖出点['日期'],
+                y=回测结果['每日资产'][卖出点.index] if max(卖出点.index) < len(回测结果['每日资产']) else [],
+                mode='markers',
+                name='卖出信号',
+                marker=dict(symbol='triangle-down', size=12, color='#E74C3C'),
+                hovertemplate='卖出信号<br>%{x|%Y-%m-%d}<extra></extra>'
+            ),
+            row=1, col=1
+        )
+    
+    # 更新布局
+    fig.update_layout(
+        title=dict(
+            text=f"{股票代码} - 持仓回测资金曲线",
+            x=0.5,
+            font=dict(size=18)
+        ),
+        hovermode='x unified',
+        legend=dict(
+            orientation='h',
+            yanchor='bottom',
+            y=1.02,
+            xanchor='center',
+            x=0.5
+        ),
+        height=600,
+        plot_bgcolor='white'
+    )
+    
+    fig.update_xaxes(title_text="日期", row=2, col=1, gridcolor='#E8E8E8')
+    fig.update_yaxes(title_text="资产净值 (¥)", row=1, col=1, gridcolor='#E8E8E8', tickformat=',.0f')
+    fig.update_yaxes(title_text="持仓数量 (股)", row=2, col=1, gridcolor='#E8E8E8')
     
     return fig
 
 
-def 显示多策略结果(策略结果, 策略净值曲线, 股票代码, 初始资金):
-    """显示多策略回测结果"""
+def 显示回测结果(回测结果, 股票代码, 短期均线, 长期均线, 止盈百分比, 止损百分比):
+    """显示回测结果"""
     
     st.markdown("---")
     
-    # ==================== 多策略净值曲线图 ====================
-    st.subheader("📈 多策略净值曲线对比")
+    # ==================== 核心指标卡片 ====================
+    st.subheader("📊 回测指标")
     
-    fig = 绘制多策略曲线(策略净值曲线, f"{股票代码} - 多策略净值曲线对比")
+    col1, col2, col3, col4, col5 = st.columns(5)
+    col1.metric("初始资金", f"¥{回测结果['初始资金']:,.0f}")
+    col2.metric("最终资金", f"¥{回测结果['最终资金']:,.0f}", 
+                delta=f"¥{回测结果['总盈亏']:+,.0f}")
+    col3.metric("总收益率", f"{回测结果['总收益率']:+.2f}%",
+                delta=f"{回测结果['总收益率']:+.2f}%")
+    col4.metric("最大回撤", "计算中...")
+    col5.metric("交易次数", len([t for t in 回测结果['交易记录'] if t['行动'] in ['买入', '卖出(信号)']]))
+    
+    st.markdown("---")
+    
+    # ==================== 动态净值曲线 ====================
+    st.subheader("📈 动态净值曲线")
+    
+    fig = 绘制动态净值曲线(回测结果['数据'], 回测结果, 股票代码)
     st.plotly_chart(fig, use_container_width=True)
     
-    # ==================== 策略性能指标对比表 ====================
-    st.subheader("📊 策略性能指标对比")
+    # ==================== 策略参数摘要 ====================
+    with st.expander("📖 策略参数", expanded=False):
+        col1, col2 = st.columns(2)
+        col1.markdown(f"""
+        - **股票代码**: {股票代码}
+        - **回测区间**: {回测结果['数据']['日期'].iloc[0].strftime('%Y-%m-%d')} 至 {回测结果['数据']['日期'].iloc[-1].strftime('%Y-%m-%d')}
+        - **短期均线**: {短期均线}日
+        - **长期均线**: {长期均线}日
+        """)
+        col2.markdown(f"""
+        - **手续费率**: {回测结果['手续费率']*100:.2f}%
+        - **止盈目标**: {止盈百分比}%
+        - **止损目标**: {止损百分比}%
+        - **初始资金**: ¥{回测结果['初始资金']:,.0f}
+        """)
     
-    性能数据 = []
-    for 策略名, 结果 in 策略结果.items():
-        最终资金 = 结果['最终资金']
-        总收益率 = (最终资金 - 初始资金) / 初始资金 * 100
-        年化收益率 = 总收益率 / (len(结果['数据']) / 252) if len(结果['数据']) > 0 else 0
-        交易次数 = len(结果['交易记录'])
+    # ==================== 收益分析图 ====================
+    st.subheader("📊 收益分析")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # 收益率分布图
+        收益数据 = [t['盈亏'] for t in 回测结果['交易记录'] if t['盈亏'] != 0]
+        if 收益数据:
+            fig_pie = go.Figure(data=[go.Pie(
+                labels=['盈利交易', '亏损交易'],
+                values=[len([x for x in 收益数据 if x > 0]), len([x for x in 收益数据 if x < 0])],
+                marker_colors=['#2ECC71', '#E74C3C'],
+                hole=0.4
+            )])
+            fig_pie.update_layout(title="盈亏交易比例", height=350)
+            st.plotly_chart(fig_pie, use_container_width=True)
+        else:
+            st.info("暂无盈亏数据")
+    
+    with col2:
+        # 资金增长曲线
+        if len(回测结果['每日资产']) > 0:
+            增长数据 = pd.DataFrame({
+                '日期': 回测结果['数据']['日期'],
+                '总资产': 回测结果['每日资产'],
+                '基准': 回测结果['初始资金'] * 回测结果['数据']['收盘'] / 回测结果['数据']['收盘'].iloc[0]
+            })
+            fig_line = go.Figure()
+            fig_line.add_trace(go.Scatter(x=增长数据['日期'], y=增长数据['总资产'], 
+                                          name='策略收益', line=dict(color='#3498DB')))
+            fig_line.add_trace(go.Scatter(x=增长数据['日期'], y=增长数据['基准'],
+                                          name='基准收益', line=dict(color='#95A5A6', dash='dash')))
+            fig_line.update_layout(title="策略 vs 基准", height=350, xaxis_title="日期", yaxis_title="资产净值 (¥)")
+            st.plotly_chart(fig_line, use_container_width=True)
+    
+    # ==================== 交易记录表格 ====================
+    if 回测结果['交易记录']:
+        st.subheader("📋 交易记录")
         
-        性能数据.append({
-            "策略名称": 策略名,
-            "最终资金": f"¥{最终资金:,.0f}",
-            "总收益率": f"{总收益率:+.2f}%",
-            "年化收益率": f"{年化收益率:+.2f}%",
-            "交易次数": 交易次数
-        })
-    
-    if 性能数据:
+        交易_df = pd.DataFrame(回测结果['交易记录'])
         st.dataframe(
-            pd.DataFrame(性能数据),
+            交易_df,
             use_container_width=True,
             hide_index=True,
             column_config={
-                "策略名称": st.column_config.TextColumn("策略名称", width="small"),
-                "最终资金": st.column_config.TextColumn("最终资金", width="small"),
-                "总收益率": st.column_config.TextColumn("总收益率", width="small"),
-                "年化收益率": st.column_config.TextColumn("年化收益率", width="small"),
-                "交易次数": st.column_config.NumberColumn("交易次数", width="small"),
+                "日期": st.column_config.TextColumn("日期", width="small"),
+                "行动": st.column_config.TextColumn("行动", width="small"),
+                "价格": st.column_config.NumberColumn("价格", format="%.2f"),
+                "数量": st.column_config.NumberColumn("数量", format="%.0f"),
+                "手续费": st.column_config.NumberColumn("手续费", format="%.2f"),
+                "盈亏": st.column_config.NumberColumn("盈亏", format="%.2f"),
             }
         )
-    
-    # ==================== 各策略详细结果（可折叠） ====================
-    st.subheader("📋 各策略详细结果")
-    
-    for 策略名, 结果 in 策略结果.items():
-        with st.expander(f"{策略名} - 详细结果"):
-            col1, col2, col3 = st.columns(3)
-            col1.metric("初始资金", f"¥{结果['初始资金']:,.0f}")
-            col2.metric("最终资金", f"¥{结果['最终资金']:,.0f}")
-            收益率 = (结果['最终资金'] - 结果['初始资金']) / 结果['初始资金'] * 100
-            col3.metric("收益率", f"{收益率:+.2f}%")
+        
+        # 盈亏统计
+        盈利交易 = [t for t in 回测结果['交易记录'] if t['盈亏'] > 0]
+        亏损交易 = [t for t in 回测结果['交易记录'] if t['盈亏'] < 0]
+        
+        if 盈利交易 or 亏损交易:
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("总盈利", f"¥{sum(t['盈亏'] for t in 盈利交易):,.2f}" if 盈利交易 else "¥0")
+            col2.metric("总亏损", f"¥{sum(t['盈亏'] for t in 亏损交易):,.2f}" if 亏损交易 else "¥0")
+            col3.metric("盈利次数", len(盈利交易))
+            col4.metric("亏损次数", len(亏损交易))
             
-            if 结果['交易记录']:
-                st.caption(f"共 {len(结果['交易记录'])} 条交易记录")
-                交易_df = pd.DataFrame(结果['交易记录'])
-                st.dataframe(交易_df, use_container_width=True, hide_index=True)
-            else:
-                st.info("无交易记录")
+            if len(盈利交易) + len(亏损交易) > 0:
+                胜率 = len(盈利交易) / (len(盈利交易) + len(亏损交易)) * 100
+                st.metric("胜率", f"{胜率:.1f}%")
+    
+    else:
+        st.info("本次回测没有产生任何交易记录")
     
     # ==================== 策略总结 ====================
     st.markdown("---")
-    st.subheader("💡 策略总结")
+    st.subheader("💡 回测总结")
     
-    # 找出最优策略
-    if 策略结果:
-        最优策略 = max(策略结果.items(), key=lambda x: x[1]['最终资金'])
-        st.success(f"🏆 本次回测最优策略：**{最优策略[0]}**，最终资金 ¥{最优策略[1]['最终资金']:,.0f}，收益率 {((最优策略[1]['最终资金'] - 初始资金) / 初始资金 * 100):+.2f}%")
+    总收益率 = 回测结果['总收益率']
+    if 总收益率 > 0:
+        st.success(f"✅ 策略在回测区间内取得了 {总收益率:+.2f}% 的正收益")
+    else:
+        st.warning(f"⚠️ 策略在回测区间内取得了 {总收益率:+.2f}% 的负收益")
+    
+    # 建议
+    st.markdown("""
+    **⚠️ 风险提示**：
+    - 历史回测结果不代表未来收益
+    - 实际交易中可能存在滑点和流动性风险
+    - 建议在实盘前进行充分的参数优化和压力测试
+    """)
