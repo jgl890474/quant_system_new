@@ -1,237 +1,202 @@
 # -*- coding: utf-8 -*-
 import sqlite3
+import os
 import json
-import pandas as pd
 from datetime import datetime
 
-数据库路径 = "quant_system.db"
+
+DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "quant_system.db")
+
 
 def 获取连接():
-    return sqlite3.connect(数据库路径, check_same_thread=False)
+    """获取数据库连接"""
+    return sqlite3.connect(DB_PATH)
+
 
 def 初始化数据库():
+    """初始化数据库表"""
     conn = 获取连接()
     cursor = conn.cursor()
     
     # 交易记录表
-    cursor.execute("""
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS 交易记录 (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             时间 TEXT,
-            动作 TEXT,
             品种 TEXT,
+            动作 TEXT,
             价格 REAL,
             数量 REAL,
-            盈亏 REAL DEFAULT 0,
+            盈亏 REAL,
             策略名称 TEXT
         )
-    """)
+    ''')
     
-    # 持仓表
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS 持仓 (
-            品种 TEXT PRIMARY KEY,
-            数量 REAL,
-            平均成本 REAL,
-            已实现盈亏 REAL DEFAULT 0,
-            更新时间 TEXT
-        )
-    """)
-    
-    # 资金曲线表
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS 资金曲线 (
-            日期 TEXT PRIMARY KEY,
-            总资产 REAL,
-            总盈亏 REAL,
-            持仓市值 REAL,
-            可用资金 REAL
-        )
-    """)
-    
-    # 持仓历史表
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS 持仓历史 (
+    # 持仓快照表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS 持仓快照 (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             时间 TEXT,
             品种 TEXT,
             数量 REAL,
-            成本 REAL,
-            现价 REAL,
-            盈亏 REAL,
-            市值 REAL
+            平均成本 REAL,
+            当前价格 REAL,
+            盈亏 REAL
         )
-    """)
+    ''')
     
-    # 系统参数表
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS 系统参数 (
-            参数名 TEXT PRIMARY KEY,
-            参数值 TEXT,
-            更新时间 TEXT
+    # AI决策历史表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS AI决策历史 (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            时间 TEXT,
+            品种 TEXT,
+            价格 REAL,
+            策略信号 TEXT,
+            AI信号 TEXT,
+            置信度 INTEGER,
+            理由 TEXT
         )
-    """)
+    ''')
     
     conn.commit()
     conn.close()
     print("✅ 数据库初始化完成")
+
+
+def 保存交易记录(交易):
+    """保存交易记录"""
+    try:
+        conn = 获取连接()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO 交易记录 (时间, 品种, 动作, 价格, 数量, 盈亏, 策略名称)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            交易.get("时间", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+            交易.get("品种", ""),
+            交易.get("动作", ""),
+            交易.get("价格", 0),
+            交易.get("数量", 0),
+            交易.get("盈亏", 0),
+            交易.get("策略名称", "")
+        ))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"保存交易记录失败: {e}")
+        return False
+
+
+def 获取交易记录(限制数量=100):
+    """获取交易记录"""
+    try:
+        conn = 获取连接()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT 时间, 品种, 动作, 价格, 数量, 盈亏, 策略名称
+            FROM 交易记录
+            ORDER BY 时间 DESC
+            LIMIT ?
+        ''', (限制数量,))
+        rows = cursor.fetchall()
+        conn.close()
+        
+        记录 = []
+        for row in rows:
+            记录.append({
+                "时间": row[0],
+                "品种": row[1],
+                "动作": row[2],
+                "价格": row[3],
+                "数量": row[4],
+                "盈亏": row[5],
+                "策略名称": row[6]
+            })
+        return 记录
+    except Exception as e:
+        print(f"获取交易记录失败: {e}")
+        return []
+
+
+def 保存持仓快照(持仓):
+    """保存持仓快照"""
+    try:
+        conn = 获取连接()
+        cursor = conn.cursor()
+        当前时间 = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        for 品种, pos in 持仓.items():
+            cursor.execute('''
+                INSERT INTO 持仓快照 (时间, 品种, 数量, 平均成本, 当前价格, 盈亏)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (
+                当前时间,
+                品种,
+                getattr(pos, '数量', 0),
+                getattr(pos, '平均成本', 0),
+                getattr(pos, '当前价格', 0),
+                0
+            ))
+        
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"保存持仓快照失败: {e}")
+        return False
+
+
+def 加载持仓快照():
+    """加载最新的持仓快照"""
+    try:
+        conn = 获取连接()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT t1.品种, t1.数量, t1.平均成本
+            FROM 持仓快照 t1
+            INNER JOIN (
+                SELECT 品种, MAX(时间) as 最新时间
+                FROM 持仓快照
+                GROUP BY 品种
+            ) t2 ON t1.品种 = t2.品种 AND t1.时间 = t2.最新时间
+        ''')
+        rows = cursor.fetchall()
+        conn.close()
+        
+        持仓 = {}
+        for row in rows:
+            持仓[row[0]] = {
+                "数量": row[1],
+                "平均成本": row[2]
+            }
+        return 持仓
+    except Exception as e:
+        print(f"加载持仓快照失败: {e}")
+        return {}
+
 
 def 清空所有持仓():
     """清空所有持仓数据"""
     try:
         conn = 获取连接()
         cursor = conn.cursor()
-        
-        # 删除所有持仓
-        cursor.execute("DELETE FROM 持仓")
-        
-        # 删除所有资金曲线
-        cursor.execute("DELETE FROM 资金曲线")
-        
-        # 删除所有持仓历史
-        cursor.execute("DELETE FROM 持仓历史")
-        
+        cursor.execute("DELETE FROM 持仓快照")
         conn.commit()
         conn.close()
-        
         print("✅ 已清空所有持仓数据")
         return True
     except Exception as e:
-        print(f"清空持仓失败: {e}")
+        print(f"清空持仓数据失败: {e}")
         return False
 
-def 保存持仓(品种, 数量, 平均成本, 已实现盈亏=0):
-    try:
-        conn = 获取连接()
-        cursor = conn.cursor()
-        更新时间 = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        cursor.execute("""
-            INSERT OR REPLACE INTO 持仓 (品种, 数量, 平均成本, 已实现盈亏, 更新时间)
-            VALUES (?, ?, ?, ?, ?)
-        """, (品种, 数量, 平均成本, 已实现盈亏, 更新时间))
-        conn.commit()
-        conn.close()
-        print(f"💾 保存持仓: {品种}, 数量={数量}, 成本={平均成本}")
-        return True
-    except Exception as e:
-        print(f"保存持仓失败: {e}")
-        return False
-
-def 删除持仓(品种):
-    try:
-        conn = 获取连接()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM 持仓 WHERE 品种 = ?", (品种,))
-        conn.commit()
-        conn.close()
-        print(f"🗑️ 删除持仓: {品种}")
-        return True
-    except Exception as e:
-        print(f"删除持仓失败: {e}")
-        return False
-
-def 获取所有持仓():
-    """从数据库加载所有持仓"""
-    try:
-        conn = 获取连接()
-        df = pd.read_sql_query("SELECT * FROM 持仓", conn)
-        conn.close()
-        
-        print(f"📂 数据库查询到 {len(df)} 条持仓记录")
-        
-        持仓字典 = {}
-        for _, row in df.iterrows():
-            持仓字典[row['品种']] = {
-                '数量': row['数量'],
-                '平均成本': row['平均成本'],
-                '已实现盈亏': row['已实现盈亏']
-            }
-            print(f"   品种: {row['品种']}, 数量={row['数量']}, 成本={row['平均成本']}")
-        
-        return 持仓字典
-    except Exception as e:
-        print(f"获取持仓失败: {e}")
-        return {}
-
-def 保存交易记录(动作, 品种, 价格, 数量, 盈亏=0, 策略名称=""):
-    try:
-        conn = 获取连接()
-        cursor = conn.cursor()
-        时间 = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        cursor.execute("""
-            INSERT INTO 交易记录 (时间, 动作, 品种, 价格, 数量, 盈亏, 策略名称)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (时间, 动作, 品种, 价格, 数量, 盈亏, 策略名称))
-        conn.commit()
-        conn.close()
-        print(f"📝 保存交易记录: {动作} {品种} {数量}股 @ {价格}")
-        return True
-    except Exception as e:
-        print(f"保存交易记录失败: {e}")
-        return False
-
-def 获取交易记录(限制数量=100):
-    try:
-        conn = 获取连接()
-        query = f"SELECT * FROM 交易记录 ORDER BY 时间 DESC LIMIT {限制数量}"
-        df = pd.read_sql_query(query, conn)
-        conn.close()
-        return df
-    except:
-        return pd.DataFrame()
-
-def 保存资金快照(总资产, 总盈亏, 持仓市值, 可用资金):
-    try:
-        conn = 获取连接()
-        cursor = conn.cursor()
-        日期 = datetime.now().strftime("%Y-%m-%d")
-        cursor.execute("""
-            INSERT OR REPLACE INTO 资金曲线 (日期, 总资产, 总盈亏, 持仓市值, 可用资金)
-            VALUES (?, ?, ?, ?, ?)
-        """, (日期, 总资产, 总盈亏, 持仓市值, 可用资金))
-        conn.commit()
-        conn.close()
-        return True
-    except:
-        return False
-
-def 获取资金曲线(天数=90):
-    try:
-        conn = 获取连接()
-        query = f"SELECT * FROM 资金曲线 ORDER BY 日期 DESC LIMIT {天数}"
-        df = pd.read_sql_query(query, conn)
-        conn.close()
-        return df.sort_values('日期')
-    except:
-        return pd.DataFrame()
-
-def 保存系统参数(参数名, 参数值):
-    try:
-        conn = 获取连接()
-        cursor = conn.cursor()
-        更新时间 = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        cursor.execute("""
-            INSERT OR REPLACE INTO 系统参数 (参数名, 参数值, 更新时间)
-            VALUES (?, ?, ?)
-        """, (参数名, json.dumps(参数值), 更新时间))
-        conn.commit()
-        conn.close()
-        return True
-    except:
-        return False
-
-def 获取系统参数(参数名):
-    try:
-        conn = 获取连接()
-        cursor = conn.cursor()
-        cursor.execute("SELECT 参数值 FROM 系统参数 WHERE 参数名 = ?", (参数名,))
-        row = cursor.fetchone()
-        conn.close()
-        if row:
-            return json.loads(row[0])
-        return None
-    except:
-        return None
 
 def 获取当前时间():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+# 测试入口
+if __name__ == "__main__":
+    初始化数据库()
+    print("数据库模块测试完成")
