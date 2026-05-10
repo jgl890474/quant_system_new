@@ -204,26 +204,6 @@ with st.sidebar:
         if hasattr(风控, '移动止损开关'):
             st.caption(f"移动止损: {'开启' if 风控.移动止损开关 else '关闭'} | 回撤: {风控.移动止损回撤*100:.0f}%")
     
-    # 注意：自动风控自动执行可能会导致意外平仓，默认关闭
-    # 如需开启，请取消下方代码注释
-    """
-    if 自动风控 and hasattr(风控, '监控持仓'):
-        try:
-            触发 = 风控.监控持仓(引擎)
-            if 触发:
-                st.markdown("### ⚠️ 风控警报")
-                for t in 触发:
-                    st.warning(f"{t['品种']}: {t['类型']} 触发 (盈亏率: {t['盈亏率']*100:.2f}%)")
-                if hasattr(风控, '执行自动平仓'):
-                    平仓记录 = 风控.执行自动平仓(引擎)
-                    if 平仓记录:
-                        for r in 平仓记录:
-                            st.error(f"✅ 已自动平仓 {r['品种']} ({r['类型']})")
-                        st.rerun()
-        except:
-            pass
-    """
-    
     st.markdown("---")
     st.caption(f"当前时间: {数据库.获取当前时间()}")
 
@@ -233,15 +213,104 @@ with st.sidebar:
 def 创建默认显示(模块名):
     def 默认显示(*args, **kwargs):
         st.info(f"⚠️ 模块 '{模块名}' 尚未配置")
-        st.markdown(f"""
-        ### 📌 使用说明
-        请创建 `前端/{模块名}.py` 文件，并实现 `显示()` 函数。
-        
-        **示例代码：**
-        ```python
-        # -*- coding: utf-8 -*-
-        import streamlit as st
-        
-        def 显示(引擎=None, 策略加载器=None, AI引擎=None):
-            st.subheader("{模块名}")
-            st.info("功能开发中...")
+        st.markdown("### 📌 使用说明")
+        st.markdown(f"请创建 `前端/{模块名}.py` 文件，并实现 `显示()` 函数。")
+        st.markdown("**示例代码：**")
+        st.code(f"""
+# -*- coding: utf-8 -*-
+import streamlit as st
+
+def 显示(引擎=None, 策略加载器=None, AI引擎=None):
+    st.subheader("{模块名}")
+    st.info("功能开发中...")
+        """, language="python")
+    return 默认显示
+
+# 安全获取前端模块的显示函数
+def 安全获取显示函数(模块, 模块名):
+    if hasattr(模块, '显示'):
+        return 模块.显示
+    else:
+        return 创建默认显示(模块名)
+
+# ========== Tab ==========
+tabs = st.tabs(["🏠 首页", "📊 策略中心", "🤖 AI交易", "💼 持仓管理", "💰 资金曲线", "📈 回测", "📋 交易记录"])
+
+# 获取各模块的显示函数
+首页显示 = 安全获取显示函数(首页, "首页")
+策略中心显示 = 安全获取显示函数(策略中心, "策略中心")
+AI交易显示 = 安全获取显示函数(AI交易, "AI交易")
+持仓管理显示 = 安全获取显示函数(持仓管理, "持仓管理")
+资金曲线显示 = 安全获取显示函数(资金曲线, "资金曲线")
+回测显示 = 安全获取显示函数(回测, "回测")
+交易记录显示 = 安全获取显示函数(交易记录, "交易记录")
+
+with tabs[0]:
+    try:
+        首页显示(引擎, 策略加载器, AI引擎)
+    except TypeError:
+        try:
+            首页显示(引擎, 策略加载器)
+        except TypeError:
+            try:
+                首页显示(引擎)
+            except:
+                首页显示()
+
+with tabs[1]:
+    try:
+        策略中心显示(引擎, 策略加载器, 策略信号)
+    except TypeError:
+        try:
+            策略中心显示(引擎, 策略加载器)
+        except TypeError:
+            try:
+                策略中心显示(引擎)
+            except:
+                策略中心显示()
+
+with tabs[2]:
+    try:
+        AI交易显示(引擎, 策略加载器, AI引擎)
+    except TypeError:
+        try:
+            AI交易显示(引擎, 策略加载器)
+        except TypeError:
+            try:
+                AI交易显示(引擎)
+            except:
+                AI交易显示()
+
+with tabs[3]:
+    try:
+        持仓管理显示(引擎, 策略加载器, AI引擎)
+    except TypeError:
+        try:
+            持仓管理显示(引擎, 策略加载器)
+        except TypeError:
+            try:
+                持仓管理显示(引擎)
+            except:
+                持仓管理显示()
+
+with tabs[4]:
+    try:
+        资金曲线显示(引擎)
+    except TypeError:
+        资金曲线显示()
+
+with tabs[5]:
+    try:
+        回测显示(引擎)
+    except TypeError:
+        回测显示()
+
+with tabs[6]:
+    try:
+        交易记录显示()
+    except TypeError:
+        交易记录显示(引擎)
+
+# ========== 页脚 ==========
+st.markdown("---")
+st.caption("⚠️ 风险提示：量化交易存在风险，历史回测结果不代表未来收益。请理性投资，注意风险控制。")
