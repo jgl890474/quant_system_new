@@ -119,7 +119,6 @@ def 显示(引擎):
                 # 获取实时价格（带容错）
                 价格结果 = 行情获取.获取价格(品种)
                 
-                # 兼容不同的返回格式
                 if hasattr(价格结果, '价格'):
                     现价 = float(价格结果.价格)
                 elif hasattr(价格结果, 'price'):
@@ -130,8 +129,6 @@ def 显示(引擎):
                     现价 = float(pos.平均成本)
                 
                 成本价 = float(pos.平均成本)
-                
-                # 计算盈亏
                 盈亏 = (现价 - 成本价) * pos.数量
                 盈亏率 = (现价 / 成本价 - 1) * 100 if 成本价 > 0 else 0
                 
@@ -245,7 +242,7 @@ def 显示(引擎):
         if 持仓数据:
             col_a, col_b = st.columns(2)
             
-            # ========== 盈亏柱状图 ==========
+            # ========== 盈亏柱状图（修复版：显示盈亏，不是市值） ==========
             with col_a:
                 st.markdown("#### 盈亏柱状图")
                 df_bar = pd.DataFrame(持仓数据)
@@ -257,7 +254,7 @@ def 显示(引擎):
                 fig_bar = go.Figure()
                 fig_bar.add_trace(go.Bar(
                     x=df_bar['品种'],
-                    y=df_bar['盈亏'],
+                    y=df_bar['盈亏'],  # ✅ 修复：y轴用盈亏，不是市值
                     marker_color=盈亏颜色,
                     text=df_bar['盈亏'].apply(lambda x: f"¥{x:+,.0f}"),
                     textposition='outside'
@@ -277,7 +274,7 @@ def 显示(引擎):
                 )
                 st.plotly_chart(fig_bar, use_container_width=True)
             
-            # ========== 持仓市值条形图 ==========
+            # ========== 持仓市值条形图（保持不变） ==========
             with col_b:
                 st.markdown("#### 持仓市值条形图")
                 df_bar_h = pd.DataFrame(持仓数据)
