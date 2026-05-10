@@ -18,66 +18,35 @@ except ImportError:
 def 显示(引擎=None):
     """
     显示回测页面 - 动态净值曲线 + 动态回撤曲线
+    股票仅从当前持仓中选择
     """
     st.subheader("📈 动态回测系统")
 
-    # ==================== 获取可选股票列表 ====================
+    # ==================== 仅从当前持仓获取股票列表 ====================
     可选股票 = []
 
-    # 1. 从当前持仓中获取
+    # 从当前持仓中获取
     if 引擎 and hasattr(引擎, '持仓') and 引擎.持仓:
         for 代码 in 引擎.持仓.keys():
-            if 代码 and not 代码.startswith(('AAPL', 'GOOG', 'MSFT')):
+            if 代码:
                 可选股票.append({"代码": 代码, "名称": f"{代码} (持仓)", "来源": "持仓"})
 
-    # 2. 从策略库获取（如果存在）
-    try:
-        from 核心.策略加载器 import 策略加载器
-        策略器 = 策略加载器()
-        策略股票 = 策略器.获取策略股票列表() if hasattr(策略器, '获取策略股票列表') else []
-        for 股票 in 策略股票:
-            if isinstance(股票, dict):
-                代码 = 股票.get('代码', '')
-                名称 = 股票.get('名称', 代码)
-            else:
-                代码 = str(股票)
-                名称 = 代码
-            if 代码 and 代码 not in [s["代码"] for s in 可选股票] and not 代码.startswith(('AAPL', 'GOOG', 'MSFT')):
-                可选股票.append({"代码": 代码, "名称": f"{代码} ({名称})", "来源": "策略库"})
-    except Exception:
-        pass
-
-    # 3. 常用A股备选
-    常用股票 = [
-        {"代码": "000001", "名称": "平安银行"},
-        {"代码": "000002", "名称": "万科A"},
-        {"代码": "000858", "名称": "五粮液"},
-        {"代码": "002415", "名称": "海康威视"},
-        {"代码": "300750", "名称": "宁德时代"},
-        {"代码": "600036", "名称": "招商银行"},
-        {"代码": "600519", "名称": "贵州茅台"},
-        {"代码": "601318", "名称": "中国平安"},
-        {"代码": "601398", "名称": "工商银行"},
-        {"代码": "601857", "名称": "中国石油"},
-    ]
-
-    for 股票 in 常用股票:
-        if 股票["代码"] not in [s["代码"] for s in 可选股票]:
-            可选股票.append({"代码": 股票["代码"], "名称": f"{股票['代码']} ({股票['名称']})", "来源": "常用"})
-
+    # 如果没有任何持仓，显示提示并返回
     if not 可选股票:
-        可选股票 = [{"代码": "000001", "名称": "000001 (平安银行)", "来源": "默认"}]
+        st.warning("⚠️ 当前没有持仓股票，请先进行交易获得持仓后再使用回测功能")
+        st.info("💡 提示：您可以在「AI交易」或「策略中心」中进行交易，产生持仓后即可在此处回测")
+        return
 
     # ==================== 侧边栏参数设置 ====================
     with st.sidebar:
         st.markdown("### ⚙️ 回测参数")
 
+        # 股票代码选择（仅持仓股票）
         股票选项 = {f"{s['名称']}": s["代码"] for s in 可选股票}
         股票显示名称 = list(股票选项.keys())
-        选中股票显示 = st.selectbox("选择股票", 股票显示名称, help="从持仓、策略库或常用A股中选择")
-        股票代码 = 股票选项.get(选中股票显示, "000001")
-        股票来源 = next((s["来源"] for s in 可选股票 if s["代码"] == 股票代码), "未知")
-        st.caption(f"📌 股票来源: {股票来源}")
+        选中股票显示 = st.selectbox("选择持仓股票", 股票显示名称, help="从当前持仓中选择要回测的股票")
+        股票代码 = 股票选项.get(选中股票显示, 可选股票[0]["代码"] if 可选股票 else "")
+        st.caption(f"📌 当前持仓: {len(可选股票)} 只股票")
 
         开始日期 = st.date_input("开始日期", value=datetime.date(2023, 1, 1))
         结束日期 = st.date_input("结束日期", value=datetime.date.today())
@@ -99,17 +68,20 @@ def 显示(引擎=None):
         st.markdown("---")
         运行按钮 = st.button("🚀 开始回测", type="primary", use_container_width=True)
 
+    # 显示当前持仓股票信息
+    col1, col2 = st.columns(2)
+    with col1:
+        st.info(f"💼 当前持仓股票: {', '.join([s['代码'] for s in 可选股票])}")
+    with col2:
+        st.info(f"📊 可选回测股票: {len(可选股票)} 只")
+
     if not 运行按钮:
-        st.info("👈 请在左侧选择股票并设置参数，然后点击「开始回测」")
+        st.info("👈 请在左侧选择持仓股票并设置参数，然后点击「开始回测」")
 
         with st.expander("📈 示例：动态净值曲线 + 动态回撤曲线（点击展开）"):
-            # 生成示例数据
             dates = pd.date_range("2023-01-01", periods=100, freq='ME')
-            # 使用 pandas Series 来避免 numpy 数组问题
             nav_series = pd.Series(np.random.randn(100).cumsum() + 100, index=dates)
             nav = 1000000 * (1 + nav_series / 100)
-
-            # 计算回撤（使用 pandas 方法）
             peak = nav.cummax()
             drawdown = ((nav - peak) / peak * 100).fillna(0)
 
@@ -142,7 +114,7 @@ def 显示(引擎=None):
             fig.update_yaxes(title_text="回撤 (%)", row=2, col=1, tickformat='.1f')
 
             st.plotly_chart(fig, use_container_width=True)
-            st.caption("注：此为演示数据，实际回测请选择股票并点击「开始回测」")
+            st.caption("注：此为演示数据，实际回测请选择持仓股票并点击「开始回测」")
         return
 
     # ==================== 执行回测 ====================
@@ -152,7 +124,7 @@ def 显示(引擎=None):
 
             if df is None or df.empty:
                 st.error(f"❌ 无法获取股票 {股票代码} 的历史数据")
-                st.info("请尝试以下方法：\n1. 检查股票代码是否正确（A股6位数字）\n2. 选择其他股票\n3. 检查网络连接")
+                st.info("请尝试以下方法：\n1. 检查股票代码是否正确\n2. 选择其他持仓股票\n3. 检查网络连接")
                 return
 
             st.success(f"✅ 成功获取 {len(df)} 条历史数据")
@@ -179,9 +151,6 @@ def 显示(引擎=None):
 def 获取股票历史数据(股票代码, 开始日期, 结束日期):
     """获取A股历史日线数据"""
     代码 = str(股票代码).strip().zfill(6)
-
-    if 代码.startswith(('AAPL', 'GOOG', 'MSFT', 'TSLA', 'AMZN')):
-        return None
 
     if AKSHARE_AVAILABLE:
         try:
@@ -362,13 +331,10 @@ def 执行持仓回测(df, 初始资金, 手续费率, 止盈率, 止损率):
 
 def 计算回撤(回测结果):
     """计算动态回撤"""
-    # 转换为 pandas Series 以便使用 expanding 和 cummax
     净值列表 = 回测结果['每日净值']
     净值序列 = pd.Series(净值列表)
 
-    # 计算历史高点
     历史高点 = 净值序列.cummax()
-    # 计算回撤
     回撤序列 = ((净值序列 - 历史高点) / 历史高点 * 100).fillna(0)
 
     回测结果['回撤'] = 回撤序列.tolist()
@@ -385,7 +351,6 @@ def 绘制动态净值曲线(df, 回测结果, 股票代码):
     回撤 = 回测结果['回撤']
     历史高点 = 回测结果['历史高点']
 
-    # 基准净值
     基准净值 = 回测结果['初始资金'] * df['收盘'] / df['收盘'].iloc[0]
     基准净值 = 基准净值.tolist()
 
@@ -489,7 +454,8 @@ def 绘制动态净值曲线(df, 回测结果, 股票代码):
 
     # 最大回撤标记
     最大回撤值 = 回测结果['最大回撤']
-    最大回撤索引 = 回撤.index(min(回撤)) if 回撤 else 0
+    回撤列表 = 回测结果['回撤']
+    最大回撤索引 = 回撤列表.index(min(回撤列表)) if 回撤列表 else 0
     if 最大回撤索引 < len(dates):
         fig.add_annotation(
             x=dates[最大回撤索引],
