@@ -108,7 +108,7 @@ def 获取交易记录(限制数量=100):
                 "价格": row[3],
                 "数量": row[4],
                 "盈亏": row[5],
-                "策略名称": row[6]
+                "策略名称": row[6] if row[6] else ""
             })
         return 记录
     except Exception as e:
@@ -124,7 +124,6 @@ def 保存持仓快照(持仓):
         当前时间 = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         for 品种, pos in 持仓.items():
-            # 兼容持仓数据对象和字典两种格式
             if hasattr(pos, '数量'):
                 number = pos.数量
                 avg_cost = pos.平均成本
