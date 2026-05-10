@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import requests
+import yfinance as yf
 
 
 class 行情数据:
@@ -25,13 +26,12 @@ def 获取价格(品种代码):
     if 品种代码 == "EURUSD":
         return 获取_外汇价格("EUR", "USD")
     
-    # 黄金期货 -> 使用 Gold-API
+    # 黄金期货 -> 使用 yfinance
     if 品种代码 == "GC=F":
         return 获取_黄金价格()
     
-    # 美股 -> 使用 Alpha Vantage（需注册）或 币安（如果有）
-    # 临时：返回演示数据，但用成本价显示
-    return 获取_演示价格(品种代码)
+    # 美股 -> 使用 yfinance 或演示数据
+    return 获取_美股价格(品种代码)
 
 
 def 获取_币安价格(symbol):
@@ -45,7 +45,9 @@ def 获取_币安价格(symbol):
         return 行情数据(symbol, price, price, price, price, 0)
     except Exception as e:
         print(f"币安获取失败 {symbol}: {e}")
-        return 行情数据(symbol, 45000, 45000, 45000, 45000, 0)  # BTC 默认 45000
+        # 降级：返回默认价格
+        default_price = 45000 if symbol == "BTCUSDT" else 2300
+        return 行情数据(symbol, default_price, default_price, default_price, default_price, 0)
 
 
 def 获取_外汇价格(from_currency, to_currency):
@@ -63,21 +65,35 @@ def 获取_外汇价格(from_currency, to_currency):
 
 
 def 获取_黄金价格():
-    """黄金价格"""
+    """黄金价格 - 使用 yfinance"""
     try:
-        url = "https://api.gold-api.com/price/XAU"
-        r = requests.get(url, timeout=10)
-        data = r.json()
-        price = float(data['price'])
-        print(f"[黄金] GC=F: ${price}")
-        return 行情数据("GC=F", price, price, price, price, 0)
+        ticker = yf.Ticker("GC=F")
+        data = ticker.history(period="1d")
+        if not data.empty:
+            price = float(data['Close'].iloc[-1])
+            print(f"[yfinance黄金] GC=F: ${price}")
+            return 行情数据("GC=F", price, price, price, price, 0)
+        else:
+            print(f"[yfinance黄金] GC=F 无数据")
+            return 行情数据("GC=F", 1950.00, 1950.00, 1950.00, 1950.00, 0)
     except Exception as e:
         print(f"黄金获取失败: {e}")
-        return 行情数据("GC=F", 1950, 1950, 1950, 1950, 0)
+        return 行情数据("GC=F", 1950.00, 1950.00, 1950.00, 1950.00, 0)
 
 
-def 获取_演示价格(品种代码):
-    """美股演示数据（使用接近真实的价格）"""
+def 获取_美股价格(symbol):
+    """美股价格 - 先尝试 yfinance，失败则用演示数据"""
+    try:
+        ticker = yf.Ticker(symbol)
+        data = ticker.history(period="1d")
+        if not data.empty:
+            price = float(data['Close'].iloc[-1])
+            print(f"[yfinance美股] {symbol}: ${price}")
+            return 行情数据(symbol, price, price, price, price, 0)
+    except Exception as e:
+        print(f"yfinance美股获取失败 {symbol}: {e}")
+    
+    # 降级：演示数据（接近真实价格）
     价格表 = {
         "AAPL": 175.00,
         "TSLA": 170.00,
@@ -85,6 +101,6 @@ def 获取_演示价格(品种代码):
         "MSFT": 330.00,
         "GOOGL": 130.00,
     }
-    price = 价格表.get(品种代码, 100)
-    print(f"[演示] {品种代码}: ${price}")
-    return 行情数据(品种代码, price, price, price, price, 0)
+    price = 价格表.get(symbol, 100)
+    print(f"[演示] {symbol}: ${price}")
+    return 行情数据(symbol, price, price, price, price, 0)
