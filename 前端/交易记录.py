@@ -1,64 +1,86 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
-from 工具 import 数据库
+from 工具.数据库 import 获取交易记录
+
 
 def 显示():
-    st.markdown("### 📜 交易记录")
-
-    df = 数据库.获取交易记录(200)
-
-    if df.empty:
-        st.info("暂无交易记录")
-        return
-
-    # ✅ 确保有数据才处理
-    if "时间" not in df.columns:
-        st.info("交易记录表结构异常")
-        return
-
-    # ✅ 安全处理时间格式
-    try:
-        df["交易时间"] = pd.to_datetime(df["时间"], errors='coerce').dt.strftime("%Y-%m-%d %H:%M:%S")
-    except:
-        df["交易时间"] = df["时间"].astype(str)
-
-    # 填补空值
-    df["盈亏"] = df["盈亏"].fillna(0)
-    df["价格"] = df["价格"].fillna(0)
-    df["数量"] = df["数量"].fillna(0)
-
-    # 计算盈亏率（仅卖出）
-    df["盈亏率"] = df.apply(
-        lambda row: f"{row['盈亏'] / (row['价格'] * row['数量'] + 0.01) * 100:.2f}%"
-        if row["动作"] == "卖出" and row["价格"] > 0 and row["数量"] > 0 else "",
-        axis=1
-    )
-
-    # 手续费暂为0（可预留）
-    df["手续费"] = 0
-
-    # 选择显示列（使用安全列名）
-    show_columns = ["id", "交易时间", "品种", "动作", "数量", "价格", "手续费", "盈亏", "盈亏率", "策略名称"]
+    """显示交易记录页面"""
+    st.subheader("📋 交易记录")
     
-    # 只保留存在的列
-    show_columns = [col for col in show_columns if col in df.columns]
-
-    display_df = df[show_columns].rename(columns={
-        "id": "交易ID",
-        "动作": "交易类型",
-        "价格": "成交价格",
-        "盈亏": "盈亏金额",
-        "策略名称": "策略来源"
-    })
-
-    st.dataframe(display_df, use_container_width=True, hide_index=True)
-
-    # 导出 CSV
-    csv = df.to_csv(index=False)
-    st.download_button(
-        label="📥 导出交易记录 CSV",
-        data=csv,
-        file_name="交易记录.csv",
-        mime="text/csv"
-    )
+    try:
+        # 获取交易记录
+        记录 = 获取交易记录(限制数量=200)
+        
+        if not 记录 or len(记录) == 0:
+            st.info("暂无交易记录")
+            return
+        
+        # 转换为 DataFrame
+        df = pd.DataFrame(记录)
+        
+        # 检查 DataFrame 是否为空
+        if df.empty:
+            st.info("暂无交易记录")
+            return
+        
+        # 显示表格
+        st.dataframe(
+            df, 
+            use_container_width=True, 
+            hide_index=True,
+            column_config={
+                "时间": st.column_config.TextColumn("时间", width="small"),
+                "品种": st.column_config.TextColumn("品种", width="small"),
+                "动作": st.column_config.TextColumn("动作", width="small"),
+                "价格": st.column_config.NumberColumn("价格", format="%.2f"),
+                "数量": st.column_config.NumberColumn("数量", format="%.0f"),
+                "盈亏": st.column_config.NumberColumn("盈亏", format="%.2f"),
+                "策略名称": st.column_config.TextColumn("策略名称", width="medium"),
+            }
+        )
+        
+        # 统计信息
+        col1, col2, col3 = st.columns(3)
+        
+        # 买入卖出统计
+        买入次数 = len(df[df["动作"] == "买入"]) if "动作" in df.columns else 0
+        卖出次数 = len(df[df["动作"] == "卖出"]) if "动作" in df.columns else 0
+        
+        # 总盈亏
+        if "盈亏" in df.columns:
+            总盈亏 = df["盈亏"].sum()
+            盈利次数 = len(df[df["盈亏"] > 0]) if "盈亏" in df.columns else 0
+            亏损次数 = len(df[df["盈亏"] < 0]) if "盈亏" in df.columns else 0
+        else:
+            总盈亏 = 0
+            盈利次数 = 0
+            亏损次数 = 0
+        
+        col1.metric("总交易次数", len(df))
+        col2.metric("买入/卖出", f"{买入次数} / {卖出次数}")
+        col3.metric("总盈亏", f"¥{总盈亏:,.2f}", 
+                    delta=f"盈利{盈利次数}次 / 亏损{亏损次数}次" if 盈利次数 + 亏损次数 > 0 else None)
+        
+        # 盈亏分布图
+        if "盈亏" in df.columns and len(df[df["盈亏"] != 0]) > 0:
+            st.subheader("📊 盈亏分布")
+            
+            # 筛选出有盈亏的交易（卖出）
+            盈亏数据 = df[df["盈亏"] != 0].copy()
+            if not 盈亏数据.empty:
+                # 按时间排序
+                盈亏数据 = 盈亏数据.sort_values("时间")
+                盈亏数据["累计盈亏"] = 盈亏数据["盈亏"].cumsum()
+                
+                tab1, tab2 = st.tabs(["盈亏柱状图", "累计盈亏曲线"])
+                
+                with tab1:
+                    st.bar_chart(盈亏数据.set_index("时间")["盈亏"])
+                
+                with tab2:
+                    st.line_chart(盈亏数据.set_index("时间")["累计盈亏"])
+        
+    except Exception as e:
+        st.error(f"加载交易记录失败: {e}")
+        st.info("请确保数据库已正确初始化")
