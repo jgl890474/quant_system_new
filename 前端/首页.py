@@ -2,6 +2,19 @@
 import streamlit as st
 import os
 from 核心 import 行情获取
+import concurrent.futures
+
+# ----------------------------------------------------------------------
+# 辅助函数：带超时的价格获取，防止卡死页面
+# ----------------------------------------------------------------------
+def 获取价格带超时(品种, 超时秒=2):
+    """尝试在指定秒数内获取价格，超时则返回 None"""
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(lambda: 行情获取.获取价格(品种).价格)
+            return future.result(timeout=超时秒)
+    except Exception:
+        return None
 
 def 显示(引擎):
     # 计算资金指标
@@ -31,8 +44,12 @@ def 显示(引擎):
     for i, 品种 in enumerate(行情品种):
         with 行情列[i]:
             try:
-                价格 = 行情获取.获取价格(品种).价格
-                st.metric(品种, f"${价格:.2f}")
+                # ----- 唯一修改的地方：使用带超时的获取方式，防止卡死 -----
+                价格 = 获取价格带超时(品种)
+                if 价格 is not None:
+                    st.metric(品种, f"${价格:.2f}")
+                else:
+                    st.metric(品种, "—")
             except:
                 st.metric(品种, "—")
     
@@ -59,12 +76,14 @@ def 显示(引擎):
         # 使用独立的 key 避免冲突
         买入品种 = st.selectbox("选择品种", 可买品种列表, key="buy_symbol_select")
         
-        # 获取当前价格显示
+        # 获取当前价格显示（同样使用带超时的方法）
         try:
-            当前买入价 = 行情获取.获取价格(买入品种).价格
-            st.caption(f"当前价格: ${当前买入价:.4f}")
+            当前买入价 = 获取价格带超时(买入品种)
+            if 当前买入价 is not None:
+                st.caption(f"当前价格: ${当前买入价:.4f}")
+            else:
+                st.caption("当前价格: —")
         except:
-            当前买入价 = 0
             st.caption("获取价格失败")
         
         # 根据品种类型显示不同的单位
@@ -93,23 +112,24 @@ def 显示(引擎):
             key="buy_qty_input"
         )
         
-        # 计算预计花费
-        if 买入品种 == "000001.SS":
-            实际股数 = 买入数量 * 100
-            预计花费 = 当前买入价 * 实际股数
-            st.caption(f"预计花费: ¥{预计花费:,.0f} (实际股数: {实际股数}股)")
-        elif 买入品种 == "EURUSD":
-            实际单位 = 买入数量 * 10000
-            预计花费 = 当前买入价 * 实际单位
-            st.caption(f"预计花费: ¥{预计花费:,.0f} (实际单位: {实际单位})")
-        else:
-            预计花费 = 当前买入价 * 买入数量
-            st.caption(f"预计花费: ¥{预计花费:,.0f}")
+        # 计算预计花费（如果价格获取成功）
+        if 当前买入价 is not None:
+            if 买入品种 == "000001.SS":
+                实际股数 = 买入数量 * 100
+                预计花费 = 当前买入价 * 实际股数
+                st.caption(f"预计花费: ¥{预计花费:,.0f} (实际股数: {实际股数}股)")
+            elif 买入品种 == "EURUSD":
+                实际单位 = 买入数量 * 10000
+                预计花费 = 当前买入价 * 实际单位
+                st.caption(f"预计花费: ¥{预计花费:,.0f} (实际单位: {实际单位})")
+            else:
+                预计花费 = 当前买入价 * 买入数量
+                st.caption(f"预计花费: ¥{预计花费:,.0f}")
         
         # 使用独立的按钮 key
         if st.button("买入", type="primary", use_container_width=True, key="buy_button"):
             try:
-                价格 = 行情获取.获取价格(买入品种).价格
+                价格 = 行情获取.获取价格(买入品种).price  # 实际下单时用真实价格
                 st.info(f"正在买入: {买入品种} {买入数量}手 @ {价格:.4f}")
                 引擎.买入(买入品种, 价格, 买入数量)
                 st.rerun()
@@ -138,10 +158,13 @@ def 显示(引擎):
             st.caption(f"持仓成本: ${引擎.持仓[卖品种].平均成本:.4f}")
             
             try:
-                当前卖出价 = 行情获取.获取价格(卖品种).价格
-                st.caption(f"当前价格: ${当前卖出价:.4f}")
+                当前卖出价 = 获取价格带超时(卖品种)
+                if 当前卖出价 is not None:
+                    st.caption(f"当前价格: ${当前卖出价:.4f}")
+                else:
+                    st.caption("当前价格: —")
             except:
-                当前卖出价 = 0
+                st.caption("获取价格失败")
             
             卖出数量 = st.number_input(
                 "数量", 
@@ -152,12 +175,13 @@ def 显示(引擎):
                 key="sell_qty_input"
             )
             
-            预计收入 = 当前卖出价 * 卖出数量
-            st.caption(f"预计收入: ¥{预计收入:,.0f}")
+            if 当前卖出价 is not None:
+                预计收入 = 当前卖出价 * 卖出数量
+                st.caption(f"预计收入: ¥{预计收入:,.0f}")
             
             if st.button("卖出", use_container_width=True, key="sell_button"):
                 try:
-                    价格 = 行情获取.获取价格(卖品种).价格
+                    价格 = 行情获取.获取价格(卖品种).price
                     引擎.卖出(卖品种, 价格, 卖出数量)
                     st.rerun()
                 except Exception as e:
@@ -166,4 +190,4 @@ def 显示(引擎):
             st.info("暂无持仓")
             st.selectbox("选择持仓品种", ["无持仓"], disabled=True, key="sell_symbol_disabled")
             st.number_input("数量", min_value=1, value=100, disabled=True, key="sell_qty_disabled")
-            st.button("卖出", disabled=True, use_container_width=True, key="sell_button_disabled") 
+            st.button("卖出", disabled=True, use_container_width=True, key="sell_button_disabled")
