@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 import requests
-import yfinance as yf
-import time
 
 
 class 行情数据:
@@ -12,6 +10,10 @@ class 行情数据:
         self.最低 = float(最低) if 最低 else 0.0
         self.开盘 = float(开盘) if 开盘 else 0.0
         self.成交量 = int(成交量) if 成交量 else 0
+
+
+# Alpha Vantage API Key（免费注册获取）
+ALPHA_VANTAGE_KEY = "demo"  # 替换为您的实际 Key
 
 
 def 获取价格(品种代码):
@@ -27,11 +29,11 @@ def 获取价格(品种代码):
     if 品种代码 == "EURUSD":
         return 获取_外汇价格("EUR", "USD")
     
-    # 黄金期货 -> 使用 yfinance
+    # 黄金期货 -> Alpha Vantage
     if 品种代码 == "GC=F":
-        return 获取_黄金价格()
+        return 获取_期货价格("GC")
     
-    # 美股 -> 使用 yfinance
+    # 美股 -> Alpha Vantage
     return 获取_美股价格(品种代码)
 
 
@@ -64,36 +66,35 @@ def 获取_外汇价格(from_currency, to_currency):
         return 行情数据("EURUSD", 1.08, 1.08, 1.08, 1.08, 0)
 
 
-def 获取_黄金价格():
-    """黄金价格 - 使用 yfinance"""
+def 获取_期货价格(symbol):
+    """期货价格（Alpha Vantage）"""
     try:
-        ticker = yf.Ticker("GC=F")
-        data = ticker.history(period="1d")
-        if not data.empty:
-            price = float(data['Close'].iloc[-1])
-            print(f"[yfinance黄金] GC=F: ${price}")
+        url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey={ALPHA_VANTAGE_KEY}"
+        r = requests.get(url, timeout=10)
+        data = r.json()
+        if 'Global Quote' in data and data['Global Quote']:
+            price = float(data['Global Quote']['05. price'])
+            print(f"[Alpha Vantage期货] {symbol}: ${price}")
             return 行情数据("GC=F", price, price, price, price, 0)
     except Exception as e:
-        print(f"黄金获取失败: {e}")
+        print(f"期货获取失败: {e}")
     return 行情数据("GC=F", 1950.00, 1950.00, 1950.00, 1950.00, 0)
 
 
 def 获取_美股价格(symbol):
-    """美股价格 - 强制使用 yfinance"""
-    for i in range(3):  # 重试3次
-        try:
-            ticker = yf.Ticker(symbol)
-            data = ticker.history(period="2d")
-            if not data.empty:
-                price = float(data['Close'].iloc[-1])
-                print(f"[yfinance美股] {symbol}: ${price}")
-                return 行情数据(symbol, price, price, price, price, 0)
-            time.sleep(1)
-        except Exception as e:
-            print(f"yfinance尝试 {i+1}/3 失败 {symbol}: {e}")
-            time.sleep(1)
+    """美股价格（Alpha Vantage）"""
+    try:
+        url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey={ALPHA_VANTAGE_KEY}"
+        r = requests.get(url, timeout=10)
+        data = r.json()
+        if 'Global Quote' in data and data['Global Quote']:
+            price = float(data['Global Quote']['05. price'])
+            print(f"[Alpha Vantage] {symbol}: ${price}")
+            return 行情数据(symbol, price, price, price, price, 0)
+    except Exception as e:
+        print(f"美股获取失败 {symbol}: {e}")
     
-    # 最终降级：使用硬编码的真实价格（不是成本价）
+    # 降级：使用硬编码真实价格
     真实价格 = {
         "AAPL": 175.00,
         "TSLA": 170.00,
