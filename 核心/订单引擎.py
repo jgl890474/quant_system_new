@@ -1,13 +1,26 @@
 # -*- coding: utf-8 -*-
 import time
-from 工具.数据库 import 数据库
+import 工具.数据库 as 数据库
 from 核心.数据模型 import 持仓数据
 
 
 class 订单引擎:
-    def __init__(self, 初始资金=1000000):
-        self.初始资金 = 初始资金
-        self.可用资金 = 初始资金
+    def __init__(self, 初始资金=1000000, **kwargs):
+        """
+        初始化订单引擎
+        参数:
+            初始资金: 初始资金金额（默认100万）
+            **kwargs: 兼容其他参数（如 INITIAL_CAPITAL）
+        """
+        # 兼容英文参数名
+        if 'initial_capital' in kwargs:
+            self.初始资金 = kwargs['initial_capital']
+        elif 'INITIAL_CAPITAL' in kwargs:
+            self.初始资金 = kwargs['INITIAL_CAPITAL']
+        else:
+            self.初始资金 = 初始资金
+        
+        self.可用资金 = self.初始资金
         self.持仓市值 = 0
         self.总盈亏 = 0
         self.持仓 = {}
@@ -45,7 +58,7 @@ class 订单引擎:
             self._记录交易("买入", 品种, 价格, 数量)
             self._保存持仓()
             
-            return {"success": True, "message": f"成功买入 {品种} {数量} 股"}
+            return {"success": True, "message": f"成功买入 {品种} {数量} 股", "amount": 花费}
             
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -81,15 +94,19 @@ class 订单引擎:
             return {"success": False, "error": str(e)}
     
     def 获取总资产(self):
+        """获取总资产（可用资金 + 持仓市值）"""
         return self.可用资金 + self.持仓市值
     
     def 获取可用资金(self):
+        """获取可用资金"""
         return self.可用资金
     
     def 获取持仓市值(self):
+        """获取持仓市值"""
         return self.持仓市值
     
     def 获取总盈亏(self):
+        """获取总盈亏"""
         return self.总盈亏
     
     def 获取持仓(self):
@@ -100,14 +117,33 @@ class 订单引擎:
         """获取交易记录"""
         return self.交易记录
     
+    def 获取初始资金(self):
+        """获取初始资金"""
+        return self.初始资金
+    
     def 清空所有持仓(self):
         """清空所有持仓"""
         self.持仓 = {}
         self.可用资金 = self.初始资金
         self.持仓市值 = 0
         self.总盈亏 = 0
+        self.交易记录 = []
         数据库.清空所有持仓()
         print("✅ 已清空所有持仓")
+        return {"success": True, "message": "已清空所有持仓"}
+    
+    def 重置引擎(self, 初始资金=None):
+        """重置订单引擎"""
+        if 初始资金 is not None:
+            self.初始资金 = 初始资金
+        self.可用资金 = self.初始资金
+        self.持仓市值 = 0
+        self.总盈亏 = 0
+        self.持仓 = {}
+        self.交易记录 = []
+        self._保存持仓()
+        print("✅ 订单引擎已重置")
+        return {"success": True, "message": "引擎已重置"}
     
     def 更新持仓价格(self, 品种, 当前价格):
         """更新持仓的当前价格"""
@@ -140,5 +176,15 @@ class 订单引擎:
                     data.get("数量", 0), 
                     data.get("平均成本", 0)
                 )
+                # 更新持仓市值
+                self.持仓市值 += data.get("平均成本", 0) * data.get("数量", 0)
+                # 更新可用资金（减去持仓成本）
+                self.可用资金 -= data.get("平均成本", 0) * data.get("数量", 0)
         except Exception as e:
             print(f"恢复持仓失败: {e}")
+
+
+# 兼容性函数 - 供其他模块导入
+def 创建订单引擎(初始资金=1000000):
+    """创建订单引擎实例"""
+    return 订单引擎(初始资金=初始资金)
