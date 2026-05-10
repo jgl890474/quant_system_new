@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import sqlite3
 import os
-import json
 from datetime import datetime
 
 
@@ -18,7 +17,6 @@ def 初始化数据库():
     conn = 获取连接()
     cursor = conn.cursor()
     
-    # 交易记录表
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS 交易记录 (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -32,7 +30,6 @@ def 初始化数据库():
         )
     ''')
     
-    # 持仓快照表
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS 持仓快照 (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,7 +42,6 @@ def 初始化数据库():
         )
     ''')
     
-    # AI决策历史表
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS AI决策历史 (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -128,14 +124,22 @@ def 保存持仓快照(持仓):
         当前时间 = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         for 品种, pos in 持仓.items():
+            # 兼容持仓数据对象和字典两种格式
+            if hasattr(pos, '数量'):
+                number = pos.数量
+                avg_cost = pos.平均成本
+            else:
+                number = pos.get("数量", 0)
+                avg_cost = pos.get("平均成本", 0)
+                
             cursor.execute('''
                 INSERT INTO 持仓快照 (时间, 品种, 数量, 平均成本, 当前价格, 盈亏)
                 VALUES (?, ?, ?, ?, ?, ?)
             ''', (
                 当前时间,
                 品种,
-                pos.数量 if hasattr(pos, '数量') else pos.get("数量", 0),
-                pos.平均成本 if hasattr(pos, '平均成本') else pos.get("平均成本", 0),
+                number,
+                avg_cost,
                 0,
                 0
             ))
@@ -196,38 +200,32 @@ def 获取当前时间():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-# ==================== 新增：数据库类（兼容订单引擎的调用方式） ====================
+# ==================== 数据库类（兼容订单引擎的调用方式） ====================
 class 数据库:
     """数据库操作类 - 兼容订单引擎的调用方式"""
     
     @staticmethod
     def 保存交易记录(交易):
-        """保存交易记录"""
         return 保存交易记录(交易)
     
     @staticmethod
     def 保存持仓快照(持仓):
-        """保存持仓快照"""
         return 保存持仓快照(持仓)
     
     @staticmethod
     def 加载持仓快照():
-        """加载持仓快照"""
         return 加载持仓快照()
     
     @staticmethod
     def 获取交易记录(限制数量=100):
-        """获取交易记录"""
         return 获取交易记录(限制数量)
     
     @staticmethod
     def 清空所有持仓():
-        """清空所有持仓"""
         return 清空所有持仓()
     
     @staticmethod
     def 初始化数据库():
-        """初始化数据库"""
         return 初始化数据库()
 
 
