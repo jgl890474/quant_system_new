@@ -3,8 +3,10 @@ import streamlit as st
 import sys
 import os
 
+# 添加项目根目录到系统路径
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+# ========== 导入模块 ==========
 from 前端 import 首页, 策略中心, AI交易, 持仓管理, 资金曲线, 回测, 交易记录
 from 核心 import 订单引擎, 策略加载器, AI引擎
 
@@ -13,7 +15,6 @@ from 工具 import 数据库
 数据库.初始化数据库()
 
 # ========== 初始化 session_state ==========
-# 初始资金可根据需要修改（单位：元）
 INITIAL_CAPITAL = 1000000  # 100万
 
 if '订单引擎' not in st.session_state:
@@ -48,7 +49,12 @@ if '风控引擎' not in st.session_state:
 风控 = st.session_state.风控引擎
 
 # ========== 页面配置 ==========
-st.set_page_config(page_title="量化交易系统 v5.0", page_icon="📈", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(
+    page_title="量化交易系统 v5.0", 
+    page_icon="📈", 
+    layout="wide", 
+    initial_sidebar_state="expanded"
+)
 
 # ========== 紧凑样式 ==========
 st.markdown("""
@@ -93,13 +99,13 @@ with st.sidebar:
     st.markdown("### 🛠️ 系统工具")
     
     # 清空数据按钮
-    if st.button("🗑️ 清空所有持仓数据", use_container_width=True):
+    if st.button("🗑️ 清空所有持仓数据", width="stretch"):
         数据库.清空所有持仓()
         st.success("✅ 已清空")
         st.rerun()
     
     # 刷新策略列表按钮
-    if st.button("🔄 刷新策略列表", use_container_width=True):
+    if st.button("🔄 刷新策略列表", width="stretch"):
         try:
             from 核心.策略加载器 import 策略加载器 as 策略加载器类
             st.session_state.策略加载器 = 策略加载器类()
@@ -120,7 +126,7 @@ with st.sidebar:
         # 显示持仓明细
         for 品种, pos in 引擎.持仓.items():
             # 计算当前盈亏
-            现价 = pos.当前价格
+            现价 = getattr(pos, '当前价格', 0)
             盈亏 = (现价 - pos.平均成本) * pos.数量
             st.metric(
                 label=f"{品种}",
@@ -168,7 +174,7 @@ with st.sidebar:
 tabs = st.tabs(["首页", "策略中心", "AI交易", "持仓管理", "资金曲线", "回测", "交易记录"])
 
 with tabs[0]:
-    首页.显示(引擎)
+    首页.显示(引擎, 策略加载器, AI引擎)
 
 with tabs[1]:
     策略中心.显示(引擎, 策略加载器, 策略信号)
