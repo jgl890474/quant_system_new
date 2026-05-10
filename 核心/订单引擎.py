@@ -92,6 +92,23 @@ class 订单引擎:
     def 获取总盈亏(self):
         return self.总盈亏
     
+    def 获取持仓(self):
+        """获取所有持仓"""
+        return self.持仓
+    
+    def 获取交易记录(self):
+        """获取交易记录"""
+        return self.交易记录
+    
+    def 清空所有持仓(self):
+        """清空所有持仓"""
+        self.持仓 = {}
+        self.可用资金 = self.初始资金
+        self.持仓市值 = 0
+        self.总盈亏 = 0
+        数据库.清空所有持仓()
+        print("✅ 已清空所有持仓")
+    
     def _记录交易(self, 动作, 品种, 价格, 数量, 盈亏=0):
         交易 = {
             "时间": time.strftime("%Y-%m-%d %H:%M:%S"),
