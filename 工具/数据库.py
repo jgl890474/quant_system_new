@@ -134,9 +134,9 @@ def 保存持仓快照(持仓):
             ''', (
                 当前时间,
                 品种,
-                getattr(pos, '数量', 0),
-                getattr(pos, '平均成本', 0),
-                getattr(pos, '当前价格', 0),
+                pos.数量 if hasattr(pos, '数量') else pos.get("数量", 0),
+                pos.平均成本 if hasattr(pos, '平均成本') else pos.get("平均成本", 0),
+                0,
                 0
             ))
         
@@ -194,6 +194,41 @@ def 清空所有持仓():
 
 def 获取当前时间():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+# ==================== 新增：数据库类（兼容订单引擎的调用方式） ====================
+class 数据库:
+    """数据库操作类 - 兼容订单引擎的调用方式"""
+    
+    @staticmethod
+    def 保存交易记录(交易):
+        """保存交易记录"""
+        return 保存交易记录(交易)
+    
+    @staticmethod
+    def 保存持仓快照(持仓):
+        """保存持仓快照"""
+        return 保存持仓快照(持仓)
+    
+    @staticmethod
+    def 加载持仓快照():
+        """加载持仓快照"""
+        return 加载持仓快照()
+    
+    @staticmethod
+    def 获取交易记录(限制数量=100):
+        """获取交易记录"""
+        return 获取交易记录(限制数量)
+    
+    @staticmethod
+    def 清空所有持仓():
+        """清空所有持仓"""
+        return 清空所有持仓()
+    
+    @staticmethod
+    def 初始化数据库():
+        """初始化数据库"""
+        return 初始化数据库()
 
 
 # 测试入口
