@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import requests
+import yfinance as yf
 
 
 class 行情数据:
@@ -12,69 +13,73 @@ class 行情数据:
         self.成交量 = int(成交量) if 成交量 else 0
 
 
-# Alpha Vantage API Key（免费注册获取）
-ALPHA_VANTAGE_KEY = "demo"  # 替换为您的实际 Key
-
-
 def 获取价格(品种代码):
-    """获取真实价格"""
-    try:
-        # 加密货币 -> 币安API
-        if 品种代码 == "BTC-USD":
-            return 获取_币安价格("BTCUSDT")
-        if 品种代码 == "ETH-USD":
-            return 获取_币安价格("ETHUSDT")
-        
-        # 外汇 -> 免费汇率 API
-        if 品种代码 == "EURUSD":
-            return 获取_外汇价格("EUR", "USD")
-        
-        # 黄金期货 -> 使用 Alpha Vantage
-        if 品种代码 == "GC=F":
-            return 获取_期货价格("GC")
-        
-        # 美股 -> Alpha Vantage
-        return 获取_美股价格(品种代码)
-        
-    except Exception as e:
-        print(f"获取价格失败 {品种代码}: {e}")
-        return 行情数据(品种代码, 0, 0, 0, 0, 0)
+    """统一接口：根据品种类型自动选择数据源"""
+    
+    # 1. 加密货币 -> 币安 API
+    if 品种代码 == "BTC-USD":
+        return 获取_币安价格("BTCUSDT")
+    if 品种代码 == "ETH-USD":
+        return 获取_币安价格("ETHUSDT")
+    
+    # 2. 外汇 -> ExchangeRate-API（免费，无需注册）
+    if 品种代码 == "EURUSD":
+        return 获取_外汇价格("EUR", "USD")
+    if 品种代码 == "GBPUSD=X":
+        return 获取_外汇价格("GBP", "USD")
+    
+    # 3. 黄金期货 -> 使用 yfinance
+    if 品种代码 == "GC=F":
+        return 获取_yfinance价格("GC=F")
+    
+    # 4. 美股 -> 使用 yfinance
+    if 品种代码 in ["AAPL", "TSLA", "NVDA", "MSFT", "GOOGL"]:
+        return 获取_yfinance价格(品种代码)
+    
+    # 5. A股 -> 使用 yfinance（需要 .SS 或 .SZ 后缀）
+    return 获取_yfinance价格(品种代码)
 
 
 def 获取_币安价格(symbol):
-    """币安 API"""
-    url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
-    r = requests.get(url, timeout=10)
-    price = float(r.json()['price'])
-    return 行情数据(symbol, price, price, price, price, 0)
+    """币安 API（加密货币）"""
+    try:
+        url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
+        r = requests.get(url, timeout=10)
+        data = r.json()
+        price = float(data['price'])
+        print(f"[币安] {symbol}: ${price}")
+        return 行情数据(symbol, price, price, price, price, 0)
+    except Exception as e:
+        print(f"币安获取失败 {symbol}: {e}")
+        return 行情数据(symbol, 0, 0, 0, 0, 0)
 
 
 def 获取_外汇价格(from_currency, to_currency):
-    """外汇汇率"""
-    url = f"https://api.exchangerate-api.com/v4/latest/{from_currency}"
-    r = requests.get(url, timeout=10)
-    data = r.json()
-    price = data['rates'][to_currency]
-    return 行情数据(f"{from_currency}{to_currency}", price, price, price, price, 0)
+    """外汇汇率（免费 API）"""
+    try:
+        url = f"https://api.exchangerate-api.com/v4/latest/{from_currency}"
+        r = requests.get(url, timeout=10)
+        data = r.json()
+        price = data['rates'][to_currency]
+        print(f"[外汇] {from_currency}/{to_currency}: {price}")
+        return 行情数据(f"{from_currency}{to_currency}", price, price, price, price, 0)
+    except Exception as e:
+        print(f"外汇获取失败: {e}")
+        return 行情数据(f"{from_currency}{to_currency}", 0, 0, 0, 0, 0)
 
 
-def 获取_期货价格(symbol):
-    """期货价格（使用 Alpha Vantage）"""
-    url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey={ALPHA_VANTAGE_KEY}"
-    r = requests.get(url, timeout=10)
-    data = r.json()
-    if 'Global Quote' in data and data['Global Quote']:
-        price = float(data['Global Quote']['05. price'])
-        return 行情数据(symbol, price, price, price, price, 0)
-    return 行情数据(symbol, 0, 0, 0, 0, 0)
-
-
-def 获取_美股价格(symbol):
-    """美股价格"""
-    url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey={ALPHA_VANTAGE_KEY}"
-    r = requests.get(url, timeout=10)
-    data = r.json()
-    if 'Global Quote' in data and data['Global Quote']:
-        price = float(data['Global Quote']['05. price'])
-        return 行情数据(symbol, price, price, price, price, 0)
-    return 行情数据(symbol, 0, 0, 0, 0, 0)
+def 获取_yfinance价格(symbol):
+    """yfinance 获取（美股、期货、A股）"""
+    try:
+        ticker = yf.Ticker(symbol)
+        data = ticker.history(period="1d")
+        if not data.empty:
+            price = float(data['Close'].iloc[-1])
+            print(f"[yfinance] {symbol}: ${price}")
+            return 行情数据(symbol, price, price, price, price, 0)
+        else:
+            print(f"[yfinance] {symbol} 无数据")
+            return 行情数据(symbol, 0, 0, 0, 0, 0)
+    except Exception as e:
+        print(f"yfinance 获取失败 {symbol}: {e}")
+        return 行情数据(symbol, 0, 0, 0, 0, 0)
