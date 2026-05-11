@@ -7,16 +7,16 @@ from 工具.数据库 import 获取交易记录
 
 
 def 解析时间(时间字符串):
-    """解析多种时间格式"""
+    """安全解析多种时间格式"""
     if pd.isna(时间字符串):
         return None
     try:
-        # 尝试标准格式
-        return pd.to_datetime(时间字符串, format='%Y-%m-%d %H:%M:%S')
+        # 尝试 ISO 格式 (2026-05-07T02:47:02.515105)
+        return pd.to_datetime(时间字符串, format='%Y-%m-%dT%H:%M:%S.%f')
     except:
         try:
-            # 尝试 ISO 格式
-            return pd.to_datetime(时间字符串, format='%Y-%m-%dT%H:%M:%S.%f')
+            # 尝试标准格式 (2026-05-11 10:33:33)
+            return pd.to_datetime(时间字符串, format='%Y-%m-%d %H:%M:%S')
         except:
             try:
                 # 让 pandas 自动推断
@@ -44,15 +44,18 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
             st.info("暂无交易记录")
             return
         
-        # 统一时间格式
-        df["时间"] = df["时间"].apply(解析时间)
+        # 统一解析时间
+        df["时间_解析"] = df["时间"].apply(解析时间)
         
         # 删除时间解析失败的行
-        df = df.dropna(subset=["时间"])
+        df = df.dropna(subset=["时间_解析"])
         
         if df.empty:
             st.info("暂无有效交易记录")
             return
+        
+        # 添加格式化的时间列用于显示
+        df["时间_显示"] = df["时间_解析"].dt.strftime("%Y-%m-%d %H:%M:%S")
         
         # ========== 筛选器 ==========
         st.markdown("### 🔍 筛选条件")
@@ -95,7 +98,7 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                 cutoff = None
             
             if cutoff:
-                df_filtered = df_filtered[df_filtered["时间"] >= cutoff]
+                df_filtered = df_filtered[df_filtered["时间_解析"] >= cutoff]
         
         # 显示筛选结果统计
         st.caption(f"共 {len(df_filtered)} 条记录（共 {len(df)} 条）")
@@ -104,14 +107,14 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
             st.info("没有符合筛选条件的记录")
             return
         
-        # 格式化时间显示
+        # 准备显示用的数据框
         df_display = df_filtered.copy()
-        df_display["时间"] = df_display["时间"].dt.strftime("%Y-%m-%d %H:%M:%S")
+        df_display["时间"] = df_display["时间_显示"]
         
         # ========== 显示表格 ==========
         st.markdown("### 📋 交易明细")
         st.dataframe(
-            df_display, 
+            df_display[["时间", "品种", "动作", "价格", "数量", "盈亏", "策略名称"]], 
             use_container_width=True, 
             hide_index=True,
             column_config={
@@ -145,8 +148,6 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
             总盈亏 = 卖出记录["盈亏"].sum()
             盈利次数 = len(卖出记录[卖出记录["盈亏"] > 0])
             亏损次数 = len(卖出记录[卖出记录["盈亏"] < 0])
-            最大盈利 = 卖出记录["盈亏"].max() if 盈利次数 > 0 else 0
-            最大亏损 = 卖出记录["盈亏"].min() if 亏损次数 > 0 else 0
             
             col3.metric("总盈亏", f"¥{总盈亏:+,.2f}")
             col4.metric("盈利/亏损次数", f"{盈利次数} / {亏损次数}")
@@ -165,8 +166,7 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
         if not 卖出记录.empty:
             st.subheader("📊 盈亏分布")
             
-            盈亏数据 = 卖出记录.copy()
-            盈亏数据 = 盈亏数据.sort_values("时间")
+            盈亏数据 = 卖出记录.sort_values("时间_解析")
             盈亏数据["累计盈亏"] = 盈亏数据["盈亏"].cumsum()
             
             col1, col2 = st.columns(2)
@@ -179,7 +179,7 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                 盈利数据 = 盈亏数据[盈亏数据["盈亏"] > 0]
                 if not 盈利数据.empty:
                     fig_bar.add_trace(go.Bar(
-                        x=盈利数据["时间"].dt.strftime("%m-%d"),
+                        x=盈利数据["时间_显示"],
                         y=盈利数据["盈亏"],
                         name="盈利",
                         marker_color='#2ECC71',
@@ -190,7 +190,7 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                 亏损数据 = 盈亏数据[盈亏数据["盈亏"] < 0]
                 if not 亏损数据.empty:
                     fig_bar.add_trace(go.Bar(
-                        x=亏损数据["时间"].dt.strftime("%m-%d"),
+                        x=亏损数据["时间_显示"],
                         y=亏损数据["盈亏"],
                         name="亏损",
                         marker_color='#E74C3C',
@@ -200,7 +200,7 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                 
                 fig_bar.update_layout(
                     title="单笔交易盈亏",
-                    xaxis_title="交易日期",
+                    xaxis_title="交易时间",
                     yaxis_title="盈亏金额 (¥)",
                     height=400,
                     hovermode='x unified',
@@ -231,7 +231,7 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
             
             fig_line = go.Figure()
             fig_line.add_trace(go.Scatter(
-                x=盈亏数据["时间"],
+                x=盈亏数据["时间_解析"],
                 y=盈亏数据["累计盈亏"],
                 mode='lines+markers',
                 name='累计盈亏',
@@ -263,6 +263,7 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                     st.metric("平均盈利", f"¥{盈利总额/len(盈利数据):,.2f}")
                 else:
                     st.metric("平均盈利", "¥0")
+                最大盈利 = 盈利数据["盈亏"].max() if not 盈利数据.empty else 0
                 st.metric("最大单笔盈利", f"¥{最大盈利:,.2f}")
             
             with col2:
@@ -272,6 +273,7 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                     st.metric("平均亏损", f"¥{亏损总额/len(亏损数据):,.2f}")
                 else:
                     st.metric("平均亏损", "¥0")
+                最大亏损 = 亏损数据["盈亏"].min() if not 亏损数据.empty else 0
                 st.metric("最大单笔亏损", f"¥{最大亏损:,.2f}")
             
             with col3:
@@ -283,9 +285,10 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                     st.metric("盈亏比", f"{盈亏比:.2f}")
                     st.metric("总交易次数", f"{len(盈利数据) + len(亏损数据)}")
         
-        elif "盈亏" in df_filtered.columns and len(df_filtered[df_filtered["盈亏"] != 0]) == 0:
+        else:
             st.info("暂无盈亏数据（只有买入记录，没有卖出记录）")
         
     except Exception as e:
         st.error(f"加载交易记录失败: {e}")
-        st.info("请确保数据库已正确初始化")
+        import traceback
+        st.code(traceback.format_exc())
