@@ -107,7 +107,8 @@ def 显示(引擎):
         xaxis=dict(showgrid=True, gridwidth=0.3, gridcolor='#2a2e3a', tickformat="%m/%d"),
         yaxis=dict(showgrid=True, gridwidth=0.3, gridcolor='#2a2e3a', title="净值 (¥)")
     )
-    st.plotly_chart(fig, use_container_width=True)
+    # 修复：use_container_width=True -> width='stretch'
+    st.plotly_chart(fig, width='stretch')
     
     # ========== 持仓明细表格 ==========
     if 引擎.持仓:
@@ -151,7 +152,8 @@ def 显示(引擎):
                 })
         
         if 明细数据:
-            st.dataframe(pd.DataFrame(明细数据), use_container_width=True, hide_index=True)
+            # 修复：use_container_width=True -> width='stretch'
+            st.dataframe(pd.DataFrame(明细数据), width='stretch', hide_index=True)
             
             # 显示盈亏汇总
             total_profit = 0
@@ -272,7 +274,8 @@ def 显示(引擎):
                     xaxis_title="品种",
                     yaxis_title="盈亏 (¥)"
                 )
-                st.plotly_chart(fig_bar, use_container_width=True)
+                # 修复：use_container_width=True -> width='stretch'
+                st.plotly_chart(fig_bar, width='stretch')
             
             # ========== 持仓市值条形图（保持不变） ==========
             with col_b:
@@ -298,7 +301,8 @@ def 显示(引擎):
                     xaxis_title="市值 (¥)",
                     yaxis_title="品种"
                 )
-                st.plotly_chart(fig_bar_h, use_container_width=True)
+                # 修复：use_container_width=True -> width='stretch'
+                st.plotly_chart(fig_bar_h, width='stretch')
             
             # 总市值和总盈亏卡片
             st.markdown(f"""
