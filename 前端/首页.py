@@ -58,23 +58,32 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
     # ==================== 实时行情 ====================
     st.markdown("### 📈 实时行情")
     
-    行情品种 = ["AAPL", "BTC-USD", "GC=F", "EURUSD", "TSLA", "NVDA"]
-    行情列 = st.columns(len(行情品种))
+    # 定义行情品种及其对应的代码格式
+    行情品种配置 = [
+        {"显示名": "AAPL", "代码": "AAPL"},
+        {"显示名": "BTC-USD", "代码": "BTC-USD"},
+        {"显示名": "GC=F", "代码": "GC=F"},
+        {"显示名": "EURUSD", "代码": "EURUSD=X"},
+        {"显示名": "TSLA", "代码": "TSLA"},
+        {"显示名": "NVDA", "代码": "NVDA"},
+    ]
     
-    for i, 品种 in enumerate(行情品种):
+    行情列 = st.columns(len(行情品种配置))
+    
+    for i, 品种 in enumerate(行情品种配置):
         with 行情列[i]:
             try:
-                结果 = 行情获取.获取价格(品种)
-                if 结果 and hasattr(结果, '价格'):
-                    价格 = 结果.价格
+                价格 = 获取行情的价格(品种["代码"])
+                if 价格 and 价格 > 0:
+                    # 根据品种类型格式化显示
+                    if "BTC" in 品种["代码"]:
+                        st.metric(品种["显示名"], f"${价格:,.0f}")
+                    else:
+                        st.metric(品种["显示名"], f"${价格:.2f}")
                 else:
-                    价格 = None
-                if 价格:
-                    st.metric(品种, f"${价格:.2f}")
-                else:
-                    st.metric(品种, "—")
-            except:
-                st.metric(品种, "—")
+                    st.metric(品种["显示名"], "—")
+            except Exception as e:
+                st.metric(品种["显示名"], "—")
     
     # ==================== 快捷交易 ====================
     st.markdown("### 🚀 快捷交易")
@@ -90,13 +99,12 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         
         买入品种 = st.selectbox("选择品种", 可买品种列表, key="buy_symbol_select")
         
+        # 获取买入品种对应的代码格式
+        买入代码 = 转换品种代码(买入品种)
+        
         try:
-            行情结果 = 行情获取.获取价格(买入品种)
-            if 行情结果 and hasattr(行情结果, '价格'):
-                当前买入价 = 行情结果.价格
-            else:
-                当前买入价 = 0
-            st.caption(f"当前价格: ${当前买入价:.4f}" if 当前买入价 > 0 else "获取价格失败")
+            当前买入价 = 获取行情的价格(买入代码)
+            st.caption(f"当前价格: ${当前买入价:.4f}" if 当前买入价 and 当前买入价 > 0 else "获取价格失败")
         except:
             当前买入价 = 0
             st.caption("获取价格失败")
@@ -128,18 +136,18 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         
         if 买入品种 == "000001.SS":
             实际股数 = 买入数量 * 100
-            预计花费 = 当前买入价 * 实际股数
-            st.caption(f"预计花费: ¥{预计花费:,.0f} (实际股数: {实际股数}股)")
+            预计花费 = 当前买入价 * 实际股数 if 当前买入价 else 0
+            st.caption(f"预计花费: ¥{预计花费:,.0f} (实际股数: {实际股数}股)" if 当前买入价 else "无法计算价格")
         elif 买入品种 == "EURUSD":
             实际单位 = 买入数量 * 10000
-            预计花费 = 当前买入价 * 实际单位
-            st.caption(f"预计花费: ¥{预计花费:,.0f} (实际单位: {实际单位})")
+            预计花费 = 当前买入价 * 实际单位 if 当前买入价 else 0
+            st.caption(f"预计花费: ¥{预计花费:,.0f} (实际单位: {实际单位})" if 当前买入价 else "无法计算价格")
         else:
-            预计花费 = 当前买入价 * 买入数量
-            st.caption(f"预计花费: ¥{预计花费:,.0f}")
+            预计花费 = 当前买入价 * 买入数量 if 当前买入价 else 0
+            st.caption(f"预计花费: ¥{预计花费:,.0f}" if 当前买入价 else "无法计算价格")
         
         if st.button("买入", type="primary", use_container_width=True, key="buy_button"):
-            if 当前买入价 <= 0:
+            if not 当前买入价 or 当前买入价 <= 0:
                 st.error("无法获取价格，请稍后再试")
             else:
                 try:
@@ -169,12 +177,8 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             st.caption(f"持仓成本: ${引擎.持仓[卖品种].平均成本:.4f}")
             
             try:
-                行情结果 = 行情获取.获取价格(卖品种)
-                if 行情结果 and hasattr(行情结果, '价格'):
-                    当前卖出价 = 行情结果.价格
-                else:
-                    当前卖出价 = 0
-                st.caption(f"当前价格: ${当前卖出价:.4f}" if 当前卖出价 > 0 else "获取价格失败")
+                当前卖出价 = 获取行情的价格(卖品种)
+                st.caption(f"当前价格: ${当前卖出价:.4f}" if 当前卖出价 and 当前卖出价 > 0 else "获取价格失败")
             except:
                 当前卖出价 = 0
                 st.caption("获取价格失败")
@@ -188,11 +192,11 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                 key="sell_qty_input"
             )
             
-            预计收入 = 当前卖出价 * 卖出数量
-            st.caption(f"预计收入: ¥{预计收入:,.0f}")
+            预计收入 = 当前卖出价 * 卖出数量 if 当前卖出价 else 0
+            st.caption(f"预计收入: ¥{预计收入:,.0f}" if 当前卖出价 else "无法计算收入")
             
             if st.button("卖出", use_container_width=True, key="sell_button"):
-                if 当前卖出价 <= 0:
+                if not 当前卖出价 or 当前卖出价 <= 0:
                     st.error("无法获取价格，请稍后再试")
                 else:
                     try:
@@ -206,3 +210,56 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             st.selectbox("选择持仓品种", ["无持仓"], disabled=True, key="sell_symbol_disabled")
             st.number_input("数量", min_value=1, value=100, disabled=True, key="sell_qty_disabled")
             st.button("卖出", disabled=True, use_container_width=True, key="sell_button_disabled")
+
+
+# ==================== 辅助函数 ====================
+def 获取行情的价格(代码):
+    """
+    获取行情价格，支持多种代码格式
+    """
+    try:
+        # 优先使用行情获取模块
+        结果 = 行情获取.获取价格(代码)
+        if 结果 and hasattr(结果, '价格'):
+            return 结果.价格
+        
+        # 如果失败，尝试使用 yfinance 直接获取
+        import yfinance as yf
+        ticker = yf.Ticker(代码)
+        
+        # 尝试获取实时价格
+        try:
+            # 方法1：通过 info
+            info = ticker.info
+            if 'regularMarketPrice' in info:
+                return info['regularMarketPrice']
+            if 'currentPrice' in info:
+                return info['currentPrice']
+        except:
+            pass
+        
+        # 方法2：通过历史数据
+        data = ticker.history(period="1d")
+        if not data.empty:
+            return float(data['Close'].iloc[-1])
+        
+        return None
+    except Exception as e:
+        print(f"获取 {代码} 价格失败: {e}")
+        return None
+
+
+def 转换品种代码(品种):
+    """
+    将显示品种转换为yfinance可识别的代码
+    """
+    代码映射 = {
+        "EURUSD": "EURUSD=X",
+        "BTC-USD": "BTC-USD",
+        "GC=F": "GC=F",
+        "AAPL": "AAPL",
+        "TSLA": "TSLA",
+        "NVDA": "NVDA",
+        "000001.SS": "000001.SS",
+    }
+    return 代码映射.get(品种, 品种)
