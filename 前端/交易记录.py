@@ -71,7 +71,7 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                 df_filtered = df_filtered.drop(columns=["时间_dt"])
         
         # 显示筛选结果统计
-        st.caption(f"📊 共 {len(df_filtered)} 条记录（共 {len(df)} 条）")
+        st.caption(f"共 {len(df_filtered)} 条记录（共 {len(df)} 条）")
         
         if df_filtered.empty:
             st.info("没有符合筛选条件的记录")
@@ -114,13 +114,13 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
             总盈亏 = 卖出记录["盈亏"].sum()
             盈利次数 = len(卖出记录[卖出记录["盈亏"] > 0])
             亏损次数 = len(卖出记录[卖出记录["盈亏"] < 0])
-            最大盈利 = 卖出记录["盈亏"].max() if盈利次数 > 0 else 0
-            最大亏损 = 卖出记录["盈亏"].min() if亏损次数 > 0 else 0
+            最大盈利 = 卖出记录["盈亏"].max() if 盈利次数 > 0 else 0
+            最大亏损 = 卖出记录["盈亏"].min() if 亏损次数 > 0 else 0
             
             col3.metric("总盈亏", f"¥{总盈亏:+,.2f}")
             col4.metric("盈利/亏损次数", f"{盈利次数} / {亏损次数}")
             
-            if盈利次数 + 亏损次数 > 0:
+            if 盈利次数 + 亏损次数 > 0:
                 胜率 = 盈利次数 / (盈利次数 + 亏损次数) * 100
                 st.metric("胜率", f"{胜率:.1f}%")
         else:
@@ -130,27 +130,22 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
         
         st.markdown("---")
         
-        # ==================== 盈亏分布（彩色柱状图） ====================
+        # ==================== 盈亏分布 ====================
         if "盈亏" in df_filtered.columns and len(df_filtered[df_filtered["盈亏"] != 0]) > 0:
             st.subheader("📊 盈亏分布")
             
-            # 筛选出有盈亏的交易（卖出）
             盈亏数据 = df_filtered[df_filtered["盈亏"] != 0].copy()
             if not 盈亏数据.empty:
-                # 按时间排序
                 盈亏数据 = 盈亏数据.sort_values("时间")
                 盈亏数据["累计盈亏"] = 盈亏数据["盈亏"].cumsum()
                 
-                # 创建两列布局
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    # ==================== 彩色盈亏柱状图 ====================
-                    st.markdown("#### 📊 单笔盈亏柱状图")
+                    st.markdown("#### 单笔盈亏柱状图")
                     
                     fig_bar = go.Figure()
                     
-                    # 添加盈利柱（绿色）
                     盈利数据 = 盈亏数据[盈亏数据["盈亏"] > 0]
                     if not 盈利数据.empty:
                         fig_bar.add_trace(go.Bar(
@@ -162,7 +157,6 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                             textposition='outside'
                         ))
                     
-                    # 添加亏损柱（红色）
                     亏损数据 = 盈亏数据[盈亏数据["盈亏"] < 0]
                     if not 亏损数据.empty:
                         fig_bar.add_trace(go.Bar(
@@ -185,8 +179,7 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                     st.plotly_chart(fig_bar, use_container_width=True)
                 
                 with col2:
-                    # ==================== 盈亏饼图 ====================
-                    st.markdown("#### 🥧 盈亏占比")
+                    st.markdown("#### 盈亏占比")
                     
                     盈利总额 = 盈利数据["盈亏"].sum() if not 盈利数据.empty else 0
                     亏损总额 = abs(亏损数据["盈亏"].sum()) if not 亏损数据.empty else 0
@@ -198,15 +191,12 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                         hole=0.4,
                         textinfo='label+percent'
                     )])
-                    fig_pie.update_layout(
-                        title="盈亏金额占比",
-                        height=400
-                    )
+                    fig_pie.update_layout(title="盈亏金额占比", height=400)
                     st.plotly_chart(fig_pie, use_container_width=True)
                 
                 st.markdown("---")
                 
-                # ==================== 动态累计盈亏曲线 ====================
+                # 累计盈亏曲线
                 st.subheader("📈 累计盈亏曲线")
                 
                 曲线数据 = 盈亏数据[["时间", "累计盈亏"]].copy()
@@ -214,7 +204,6 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                 曲线数据 = 曲线数据.sort_values("时间")
                 
                 fig_line = go.Figure()
-                
                 fig_line.add_trace(go.Scatter(
                     x=曲线数据["时间"],
                     y=曲线数据["累计盈亏"],
@@ -224,9 +213,7 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                     fill='tozeroy',
                     fillcolor='rgba(52,152,219,0.1)'
                 ))
-                
                 fig_line.add_hline(y=0, line_dash="dash", line_color="#95A5A6")
-                
                 fig_line.update_layout(
                     title="累计盈亏走势",
                     xaxis_title="交易时间",
@@ -235,34 +222,39 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                     hovermode='x unified',
                     plot_bgcolor='white'
                 )
-                
                 st.plotly_chart(fig_line, use_container_width=True)
                 
-                # ==================== 额外统计 ====================
+                # 额外统计
                 st.markdown("---")
                 st.subheader("📊 交易统计详情")
                 
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
-                    st.markdown("**📈 盈利统计**")
+                    st.markdown("**盈利统计**")
                     st.metric("盈利总金额", f"¥{盈利总额:,.2f}")
-                    st.metric("平均盈利", f"¥{盈利总额/len(盈利数据):,.2f}" if len(盈利数据) > 0 else "¥0")
+                    if len(盈利数据) > 0:
+                        st.metric("平均盈利", f"¥{盈利总额/len(盈利数据):,.2f}")
+                    else:
+                        st.metric("平均盈利", "¥0")
                     st.metric("最大单笔盈利", f"¥{最大盈利:,.2f}")
                 
                 with col2:
-                    st.markdown("**📉 亏损统计**")
+                    st.markdown("**亏损统计**")
                     st.metric("亏损总金额", f"¥{亏损总额:,.2f}")
-                    st.metric("平均亏损", f"¥{亏损总额/len(亏损数据):,.2f}" if len(亏损数据) > 0 else "¥0")
+                    if len(亏损数据) > 0:
+                        st.metric("平均亏损", f"¥{亏损总额/len(亏损数据):,.2f}")
+                    else:
+                        st.metric("平均亏损", "¥0")
                     st.metric("最大单笔亏损", f"¥{最大亏损:,.2f}")
                 
                 with col3:
-                    st.markdown("**⚖️ 综合指标**")
+                    st.markdown("**综合指标**")
                     if len(盈利数据) + len(亏损数据) > 0:
                         胜率 = len(盈利数据) / (len(盈利数据) + len(亏损数据)) * 100
-                        盈亏比 = abs(盈利总额 / 亏损总额) if 亏损总额 > 0 else float('inf')
+                        盈亏比 = abs(盈利总额 / 亏损总额) if 亏损总额 > 0 else 999
                         st.metric("胜率", f"{胜率:.1f}%")
-                        st.metric("盈亏比", f"{盈亏比:.2f}" if 盈亏比 != float('inf') else "∞")
+                        st.metric("盈亏比", f"{盈亏比:.2f}")
                         st.metric("总交易次数", f"{len(盈利数据) + len(亏损数据)}")
         
         else:
