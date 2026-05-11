@@ -1,13 +1,125 @@
 # -*- coding: utf-8 -*-
 """
 行情获取模块 - 支持多数据源自动降级
-主数据源: Tushare Pro (A股)
-备用数据源: yfinance (美股/加密货币/外汇)
+主数据源: 新浪财经 (A股实时)
+备用数据源: Tushare Pro (A股历史) + yfinance (美股/加密货币/外汇)
 """
 
 import pandas as pd
+import requests
+import time
 
-# ==================== Tushare Pro 配置 ====================
+# ==================== 新浪财经实时行情配置 ====================
+def 获取新浪实时行情(代码):
+    """
+    从新浪获取A股实时行情（盘中实时）
+    返回: {"当前价": xx, "涨跌幅": xx, "涨跌额": xx, "名称": xx, ...}
+    """
+    try:
+        # 判断市场代码
+        if str(代码).startswith('6'):
+            symbol = f"sh{代码}"
+        else:
+            symbol = f"sz{代码}"
+        
+        url = f"https://hq.sinajs.cn/list={symbol}"
+        headers = {
+            'Referer': 'https://finance.sina.com.cn',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        response = requests.get(url, headers=headers, timeout=3)
+        response.encoding = 'gbk'
+        
+        # 解析数据
+        content = response.text
+        if 'str_' not in content or '=""' in content:
+            return None
+        
+        data = content.split(',')
+        if len(data) < 10:
+            return None
+        
+        # 提取关键数据
+        名称 = data[0].split('="')[1] if '="' in data[0] else data[0]
+        当前价 = float(data[3])    # 当前价
+        昨日收盘 = float(data[2])   # 昨日收盘价
+        涨跌额 = 当前价 - 昨日收盘
+        涨跌幅 = (涨跌额 / 昨日收盘) * 100
+        
+        return {
+            "名称": 名称,
+            "当前价": 当前价,
+            "昨日收盘": 昨日收盘,
+            "涨跌额": round(涨跌额, 2),
+            "涨跌幅": round(涨跌幅, 2),
+            "最高": float(data[4]),
+            "最低": float(data[5]),
+            "买一价": float(data[6]) if len(data) > 6 else 0,
+            "卖一价": float(data[7]) if len(data) > 7 else 0,
+            "成交量": int(float(data[8])) if len(data) > 8 else 0,
+            "成交额": int(float(data[9])) if len(data) > 9 else 0,
+            "时间": data[-2] + ' ' + data[-1] if len(data) > 1 else ""
+        }
+    except Exception as e:
+        print(f"新浪获取 {代码} 行情失败: {e}")
+        return None
+
+
+def 获取批量新浪实时行情(代码列表):
+    """
+    批量获取多个股票实时行情
+    代码列表: ['000001', '600519', ...]
+    返回: {代码: {"当前价": xx, "涨跌幅": xx, ...}}
+    """
+    if not 代码列表:
+        return {}
+    
+    # 构建请求字符串（新浪支持同时查询多个）
+    symbol_parts = []
+    for 代码 in 代码列表:
+        if str(代码).startswith('6'):
+            symbol_parts.append(f"sh{代码}")
+        else:
+            symbol_parts.append(f"sz{代码}")
+    
+    url = f"https://hq.sinajs.cn/list={','.join(symbol_parts)}"
+    headers = {
+        'Referer': 'https://finance.sina.com.cn',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    }
+    
+    try:
+        response = requests.get(url, headers=headers, timeout=5)
+        response.encoding = 'gbk'
+        results = {}
+        
+        lines = response.text.strip().split('\n')
+        for i, line in enumerate(lines):
+            if line and 'str_' in line:
+                data = line.split(',')
+                if len(data) >= 10 and i < len(代码列表):
+                    代码 = 代码列表[i]
+                    当前价 = float(data[3])
+                    昨日收盘 = float(data[2])
+                    涨跌额 = 当前价 - 昨日收盘
+                    涨跌幅 = (涨跌额 / 昨日收盘) * 100
+                    
+                    results[代码] = {
+                        "当前价": 当前价,
+                        "涨跌幅": round(涨跌幅, 2),
+                        "涨跌额": round(涨跌额, 2),
+                        "最高": float(data[4]),
+                        "最低": float(data[5]),
+                        "名称": data[0].split('="')[1] if '="' in data[0] else data[0]
+                    }
+        return results
+    except Exception as e:
+        print(f"批量获取失败: {e}")
+        return {}
+
+
+# ==================== Tushare Pro 配置（备用） ====================
 try:
     import tushare as ts
     ts.set_token('a58ac285333f6f8ecc93063924c3dfd8906a1e01c1865cb624f097ac')
@@ -59,7 +171,37 @@ def 判断市场类型(代码):
     return "未知"
 
 
-# ==================== A股数据（Tushare Pro） ====================
+# ==================== A股数据（优先新浪实时，降级Tushare） ====================
+def 获取A股实时价格(代码):
+    """
+    获取A股实时价格（优先新浪实时接口）
+    返回: (当前价, 涨跌幅)
+    """
+    # 方法1：新浪实时接口（盘中实时）
+    行情 = 获取新浪实时行情(代码)
+    if 行情 and 行情["当前价"] > 0:
+        return 行情["当前价"], 行情["涨跌幅"]
+    
+    # 方法2：Tushare（昨日收盘价）
+    if TUSHARE_AVAILABLE and pro:
+        try:
+            if len(str(代码)) == 6:
+                if 代码.startswith('6'):
+                    ts_code = f"{代码}.SH"
+                else:
+                    ts_code = f"{代码}.SZ"
+            else:
+                ts_code = 代码
+            
+            df = pro.daily(ts_code=ts_code, limit=1)
+            if df is not None and not df.empty:
+                return float(df['close'].iloc[0]), 0
+        except Exception as e:
+            print(f"Tushare获取价格失败: {e}")
+    
+    return None, None
+
+
 def 获取A股日线(代码, 开始日期, 结束日期):
     """获取A股日线数据（Tushare Pro）"""
     if not TUSHARE_AVAILABLE or pro is None:
@@ -125,7 +267,24 @@ def 获取YFinance数据(代码, 开始日期, 结束日期):
     return None
 
 
-# ==================== 实时价格获取 ====================
+# ==================== 获取美股/加密货币实时价格 ====================
+def 获取YFinance实时价格(代码):
+    """获取美股/加密货币实时价格"""
+    if not YFINANCE_AVAILABLE:
+        return None
+    
+    try:
+        ticker = yf.Ticker(代码)
+        data = ticker.history(period="1d")
+        if not data.empty:
+            return float(data['Close'].iloc[-1])
+    except Exception as e:
+        print(f"获取{代码}实时价格失败: {e}")
+    
+    return None
+
+
+# ==================== 实时价格获取（统一入口） ====================
 def 获取价格(代码):
     """
     获取单个品种的实时价格
@@ -135,39 +294,25 @@ def 获取价格(代码):
     市场 = 判断市场类型(代码)
     
     if 市场 == "A股":
-        if TUSHARE_AVAILABLE and pro:
-            try:
-                if len(str(代码)) == 6:
-                    if 代码.startswith('6'):
-                        ts_code = f"{代码}.SH"
-                    else:
-                        ts_code = f"{代码}.SZ"
-                else:
-                    ts_code = 代码
-                
-                df = pro.daily(ts_code=ts_code, limit=1)
-                if df is not None and not df.empty:
-                    class PriceObj:
-                        pass
-                    result = PriceObj()
-                    result.价格 = float(df['close'].iloc[0])
-                    return result
-            except Exception as e:
-                print(f"获取A股实时价格失败: {e}")
+        # 优先使用新浪实时接口
+        价格, 涨跌幅 = 获取A股实时价格(代码)
+        if 价格:
+            class PriceObj:
+                pass
+            result = PriceObj()
+            result.价格 = 价格
+            result.涨跌幅 = 涨跌幅
+            return result
     
     elif 市场 in ["美股", "加密货币", "外汇"]:
         if YFINANCE_AVAILABLE:
-            try:
-                ticker = yf.Ticker(代码)
-                data = ticker.history(period="1d")
-                if not data.empty:
-                    class PriceObj:
-                        pass
-                    result = PriceObj()
-                    result.价格 = float(data['Close'].iloc[-1])
-                    return result
-            except Exception as e:
-                print(f"获取{市场}实时价格失败: {e}")
+            价格 = 获取YFinance实时价格(代码)
+            if 价格:
+                class PriceObj:
+                    pass
+                result = PriceObj()
+                result.价格 = 价格
+                return result
     
     return None
 
@@ -179,6 +324,12 @@ def 获取实时价格(代码):
     if result and hasattr(result, '价格'):
         return result.价格
     return None
+
+
+# ==================== 获取A股实时行情（返回完整信息） ====================
+def 获取A股实时行情完整(代码):
+    """获取A股完整实时行情，用于AI推荐"""
+    return 获取新浪实时行情(代码)
 
 
 # ==================== 获取股票列表 ====================
@@ -224,26 +375,25 @@ if __name__ == "__main__":
     print("测试行情获取模块")
     print("="*50)
     
-    # 测试获取价格（原有接口）
-    print("\n1. 测试获取价格 (平安银行):")
+    # 测试新浪实时行情
+    print("\n1. 测试新浪实时行情 (平安银行):")
+    result = 获取新浪实时行情('000001')
+    if result:
+        print(f"名称: {result['名称']}")
+        print(f"当前价: {result['当前价']}")
+        print(f"涨跌幅: {result['涨跌幅']:.2f}%")
+        print(f"时间: {result['时间']}")
+    else:
+        print("获取失败")
+    
+    # 测试批量获取
+    print("\n2. 测试批量获取 (平安银行, 贵州茅台):")
+    results = 获取批量新浪实时行情(['000001', '600519'])
+    for code, data in results.items():
+        print(f"{code}: {data['名称']} {data['当前价']} 涨跌幅{data['涨跌幅']}%")
+    
+    # 测试统一接口
+    print("\n3. 测试统一接口获取价格:")
     result = 获取价格('000001')
     if result:
         print(f"价格: {result.价格}")
-    else:
-        print("获取失败")
-    
-    # 测试美股
-    print("\n2. 测试美股 (苹果):")
-    price = 获取实时价格('AAPL')
-    if price:
-        print(f"AAPL 实时价格: ${price:.2f}")
-    else:
-        print("获取失败")
-    
-    # 测试加密货币
-    print("\n3. 测试加密货币 (比特币):")
-    price = 获取实时价格('BTC-USD')
-    if price:
-        print(f"BTC-USD 价格: ${price:.2f}")
-    else:
-        print("获取失败")
