@@ -6,7 +6,7 @@ import plotly.express as px
 from 工具.数据库 import 获取交易记录
 
 
-def 显示():
+def 显示(引擎=None, 策略加载器=None, AI引擎=None):
     """显示交易记录页面"""
     st.subheader("📋 交易记录")
     
