@@ -1,7 +1,56 @@
 # -*- coding: utf-8 -*-
 import time
+import pytz
+from datetime import datetime
 import 工具.数据库 as 数据库
 from 核心.数据模型 import 持仓数据
+
+
+def 获取市场类型(品种):
+    """根据品种代码判断市场类型"""
+    品种_upper = str(品种).upper()
+    
+    # A股判断
+    if str(品种).endswith('.SS') or str(品种).endswith('.SZ'):
+        return "A股"
+    if str(品种).isdigit() and len(str(品种)) == 6:
+        return "A股"
+    
+    # 美股判断
+    美股列表 = ['AAPL', 'GOOGL', 'MSFT', 'AMZN', 'TSLA', 'META', 'NVDA', 'NFLX', 'AMD', 'INTC', 'IBM', 'ORCL', 'CSCO', 'ADBE', 'CRM', 'PYPL', 'DIS', 'UBER', 'COIN']
+    if 品种_upper in 美股列表 or (品种_upper.isalpha() and len(品种_upper) <= 5):
+        return "美股"
+    
+    # 加密货币判断
+    加密货币列表 = ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'DOGE', 'ADA', 'AVAX', 'USDT']
+    if any(crypto in 品种_upper for crypto in 加密货币列表) or '-' in 品种:
+        return "加密货币"
+    
+    return "其他"
+
+
+def 获取交易时间(品种):
+    """根据品种获取正确的交易时间"""
+    now = datetime.now()
+    市场 = 获取市场类型(品种)
+    
+    try:
+        if 市场 == "A股":
+            # A股使用北京时间（东八区）
+            tz = pytz.timezone('Asia/Shanghai')
+            beijing_time = now.astimezone(tz)
+            return beijing_time.strftime("%Y-%m-%d %H:%M:%S")
+        elif 市场 == "美股":
+            # 美股使用美东时间
+            tz = pytz.timezone('America/New_York')
+            us_time = now.astimezone(tz)
+            return us_time.strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            # 加密货币等使用UTC
+            return now.strftime("%Y-%m-%d %H:%M:%S")
+    except:
+        # 如果没有安装pytz，使用本地时间
+        return now.strftime("%Y-%m-%d %H:%M:%S")
 
 
 class 订单引擎:
@@ -193,7 +242,8 @@ class 订单引擎:
         """获取持仓详情（含浮动盈亏）"""
         详情 = []
         for 代码, 持仓 in self.持仓.items():
-            市值 = 持仓.数量 * 持仓.当前价格
+            现价 = getattr(持仓, '当前价格', 持仓.平均成本)
+            市值 = 持仓.数量 * 现价
             成本 = 持仓.数量 * 持仓.平均成本
             浮动盈亏 = 市值 - 成本
             浮动盈亏率 = (浮动盈亏 / 成本 * 100) if 成本 > 0 else 0
@@ -201,7 +251,7 @@ class 订单引擎:
                 "品种": 代码,
                 "数量": int(持仓.数量),
                 "成本价": round(持仓.平均成本, 4),
-                "现价": round(持仓.当前价格, 4),
+                "现价": round(现价, 4),
                 "市值": round(市值, 2),
                 "成本总额": round(成本, 2),
                 "浮动盈亏": round(浮动盈亏, 2),
@@ -284,8 +334,9 @@ class 订单引擎:
         }
     
     def _记录交易(self, 动作, 品种, 价格, 数量, 盈亏=0, 手续费=0):
+        """记录交易 - 使用正确的市场时间"""
         交易 = {
-            "时间": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "时间": 获取交易时间(品种),  # 使用修正后的时间
             "品种": 品种,
             "动作": 动作,
             "价格": 价格,
