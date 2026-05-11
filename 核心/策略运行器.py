@@ -56,7 +56,8 @@ class 策略运行器:
                 # 模拟：价格波动产生随机信号
                 import random
                 random.seed(hash(品种) % 10000)
-                return random.choice(['buy', 'hold', 'hold'])  # 20%买入概率
+                result = random.choice(['buy', 'hold', 'hold'])
+                return result
             
             if "量价" in 策略名称:
                 return 'hold'
@@ -70,7 +71,9 @@ class 策略运行器:
                 return 'hold'
             
             if "加密" in 策略名称:
-                return 'buy' if 价格 > 0 else 'hold'
+                if 价格 > 0:
+                    return 'buy'
+                return 'hold'
             
             if "动量" in 策略名称:
                 return 'hold'
@@ -80,4 +83,4 @@ class 策略运行器:
             
             return 'hold'
         except:
-            return 'hold'rn 'hold'
+            return 'hold'
