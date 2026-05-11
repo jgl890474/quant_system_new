@@ -3,31 +3,47 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
-from 工具.数据库 import 获取交易记录
-
-
-def 解析时间(时间字符串):
-    """安全解析多种时间格式"""
-    if pd.isna(时间字符串):
-        return None
-    try:
-        # 尝试 ISO 格式 (2026-05-07T02:47:02.515105)
-        return pd.to_datetime(时间字符串, format='%Y-%m-%dT%H:%M:%S.%f')
-    except:
-        try:
-            # 尝试标准格式 (2026-05-11 10:33:33)
-            return pd.to_datetime(时间字符串, format='%Y-%m-%d %H:%M:%S')
-        except:
-            try:
-                # 让 pandas 自动推断
-                return pd.to_datetime(时间字符串)
-            except:
-                return None
+from 工具.数据库 import 获取交易记录, 获取连接
 
 
 def 显示(引擎=None, 策略加载器=None, AI引擎=None):
     """显示交易记录页面（带筛选功能）"""
     st.subheader("📋 交易记录")
+    
+    # ========== 添加清理按钮（仅管理员可见） ==========
+    with st.expander("🛠️ 数据维护工具"):
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🗑️ 删除所有异常记录（盈亏 > 10万）", type="secondary"):
+                try:
+                    conn = 获取连接()
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM 交易记录 WHERE ABS(盈亏) > 100000")
+                    删除数量 = cursor.rowcount
+                    conn.commit()
+                    conn.close()
+                    st.success(f"✅ 已删除 {删除数量} 条异常记录")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"删除失败: {e}")
+        
+        with col2:
+            if st.button("📊 查看异常记录统计", type="secondary"):
+                try:
+                    conn = 获取连接()
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT COUNT(*), SUM(盈亏), MAX(盈亏), MIN(盈亏) FROM 交易记录 WHERE ABS(盈亏) > 100000")
+                    row = cursor.fetchone()
+                    conn.close()
+                    if row[0] > 0:
+                        st.warning(f"发现 {row[0]} 条异常记录")
+                        st.write(f"总异常金额: {row[1]:.2f}")
+                        st.write(f"最大异常盈利: {row[2]:.2f}")
+                        st.write(f"最大异常亏损: {row[3]:.2f}")
+                    else:
+                        st.info("没有发现异常记录")
+                except Exception as e:
+                    st.error(f"查询失败: {e}")
     
     try:
         # 获取交易记录
@@ -45,9 +61,7 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
             return
         
         # 统一解析时间
-        df["时间_解析"] = df["时间"].apply(解析时间)
-        
-        # 删除时间解析失败的行
+        df["时间_解析"] = pd.to_datetime(df["时间"], errors='coerce')
         df = df.dropna(subset=["时间_解析"])
         
         if df.empty:
@@ -148,6 +162,8 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
             总盈亏 = 卖出记录["盈亏"].sum()
             盈利次数 = len(卖出记录[卖出记录["盈亏"] > 0])
             亏损次数 = len(卖出记录[卖出记录["盈亏"] < 0])
+            最大盈利 = 卖出记录["盈亏"].max() if 盈利次数 > 0 else 0
+            最大亏损 = 卖出记录["盈亏"].min() if 亏损次数 > 0 else 0
             
             col3.metric("总盈亏", f"¥{总盈亏:+,.2f}")
             col4.metric("盈利/亏损次数", f"{盈利次数} / {亏损次数}")
@@ -155,6 +171,10 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
             if 盈利次数 + 亏损次数 > 0:
                 胜率 = 盈利次数 / (盈利次数 + 亏损次数) * 100
                 st.metric("胜率", f"{胜率:.1f}%")
+                
+                # 显示异常警告
+                if abs(总盈亏) > 1000000:
+                    st.warning(f"⚠️ 总盈亏异常（{总盈亏:,.2f}），可能存在错误数据，请使用上方「数据维护工具」清理")
         else:
             col3.metric("总盈亏", "¥0.00")
             col4.metric("盈利/亏损次数", "0 / 0")
@@ -263,7 +283,6 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                     st.metric("平均盈利", f"¥{盈利总额/len(盈利数据):,.2f}")
                 else:
                     st.metric("平均盈利", "¥0")
-                最大盈利 = 盈利数据["盈亏"].max() if not 盈利数据.empty else 0
                 st.metric("最大单笔盈利", f"¥{最大盈利:,.2f}")
             
             with col2:
@@ -273,7 +292,6 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                     st.metric("平均亏损", f"¥{亏损总额/len(亏损数据):,.2f}")
                 else:
                     st.metric("平均亏损", "¥0")
-                最大亏损 = 亏损数据["盈亏"].min() if not 亏损数据.empty else 0
                 st.metric("最大单笔亏损", f"¥{最大亏损:,.2f}")
             
             with col3:
@@ -285,7 +303,7 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                     st.metric("盈亏比", f"{盈亏比:.2f}")
                     st.metric("总交易次数", f"{len(盈利数据) + len(亏损数据)}")
         
-        else:
+        elif "盈亏" in df_filtered.columns and len(df_filtered[df_filtered["盈亏"] != 0]) == 0:
             st.info("暂无盈亏数据（只有买入记录，没有卖出记录）")
         
     except Exception as e:
