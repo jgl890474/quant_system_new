@@ -75,7 +75,6 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             try:
                 价格 = 获取行情的价格(品种["代码"])
                 if 价格 and 价格 > 0:
-                    # 根据品种类型格式化显示
                     if "BTC" in 品种["代码"]:
                         st.metric(品种["显示名"], f"${价格:,.0f}")
                     else:
@@ -146,7 +145,8 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             预计花费 = 当前买入价 * 买入数量 if 当前买入价 else 0
             st.caption(f"预计花费: ¥{预计花费:,.0f}" if 当前买入价 else "无法计算价格")
         
-        if st.button("买入", type="primary", use_container_width=True, key="buy_button"):
+        # 修复：use_container_width=True -> width='stretch'
+        if st.button("买入", type="primary", width='stretch', key="buy_button"):
             if not 当前买入价 or 当前买入价 <= 0:
                 st.error("无法获取价格，请稍后再试")
             else:
@@ -195,7 +195,8 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             预计收入 = 当前卖出价 * 卖出数量 if 当前卖出价 else 0
             st.caption(f"预计收入: ¥{预计收入:,.0f}" if 当前卖出价 else "无法计算收入")
             
-            if st.button("卖出", use_container_width=True, key="sell_button"):
+            # 修复：use_container_width=True -> width='stretch'
+            if st.button("卖出", width='stretch', key="sell_button"):
                 if not 当前卖出价 or 当前卖出价 <= 0:
                     st.error("无法获取价格，请稍后再试")
                 else:
@@ -209,7 +210,8 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             st.info("暂无持仓")
             st.selectbox("选择持仓品种", ["无持仓"], disabled=True, key="sell_symbol_disabled")
             st.number_input("数量", min_value=1, value=100, disabled=True, key="sell_qty_disabled")
-            st.button("卖出", disabled=True, use_container_width=True, key="sell_button_disabled")
+            # 修复：use_container_width=True -> width='stretch'
+            st.button("卖出", disabled=True, width='stretch', key="sell_button_disabled")
 
 
 # ==================== 辅助函数 ====================
