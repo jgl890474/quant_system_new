@@ -127,15 +127,16 @@ def 获取YFinance数据(代码, 开始日期, 结束日期):
 
 
 # ==================== 实时价格获取 ====================
-def 获取实时价格(代码):
-    """获取单个品种的实时价格（自动选择数据源）"""
+def 获取价格(代码):
+    """
+    获取单个品种的实时价格
+    这是兼容原有接口的函数名
+    """
     市场 = 判断市场类型(代码)
     
     if 市场 == "A股":
-        # 使用 Tushare 获取最新价格
         if TUSHARE_AVAILABLE and pro:
             try:
-                # 转换代码格式
                 if len(str(代码)) == 6:
                     if 代码.startswith('6'):
                         ts_code = f"{代码}.SH"
@@ -146,23 +147,54 @@ def 获取实时价格(代码):
                 
                 df = pro.daily(ts_code=ts_code, limit=1)
                 if df is not None and not df.empty:
-                    return float(df['close'].iloc[0])
+                    # 返回一个简单的对象，包含价格属性
+                    class PriceObj:
+                        pass
+                    result = PriceObj()
+                    result.价格 = float(df['close'].iloc[0])
+                    return result
             except Exception as e:
                 print(f"获取A股实时价格失败: {e}")
     
     elif 市场 in ["美股", "加密货币", "外汇"]:
-        # 使用 yfinance
         if YFINANCE_AVAILABLE:
             try:
                 ticker = yf.Ticker(代码)
-                # 获取最新交易数据
                 data = ticker.history(period="1d")
                 if not data.empty:
-                    return float(data['Close'].iloc[-1])
+                    class PriceObj:
+                        pass
+                    result = PriceObj()
+                    result.价格 = float(data['Close'].iloc[-1])
+                    return result
             except Exception as e:
                 print(f"获取{市场}实时价格失败: {e}")
     
     return None
+
+
+# ==================== 获取实时价格（返回数值） ====================
+def 获取实时价格(代码):
+    """获取实时价格，直接返回数值"""
+    result = 获取价格(代码)
+    if result and hasattr(result, '价格'):
+        return result.价格
+    return None
+
+
+# ==================== 获取股票列表 ====================
+def 获取股票列表():
+    """获取A股股票列表"""
+    if not TUSHARE_AVAILABLE or pro is None:
+        return pd.DataFrame()
+    
+    try:
+        df = pro.stock_basic(exchange='', list_status='L', 
+                            fields='ts_code,symbol,name,industry')
+        return df
+    except Exception as e:
+        print(f"获取股票列表失败: {e}")
+        return pd.DataFrame()
 
 
 # ==================== 统一入口（自动降级） ====================
@@ -174,17 +206,14 @@ def 获取历史数据(代码, 开始日期, 结束日期):
     市场 = 判断市场类型(代码)
     
     if 市场 == "A股":
-        # 优先 Tushare
         df = 获取A股日线(代码, 开始日期, 结束日期)
         if df is not None:
             return df
-        # 降级到 yfinance（部分A股可能支持）
         df = 获取YFinance数据(代码, 开始日期, 结束日期)
         if df is not None:
             return df
     
     elif 市场 in ["美股", "加密货币", "外汇"]:
-        # 使用 yfinance
         return 获取YFinance数据(代码, 开始日期, 结束日期)
     
     return None
@@ -196,16 +225,16 @@ if __name__ == "__main__":
     print("测试行情获取模块")
     print("="*50)
     
-    # 测试 A股
-    print("\n1. 测试 A股 (平安银行):")
-    df = 获取历史数据('000001', '2024-12-01', '2024-12-31')
-    if df is not None:
-        print(df.head())
+    # 测试获取价格（原有接口）
+    print("\n1. 测试获取价格 (平安银行):")
+    result = 获取价格('000001')
+    if result:
+        print(f"价格: {result.价格}")
     else:
         print("获取失败")
     
     # 测试美股
-    print("\n2. 测试 美股 (苹果):")
+    print("\n2. 测试美股 (苹果):")
     price = 获取实时价格('AAPL')
     if price:
         print(f"AAPL 实时价格: ${price:.2f}")
@@ -213,17 +242,9 @@ if __name__ == "__main__":
         print("获取失败")
     
     # 测试加密货币
-    print("\n3. 测试 加密货币 (比特币):")
+    print("\n3. 测试加密货币 (比特币):")
     price = 获取实时价格('BTC-USD')
     if price:
         print(f"BTC-USD 价格: ${price:.2f}")
-    else:
-        print("获取失败")
-    
-    # 测试外汇
-    print("\n4. 测试 外汇 (欧元/美元):")
-    price = 获取实时价格('EURUSD=X')
-    if price:
-        print(f"EURUSD 汇率: {price:.4f}")
     else:
         print("获取失败")
