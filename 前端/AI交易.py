@@ -2,25 +2,87 @@
 import streamlit as st
 import pandas as pd
 import time
+import datetime
 
 
-# 缓存A股行情数据（120秒）
-@st.cache_data(ttl=120)
-def 获取A股行情缓存():
-    """获取A股行情并缓存"""
+# ==================== Tushare 配置（替代 akshare） ====================
+try:
+    import tushare as ts
+    ts.set_token('a58ac285333f6f8ecc93063924c3dfd8906a1e01c1865cb624f097ac')
+    pro = ts.pro_api()
+    TUSHARE_AVAILABLE = True
+    print("✅ Tushare Pro 已连接")
+except Exception as e:
+    TUSHARE_AVAILABLE = False
+    print(f"⚠️ Tushare Pro 连接失败: {e}")
+    pro = None
+
+
+# ==================== 获取A股实时数据（Tushare） ====================
+@st.cache_data(ttl=60)
+def 获取A股实时行情():
+    """使用 Tushare 获取A股实时行情"""
+    if not TUSHARE_AVAILABLE or pro is None:
+        return pd.DataFrame()
+    
     try:
-        import akshare as ak
-        df = ak.stock_zh_a_spot()
-        return df
+        # 获取今天日期
+        today = datetime.datetime.now().strftime('%Y%m%d')
+        
+        # 获取交易日历
+        trade_cal = pro.trade_cal(exchange='SSE', start_date=today, end_date=today)
+        if trade_cal.empty or trade_cal['is_open'].iloc[0] == 0:
+            # 非交易日，使用最近交易日数据
+            trade_cal = pro.trade_cal(exchange='SSE', start_date='20240101', end_date=today)
+            trade_cal = trade_cal[trade_cal['is_open'] == 1]
+            if not trade_cal.empty:
+                latest_trade_date = trade_cal['cal_date'].iloc[-1]
+            else:
+                latest_trade_date = today
+        else:
+            latest_trade_date = today
+        
+        # 获取指定股票列表的日线数据
+        股票列表 = [
+            {"ts_code": "000001.SZ", "symbol": "000001", "name": "平安银行"},
+            {"ts_code": "000858.SZ", "symbol": "000858", "name": "五粮液"},
+            {"ts_code": "002415.SZ", "symbol": "002415", "name": "海康威视"},
+            {"ts_code": "600036.SH", "symbol": "600036", "name": "招商银行"},
+            {"ts_code": "600519.SH", "symbol": "600519", "name": "贵州茅台"},
+            {"ts_code": "601318.SH", "symbol": "601318", "name": "中国平安"},
+            {"ts_code": "300750.SZ", "symbol": "300750", "name": "宁德时代"},
+            {"ts_code": "002594.SZ", "symbol": "002594", "name": "比亚迪"},
+        ]
+        
+        result = []
+        for 股票 in 股票列表:
+            try:
+                df = pro.daily(ts_code=股票["ts_code"], start_date=latest_trade_date, end_date=latest_trade_date)
+                if not df.empty:
+                    result.append({
+                        "代码": 股票["symbol"],
+                        "名称": 股票["name"],
+                        "最新价": round(df['close'].iloc[0], 2),
+                        "涨跌幅": round(df['pct_chg'].iloc[0], 2) if 'pct_chg' in df.columns else 0,
+                        "开盘": round(df['open'].iloc[0], 2),
+                        "最高": round(df['high'].iloc[0], 2),
+                        "最低": round(df['low'].iloc[0], 2),
+                        "成交量": df['vol'].iloc[0],
+                    })
+            except Exception as e:
+                print(f"获取 {股票['name']} 数据失败: {e}")
+                continue
+        
+        return pd.DataFrame(result)
     except Exception as e:
-        print(f"获取A股行情失败: {e}")
+        print(f"获取A股实时行情失败: {e}")
         return pd.DataFrame()
 
 
 def 获取A股价格(代码):
-    """从缓存获取A股价格"""
+    """获取单个A股价格"""
     try:
-        df = 获取A股行情缓存()
+        df = 获取A股实时行情()
         if df.empty:
             return None
         row = df[df['代码'] == 代码]
@@ -32,9 +94,9 @@ def 获取A股价格(代码):
 
 
 def 获取A股涨跌幅(代码):
-    """从缓存获取A股涨跌幅"""
+    """获取单个A股涨跌幅"""
     try:
-        df = 获取A股行情缓存()
+        df = 获取A股实时行情()
         if df.empty:
             return None
         row = df[df['代码'] == 代码]
@@ -58,7 +120,7 @@ def 获取加密货币价格(代码):
     except:
         pass
     # 返回模拟价格作为备用
-    模拟价格 = {"BTCUSD": 65000, "ETHUSD": 3500, "SOLUSD": 150, "BNBUSD": 600, "XRPUSD": 0.5}
+    模拟价格 = {"BTCUSD": 65000, "ETHUSD": 3500, "SOLUSD": 150, "BNBUSD": 600}
     return 模拟价格.get(代码.replace("-", "").upper(), 100)
 
 
@@ -73,7 +135,7 @@ def 获取美股价格(代码):
     except:
         pass
     # 返回模拟价格
-    模拟价格 = {"AAPL": 175, "GOOGL": 140, "MSFT": 420, "NVDA": 120, "TSLA": 170, "META": 480, "AMZN": 180}
+    模拟价格 = {"AAPL": 175, "GOOGL": 140, "MSFT": 420, "NVDA": 120, "TSLA": 170}
     return 模拟价格.get(代码, 100)
 
 
@@ -100,7 +162,6 @@ def 获取股票名称(代码):
     """获取股票名称"""
     名称映射 = {
         "000001": "平安银行",
-        "000002": "万科A",
         "000858": "五粮液",
         "002415": "海康威视",
         "600036": "招商银行",
@@ -116,41 +177,26 @@ def 获取真实AI推荐(市场, 策略类型, 引擎):
     """获取真实的AI推荐"""
     推荐列表 = []
     
-    # ==================== A股 ====================
+    # ==================== A股（使用 Tushare） ====================
     if 市场 == "A股":
-        候选品种 = [
-            {"代码": "000001", "名称": "平安银行"},
-            {"代码": "000858", "名称": "五粮液"},
-            {"代码": "002415", "名称": "海康威视"},
-            {"代码": "600036", "名称": "招商银行"},
-            {"代码": "600519", "名称": "贵州茅台"},
-            {"代码": "601318", "名称": "中国平安"},
-            {"代码": "300750", "名称": "宁德时代"},
-        ]
+        df = 获取A股实时行情()
         
-        for 股票 in 候选品种:
-            代码 = 股票["代码"]
-            名称 = 股票["名称"]
-            try:
-                价格 = 获取A股价格(代码)
-                涨跌幅 = 获取A股涨跌幅(代码)
+        if not df.empty:
+            for _, row in df.iterrows():
+                代码 = row['代码']
+                名称 = row['名称']
+                价格 = row['最新价']
+                涨跌幅 = row['涨跌幅']
                 
                 if 价格 and 价格 > 0:
-                    # 判断是否在交易时段（涨跌幅不为0或接近0）
-                    if 涨跌幅 is not None:
-                        if 涨跌幅 > 0:
-                            得分 = int(50 + min(涨跌幅 * 8, 50))
-                            趋势 = "上涨" if 涨跌幅 < 5 else "强势"
-                            理由 = f"涨幅{涨跌幅:.2f}%"
-                        elif 涨跌幅 < 0:
-                            得分 = int(50 + max(涨跌幅 * 2, -20))
-                            趋势 = "下跌"
-                            理由 = f"跌幅{abs(涨跌幅):.2f}%"
-                        else:
-                            # 非交易时段或平盘，仍然显示但得分较低
-                            得分 = 45
-                            趋势 = "平盘"
-                            理由 = f"当前价格 ¥{价格:.2f}"
+                    if 涨跌幅 > 0:
+                        得分 = int(50 + min(涨跌幅 * 8, 50))
+                        趋势 = "上涨" if 涨跌幅 < 5 else "强势"
+                        理由 = f"涨幅{涨跌幅:.2f}%"
+                    elif 涨跌幅 < 0:
+                        得分 = int(50 + max(涨跌幅 * 2, -20))
+                        趋势 = "下跌"
+                        理由 = f"跌幅{abs(涨跌幅):.2f}%"
                     else:
                         得分 = 45
                         趋势 = "平盘"
@@ -165,8 +211,18 @@ def 获取真实AI推荐(市场, 策略类型, 引擎):
                         "理由": 理由,
                         "市场": "A股"
                     })
-            except Exception as e:
-                continue
+        else:
+            # 如果获取失败，使用模拟数据
+            for 代码, 名称 in [("000001", "平安银行"), ("600036", "招商银行"), ("600519", "贵州茅台")]:
+                推荐列表.append({
+                    "代码": 代码,
+                    "名称": 名称,
+                    "价格": 100.00,
+                    "趋势": "观望",
+                    "得分": 50,
+                    "理由": "Tushare数据获取中",
+                    "市场": "A股"
+                })
         
         # 按得分排序
         推荐列表.sort(key=lambda x: x["得分"], reverse=True)
@@ -193,7 +249,7 @@ def 获取真实AI推荐(市场, 策略类型, 引擎):
                         "理由": f"当前价格 ${价格:.2f}",
                         "市场": "加密货币"
                     })
-            except Exception as e:
+            except:
                 continue
         
         推荐列表.sort(key=lambda x: x["得分"], reverse=True)
@@ -235,12 +291,12 @@ def 获取真实AI推荐(市场, 策略类型, 引擎):
     
     # ==================== 期货 ====================
     elif 市场 == "期货":
-        候选品种 = ["GC=F", "CL=F"]
-        for 代码 in 候选品种:
-            价格 = 获取期货价格(代码)
+        候选品种 = [{"代码": "GC=F", "名称": "黄金期货"}, {"代码": "CL=F", "名称": "原油期货"}]
+        for 品种 in 候选品种:
+            价格 = 获取期货价格(品种["代码"])
             推荐列表.append({
-                "代码": 代码,
-                "名称": "黄金期货" if 代码 == "GC=F" else "原油期货",
+                "代码": 品种["代码"],
+                "名称": 品种["名称"],
                 "价格": 价格,
                 "趋势": "震荡",
                 "得分": 55,
@@ -351,10 +407,8 @@ def 显示(引擎, 策略加载器, AI引擎):
                     st.markdown(f"**{name}** ({code})")
                     st.caption(f"💰 价格: {price:.4f}")
                 with col2:
-                    if 趋势 == "上涨":
+                    if 趋势 in ["上涨", "强势"]:
                         st.markdown("🟢 趋势向上")
-                    elif 趋势 == "强势":
-                        st.markdown("🔴 强势突破")
                     elif 趋势 == "下跌":
                         st.markdown("🔻 趋势向下")
                     else:
