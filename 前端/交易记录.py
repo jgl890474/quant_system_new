@@ -2,33 +2,85 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-import plotly.express as px
+from datetime import datetime, timedelta
 from 工具.数据库 import 获取交易记录
 
 
 def 显示(引擎=None, 策略加载器=None, AI引擎=None):
-    """显示交易记录页面"""
+    """显示交易记录页面（带筛选功能）"""
     st.subheader("📋 交易记录")
     
     try:
         # 获取交易记录
-        记录 = 获取交易记录(限制数量=200)
+        所有记录 = 获取交易记录(限制数量=500)
         
-        if not 记录 or len(记录) == 0:
+        if not 所有记录 or len(所有记录) == 0:
             st.info("暂无交易记录")
             return
         
         # 转换为 DataFrame
-        df = pd.DataFrame(记录)
+        df = pd.DataFrame(所有记录)
         
-        # 检查 DataFrame 是否为空
         if df.empty:
             st.info("暂无交易记录")
             return
         
-        # 显示表格
+        # ========== 筛选器 ==========
+        st.markdown("### 🔍 筛选条件")
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            品种列表 = ["全部"] + sorted(df["品种"].unique().tolist())
+            筛选品种 = st.selectbox("按品种筛选", 品种列表)
+        
+        with col2:
+            动作列表 = ["全部"] + sorted(df["动作"].unique().tolist())
+            筛选动作 = st.selectbox("按动作筛选", 动作列表)
+        
+        with col3:
+            时间选项 = ["全部", "最近7天", "最近30天", "最近90天"]
+            筛选时间 = st.selectbox("按时间筛选", 时间选项)
+        
+        with col4:
+            if st.button("🔄 重置筛选"):
+                st.rerun()
+        
+        # ========== 应用筛选 ==========
+        df_filtered = df.copy()
+        
+        if 筛选品种 != "全部":
+            df_filtered = df_filtered[df_filtered["品种"] == 筛选品种]
+        
+        if 筛选动作 != "全部":
+            df_filtered = df_filtered[df_filtered["动作"] == 筛选动作]
+        
+        if 筛选时间 != "全部":
+            now = datetime.now()
+            if 筛选时间 == "最近7天":
+                cutoff = now - timedelta(days=7)
+            elif 筛选时间 == "最近30天":
+                cutoff = now - timedelta(days=30)
+            elif 筛选时间 == "最近90天":
+                cutoff = now - timedelta(days=90)
+            else:
+                cutoff = None
+            
+            if cutoff:
+                df_filtered["时间_dt"] = pd.to_datetime(df_filtered["时间"])
+                df_filtered = df_filtered[df_filtered["时间_dt"] >= cutoff]
+                df_filtered = df_filtered.drop(columns=["时间_dt"])
+        
+        # 显示筛选结果统计
+        st.caption(f"📊 共 {len(df_filtered)} 条记录（共 {len(df)} 条）")
+        
+        if df_filtered.empty:
+            st.info("没有符合筛选条件的记录")
+            return
+        
+        # ========== 显示表格 ==========
+        st.markdown("### 📋 交易明细")
         st.dataframe(
-            df, 
+            df_filtered, 
             use_container_width=True, 
             hide_index=True,
             column_config={
@@ -42,46 +94,52 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
             }
         )
         
-        # 统计信息
+        # ========== 统计信息 ==========
+        st.markdown("---")
+        st.markdown("### 📊 交易统计")
+        
+        # 统计所有记录
+        总次数 = len(df_filtered)
+        买入次数 = len(df_filtered[df_filtered["动作"] == "买入"]) if "动作" in df_filtered.columns else 0
+        卖出次数 = len(df_filtered[df_filtered["动作"] == "卖出"]) if "动作" in df_filtered.columns else 0
+        
         col1, col2, col3, col4 = st.columns(4)
-        
-        # 买入卖出统计
-        买入次数 = len(df[df["动作"] == "买入"]) if "动作" in df.columns else 0
-        卖出次数 = len(df[df["动作"] == "卖出"]) if "动作" in df.columns else 0
-        
-        # 总盈亏
-        if "盈亏" in df.columns:
-            总盈亏 = df["盈亏"].sum()
-            盈利次数 = len(df[df["盈亏"] > 0])
-            亏损次数 = len(df[df["盈亏"] < 0])
-            最大盈利 = df["盈亏"].max() if len(df[df["盈亏"] > 0]) > 0 else 0
-            最大亏损 = df["盈亏"].min() if len(df[df["盈亏"] < 0]) > 0 else 0
-        else:
-            总盈亏 = 0
-            盈利次数 = 0
-            亏损次数 = 0
-            最大盈利 = 0
-            最大亏损 = 0
-        
-        col1.metric("总交易次数", len(df))
+        col1.metric("总交易次数", 总次数)
         col2.metric("买入/卖出", f"{买入次数} / {卖出次数}")
-        col3.metric("总盈亏", f"¥{总盈亏:,.2f}", 
-                    delta=f"盈利{盈利次数}次 / 亏损{亏损次数}次" if 盈利次数 + 亏损次数 > 0 else None)
-        col4.metric("最大单笔", f"¥{最大盈利:,.2f} / ¥{最大亏损:,.2f}")
+        
+        # 盈亏统计（只统计卖出记录）
+        卖出记录 = df_filtered[df_filtered["动作"] == "卖出"]
+        
+        if not 卖出记录.empty:
+            总盈亏 = 卖出记录["盈亏"].sum()
+            盈利次数 = len(卖出记录[卖出记录["盈亏"] > 0])
+            亏损次数 = len(卖出记录[卖出记录["盈亏"] < 0])
+            最大盈利 = 卖出记录["盈亏"].max() if盈利次数 > 0 else 0
+            最大亏损 = 卖出记录["盈亏"].min() if亏损次数 > 0 else 0
+            
+            col3.metric("总盈亏", f"¥{总盈亏:+,.2f}")
+            col4.metric("盈利/亏损次数", f"{盈利次数} / {亏损次数}")
+            
+            if盈利次数 + 亏损次数 > 0:
+                胜率 = 盈利次数 / (盈利次数 + 亏损次数) * 100
+                st.metric("胜率", f"{胜率:.1f}%")
+        else:
+            col3.metric("总盈亏", "¥0.00")
+            col4.metric("盈利/亏损次数", "0 / 0")
+            st.info("暂无卖出记录，无法统计盈亏")
         
         st.markdown("---")
         
         # ==================== 盈亏分布（彩色柱状图） ====================
-        if "盈亏" in df.columns and len(df[df["盈亏"] != 0]) > 0:
+        if "盈亏" in df_filtered.columns and len(df_filtered[df_filtered["盈亏"] != 0]) > 0:
             st.subheader("📊 盈亏分布")
             
             # 筛选出有盈亏的交易（卖出）
-            盈亏数据 = df[df["盈亏"] != 0].copy()
+            盈亏数据 = df_filtered[df_filtered["盈亏"] != 0].copy()
             if not 盈亏数据.empty:
                 # 按时间排序
                 盈亏数据 = 盈亏数据.sort_values("时间")
                 盈亏数据["累计盈亏"] = 盈亏数据["盈亏"].cumsum()
-                盈亏数据["颜色"] = 盈亏数据["盈亏"].apply(lambda x: "盈利" if x > 0 else "亏损")
                 
                 # 创建两列布局
                 col1, col2 = st.columns(2)
@@ -90,7 +148,6 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                     # ==================== 彩色盈亏柱状图 ====================
                     st.markdown("#### 📊 单笔盈亏柱状图")
                     
-                    # 使用 Plotly 创建彩色柱状图
                     fig_bar = go.Figure()
                     
                     # 添加盈利柱（绿色）
@@ -101,11 +158,8 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                             y=盈利数据["盈亏"],
                             name="盈利",
                             marker_color='#2ECC71',
-                            marker_line_color='#27AE60',
-                            marker_line_width=1,
-                            text=盈利数据["盈亏"].apply(lambda x: f"¥{x:,.2f}"),
-                            textposition='outside',
-                            hovertemplate='%{x}<br>盈利: ¥%{y:,.2f}<extra></extra>'
+                            text=盈利数据["盈亏"].apply(lambda x: f"¥{x:,.0f}"),
+                            textposition='outside'
                         ))
                     
                     # 添加亏损柱（红色）
@@ -116,11 +170,8 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                             y=亏损数据["盈亏"],
                             name="亏损",
                             marker_color='#E74C3C',
-                            marker_line_color='#C0392B',
-                            marker_line_width=1,
-                            text=亏损数据["盈亏"].apply(lambda x: f"¥{x:,.2f}"),
-                            textposition='outside',
-                            hovertemplate='%{x}<br>亏损: ¥%{y:,.2f}<extra></extra>'
+                            text=亏损数据["盈亏"].apply(lambda x: f"¥{x:,.0f}"),
+                            textposition='outside'
                         ))
                     
                     fig_bar.update_layout(
@@ -129,12 +180,8 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                         yaxis_title="盈亏金额 (¥)",
                         height=400,
                         hovermode='x unified',
-                        plot_bgcolor='white',
-                        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5)
+                        plot_bgcolor='white'
                     )
-                    fig_bar.update_xaxes(gridcolor='#E8E8E8')
-                    fig_bar.update_yaxes(gridcolor='#E8E8E8', tickformat=',.0f')
-                    
                     st.plotly_chart(fig_bar, use_container_width=True)
                 
                 with col2:
@@ -149,14 +196,11 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                         values=[盈利总额, 亏损总额],
                         marker_colors=['#2ECC71', '#E74C3C'],
                         hole=0.4,
-                        textinfo='label+percent',
-                        textposition='auto',
-                        hovertemplate='%{label}<br>金额: ¥%{value:,.2f}<br>占比: %{percent}<extra></extra>'
+                        textinfo='label+percent'
                     )])
                     fig_pie.update_layout(
                         title="盈亏金额占比",
-                        height=400,
-                        annotations=[dict(text=f'¥{盈利总额 - 亏损总额:,.0f}', x=0.5, y=0.5, font_size=16, showarrow=False)]
+                        height=400
                     )
                     st.plotly_chart(fig_pie, use_container_width=True)
                 
@@ -165,76 +209,23 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                 # ==================== 动态累计盈亏曲线 ====================
                 st.subheader("📈 累计盈亏曲线")
                 
-                # 准备数据
                 曲线数据 = 盈亏数据[["时间", "累计盈亏"]].copy()
                 曲线数据["时间"] = pd.to_datetime(曲线数据["时间"])
                 曲线数据 = 曲线数据.sort_values("时间")
                 
-                # 使用 Plotly 创建动态曲线
                 fig_line = go.Figure()
                 
-                # 添加累计盈亏曲线
                 fig_line.add_trace(go.Scatter(
                     x=曲线数据["时间"],
                     y=曲线数据["累计盈亏"],
                     mode='lines+markers',
                     name='累计盈亏',
                     line=dict(color='#3498DB', width=3),
-                    marker=dict(
-                        size=8,
-                        color=曲线数据["累计盈亏"].apply(lambda x: '#2ECC71' if x >= 0 else '#E74C3C'),
-                        symbol='circle',
-                        line=dict(width=1, color='white')
-                    ),
                     fill='tozeroy',
-                    fillcolor='rgba(52,152,219,0.1)',
-                    text=曲线数据["累计盈亏"].apply(lambda x: f"¥{x:,.2f}"),
-                    textposition='top center',
-                    hovertemplate='%{x|%Y-%m-%d %H:%M}<br>累计盈亏: ¥%{y:,.2f}<extra></extra>'
+                    fillcolor='rgba(52,152,219,0.1)'
                 ))
                 
-                # 添加零线参考线
-                fig_line.add_hline(
-                    y=0, 
-                    line_dash="dash", 
-                    line_color="#95A5A6",
-                    annotation_text="盈亏平衡线",
-                    annotation_position="bottom right"
-                )
-                
-                # 添加最高点标记
-                最高点 = 曲线数据["累计盈亏"].max()
-                最高点位置 = 曲线数据[曲线数据["累计盈亏"] == 最高点]["时间"].iloc[0] if not 曲线数据.empty else None
-                if 最高点位置:
-                    fig_line.add_annotation(
-                        x=最高点位置,
-                        y=最高点,
-                        text=f"最高点: ¥{最高点:,.2f}",
-                        showarrow=True,
-                        arrowhead=2,
-                        arrowsize=1,
-                        arrowwidth=2,
-                        arrowcolor="#2ECC71",
-                        ax=0,
-                        ay=-30
-                    )
-                
-                # 添加最低点标记
-                最低点 = 曲线数据["累计盈亏"].min()
-                最低点位置 = 曲线数据[曲线数据["累计盈亏"] == 最低点]["时间"].iloc[0] if not 曲线数据.empty else None
-                if 最低点位置:
-                    fig_line.add_annotation(
-                        x=最低点位置,
-                        y=最低点,
-                        text=f"最低点: ¥{最低点:,.2f}",
-                        showarrow=True,
-                        arrowhead=2,
-                        arrowsize=1,
-                        arrowwidth=2,
-                        arrowcolor="#E74C3C",
-                        ax=0,
-                        ay=30
-                    )
+                fig_line.add_hline(y=0, line_dash="dash", line_color="#95A5A6")
                 
                 fig_line.update_layout(
                     title="累计盈亏走势",
@@ -242,15 +233,7 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                     yaxis_title="累计盈亏 (¥)",
                     height=450,
                     hovermode='x unified',
-                    plot_bgcolor='white',
-                    xaxis=dict(
-                        tickformat='%m-%d %H:%M',
-                        gridcolor='#E8E8E8'
-                    ),
-                    yaxis=dict(
-                        gridcolor='#E8E8E8',
-                        tickformat=',.0f'
-                    )
+                    plot_bgcolor='white'
                 )
                 
                 st.plotly_chart(fig_line, use_container_width=True)
