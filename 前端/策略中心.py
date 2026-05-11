@@ -67,7 +67,8 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
             with col4:
                 st.caption("📉 -12.5%")
             with col5:
-                if st.button("运行", key=f"run_{策略.get('名称', '未知')}_{idx}", use_container_width=True):
+                # 修复：use_container_width=True -> width='stretch'
+                if st.button("运行", key=f"run_{策略.get('名称', '未知')}_{idx}", width='stretch'):
                     try:
                         品种 = 策略.get("品种", "")
                         if 品种:
@@ -86,7 +87,8 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                 信号 = st.session_state.策略信号[策略['名称']]
                 if 信号 == "buy":
                     st.caption("🟢 信号: BUY")
-                    if st.button("买入", key=f"buy_{策略.get('名称', '未知')}_{idx}"):
+                    # 修复：use_container_width=True -> width='stretch'
+                    if st.button("买入", key=f"buy_{策略.get('名称', '未知')}_{idx}", width='stretch'):
                         try:
                             品种 = 策略.get("品种", "")
                             if 品种 and 引擎:
@@ -103,7 +105,8 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                             st.error(f"买入失败: {e}")
                 elif 信号 == "sell":
                     st.caption("🔴 信号: SELL")
-                    if st.button("卖出", key=f"sell_{策略.get('名称', '未知')}_{idx}"):
+                    # 修复：use_container_width=True -> width='stretch'
+                    if st.button("卖出", key=f"sell_{策略.get('名称', '未知')}_{idx}", width='stretch'):
                         try:
                             品种 = 策略.get("品种", "")
                             if 品种 and 引擎:
