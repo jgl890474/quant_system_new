@@ -1,6 +1,172 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
+import pandas as pd
 from 核心 import 行情获取
+
+
+# 缓存A股行情数据（30秒内不重复请求）
+@st.cache_data(ttl=30)
+def 获取A股行情缓存():
+    """获取A股行情并缓存30秒"""
+    try:
+        import akshare as ak
+        df = ak.stock_zh_a_spot()
+        return df
+    except Exception as e:
+        print(f"获取A股行情失败: {e}")
+        return pd.DataFrame()
+
+
+def 获取A股价格和涨跌幅(代码):
+    """从缓存获取A股价格和涨跌幅"""
+    try:
+        df = 获取A股行情缓存()
+        if df.empty:
+            return None, None
+        row = df[df['代码'] == 代码]
+        if not row.empty:
+            价格 = float(row['最新价'].iloc[0])
+            涨跌幅 = float(row['涨跌幅'].iloc[0])
+            return 价格, 涨跌幅
+    except:
+        pass
+    return None, None
+
+
+def 获取真实AI推荐(市场, 策略类型, 引擎):
+    """获取真实的AI推荐（基于行情数据）"""
+    推荐列表 = []
+    
+    # 根据市场获取候选品种
+    if 市场 == "A股":
+        # A股候选品种
+        候选品种 = [
+            {"代码": "000001", "名称": "平安银行"},
+            {"代码": "000002", "名称": "万科A"},
+            {"代码": "000858", "名称": "五粮液"},
+            {"代码": "002415", "名称": "海康威视"},
+            {"代码": "600036", "名称": "招商银行"},
+            {"代码": "600519", "名称": "贵州茅台"},
+            {"代码": "601318", "名称": "中国平安"},
+            {"代码": "300750", "名称": "宁德时代"},
+            {"代码": "002594", "名称": "比亚迪"},
+        ]
+        
+        for 股票 in 候选品种:
+            代码 = 股票["代码"]
+            名称 = 股票["名称"]
+            价格, 涨跌幅 = 获取A股价格和涨跌幅(代码)
+            
+            if 价格 and 涨跌幅 is not None:
+                # 筛选条件：涨幅1%-5%（放宽条件，更容易有结果）
+                if 1 <= 涨跌幅 <= 5:
+                    推荐列表.append({
+                        "代码": 代码,
+                        "名称": 名称,
+                        "价格": 价格,
+                        "趋势": "上涨" if 涨跌幅 > 0 else "下跌",
+                        "得分": int(50 + 涨跌幅 * 8),
+                        "理由": f"涨幅{涨跌幅:.2f}%，量能充足",
+                        "市场": "A股"
+                    })
+                elif 涨跌幅 > 5:
+                    推荐列表.append({
+                        "代码": 代码,
+                        "名称": 名称,
+                        "价格": 价格,
+                        "趋势": "强势",
+                        "得分": int(70 + 涨跌幅 * 2),
+                        "理由": f"涨幅{涨跌幅:.2f}%，强势突破",
+                        "市场": "A股"
+                    })
+        
+        # 如果没有符合条件的，返回几个热门股
+        if not 推荐列表:
+            for 股票 in 候选品种[:3]:
+                代码 = 股票["代码"]
+                名称 = 股票["名称"]
+                价格, 涨跌幅 = 获取A股价格和涨跌幅(代码)
+                if 价格:
+                    推荐列表.append({
+                        "代码": 代码,
+                        "名称": 名称,
+                        "价格": 价格,
+                        "趋势": "观望",
+                        "得分": 50,
+                        "理由": "热门品种，可关注",
+                        "市场": "A股"
+                    })
+    
+    elif 市场 == "加密货币":
+        # 加密货币候选
+        候选品种 = ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD"]
+        for 代码 in 候选品种:
+            try:
+                价格 = 获取加密货币价格(代码)
+                if 价格:
+                    推荐列表.append({
+                        "代码": 代码,
+                        "名称": 代码.split('-')[0],
+                        "价格": 价格,
+                        "趋势": "上涨",
+                        "得分": 70,
+                        "理由": "技术指标显示买入信号",
+                        "市场": "加密货币"
+                    })
+            except:
+                continue
+    
+    elif 市场 == "美股":
+        # 美股候选
+        候选品种 = ["AAPL", "GOOGL", "MSFT", "NVDA", "TSLA", "META", "AMZN"]
+        for 代码 in 候选品种:
+            try:
+                价格 = 获取美股价格(代码)
+                if 价格:
+                    推荐列表.append({
+                        "代码": 代码,
+                        "名称": 代码,
+                        "价格": 价格,
+                        "趋势": "震荡",
+                        "得分": 60,
+                        "理由": "基本面良好",
+                        "市场": "美股"
+                    })
+            except:
+                continue
+    
+    # 按得分排序
+    推荐列表.sort(key=lambda x: x["得分"], reverse=True)
+    return 推荐列表[:5]
+
+
+def 获取加密货币价格(代码):
+    """获取加密货币价格"""
+    try:
+        import requests
+        symbol = 代码.replace("-", "").upper()
+        url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
+        res = requests.get(url, timeout=5)
+        data = res.json()
+        if "price" in data:
+            return float(data["price"])
+    except:
+        pass
+    return None
+
+
+def 获取美股价格(代码):
+    """获取美股价格"""
+    try:
+        import yfinance as yf
+        ticker = yf.Ticker(代码)
+        # 使用快速获取方式
+        data = ticker.history(period="1d")
+        if not data.empty:
+            return float(data['Close'].iloc[-1])
+    except:
+        pass
+    return None
 
 
 def 显示(引擎, 策略加载器, AI引擎):
@@ -32,7 +198,6 @@ def 显示(引擎, 策略加载器, AI引擎):
     if st.button("🚀 AI 分析", type="primary", use_container_width=True):
         with st.spinner(f"AI 正在使用【{策略类型}】分析【{市场}】..."):
             try:
-                # 调用真实AI引擎或行情数据
                 st.session_state.ai_list = 获取真实AI推荐(市场, 策略类型, 引擎)
                 
                 if st.session_state.ai_list:
@@ -58,11 +223,11 @@ def 显示(引擎, 策略加载器, AI引擎):
             
             # 根据市场类型计算建议数量
             if 市场类型 == "A股":
-                建议数量 = int(可用资金 * 0.1 / price / 100) * 100  # 10%资金，100股取整
+                建议数量 = int(可用资金 * 0.1 / price / 100) * 100
                 建议数量 = max(建议数量, 100)
                 数量单位 = "股"
             elif 市场类型 == "加密货币":
-                建议数量 = round(可用资金 * 0.1 / price, 4)  # 10%资金，精确到4位小数
+                建议数量 = round(可用资金 * 0.1 / price, 4)
                 数量单位 = "个"
             else:
                 建议数量 = int(可用资金 * 0.1 / price / 100) * 100
@@ -75,7 +240,7 @@ def 显示(引擎, 策略加载器, AI引擎):
                     st.markdown(f"**{name}** ({code})")
                     st.caption(f"💰 价格: {price:.4f}")
                 with col2:
-                    if 趋势 == "上涨":
+                    if 趋势 in ["上涨", "强势"]:
                         st.markdown("🟢 趋势向上")
                     else:
                         st.markdown("🔴 趋势向下")
@@ -131,150 +296,19 @@ def 显示(引擎, 策略加载器, AI引擎):
         st.info("暂无持仓")
 
 
-def 获取真实AI推荐(市场, 策略类型, 引擎):
-    """获取真实的AI推荐（基于行情数据）"""
-    推荐列表 = []
-    
-    # 根据市场获取候选品种
-    if 市场 == "A股":
-        候选品种 = ["000001", "000002", "000858", "002415", "600036", "600519", "601318"]
-        # 获取实时行情
-        for 代码 in 候选品种:
-            try:
-                价格 = 获取A股价格(代码)
-                涨跌幅 = 获取A股涨跌幅(代码)
-                if 价格 and 涨跌幅 is not None:
-                    # 筛选条件：涨幅3%-7%，不是ST
-                    if 3 <= 涨跌幅 <= 7:
-                        推荐列表.append({
-                            "代码": 代码,
-                            "名称": 获取股票名称(代码),
-                            "价格": 价格,
-                            "趋势": "上涨" if 涨跌幅 > 0 else "下跌",
-                            "得分": int(50 + 涨跌幅 * 5),
-                            "理由": f"涨幅{涨跌幅:.2f}%，量能充足",
-                            "市场": "A股"
-                        })
-            except:
-                continue
-    
-    elif 市场 == "加密货币":
-        候选品种 = ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD"]
-        for 代码 in 候选品种:
-            try:
-                价格 = 获取加密货币价格(代码)
-                if 价格:
-                    推荐列表.append({
-                        "代码": 代码,
-                        "名称": 代码.split('-')[0],
-                        "价格": 价格,
-                        "趋势": "上涨",
-                        "得分": 70,
-                        "理由": "技术指标显示买入信号",
-                        "市场": "加密货币"
-                    })
-            except:
-                continue
-    
-    elif 市场 == "美股":
-        候选品种 = ["AAPL", "GOOGL", "MSFT", "NVDA", "TSLA"]
-        for 代码 in 候选品种:
-            try:
-                价格 = 获取美股价格(代码)
-                if 价格:
-                    推荐列表.append({
-                        "代码": 代码,
-                        "名称": 代码,
-                        "价格": 价格,
-                        "趋势": "震荡",
-                        "得分": 60,
-                        "理由": "基本面良好",
-                        "市场": "美股"
-                    })
-            except:
-                continue
-    
-    # 按得分排序
-    推荐列表.sort(key=lambda x: x["得分"], reverse=True)
-    return 推荐列表[:5]
-
-
 def 获取实时价格(代码, 市场类型):
     """获取实时价格"""
     try:
         if 市场类型 == "A股":
-            return 获取A股价格(代码)
+            价格, _ = 获取A股价格和涨跌幅(代码)
+            return 价格
         elif 市场类型 == "加密货币":
             return 获取加密货币价格(代码)
         elif 市场类型 == "美股":
             return 获取美股价格(代码)
     except:
-        return None
-    return None
-
-
-def 获取A股价格(代码):
-    """获取A股实时价格"""
-    try:
-        import akshare as ak
-        df = ak.stock_zh_a_spot()
-        row = df[df['代码'] == 代码]
-        if not row.empty:
-            return float(row['最新价'].iloc[0])
-    except:
         pass
     return None
-
-
-def 获取A股涨跌幅(代码):
-    """获取A股涨跌幅"""
-    try:
-        import akshare as ak
-        df = ak.stock_zh_a_spot()
-        row = df[df['代码'] == 代码]
-        if not row.empty:
-            return float(row['涨跌幅'].iloc[0])
-    except:
-        pass
-    return None
-
-
-def 获取股票名称(代码):
-    """获取股票名称"""
-    名称映射 = {
-        "000001": "平安银行",
-        "000002": "万科A",
-        "000858": "五粮液",
-        "002415": "海康威视",
-        "600036": "招商银行",
-        "600519": "贵州茅台",
-        "601318": "中国平安",
-    }
-    return 名称映射.get(代码, 代码)
-
-
-def 获取加密货币价格(代码):
-    """获取加密货币价格"""
-    try:
-        import requests
-        symbol = 代码.replace("-", "").upper()
-        url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
-        res = requests.get(url, timeout=5)
-        data = res.json()
-        return float(data["price"])
-    except:
-        return None
-
-
-def 获取美股价格(代码):
-    """获取美股价格"""
-    try:
-        import yfinance as yf
-        ticker = yf.Ticker(代码)
-        price = ticker.info.get('regularMarketPrice', 0)
-        return price if price > 0 else None
-    except:
-        return None
 
 
 def 执行买入(引擎, 代码, 价格, 数量, 市场类型, 策略类型):
