@@ -360,7 +360,8 @@ def 显示(引擎, 策略加载器, AI引擎):
     if "ai_list" not in st.session_state:
         st.session_state.ai_list = []
     
-    if st.button("🚀 AI 分析", type="primary", use_container_width=True):
+    # 修复：use_container_width=True -> width='stretch'
+    if st.button("🚀 AI 分析", type="primary", width='stretch'):
         with st.spinner(f"AI 正在使用【{策略类型}】分析【{市场}】..."):
             try:
                 st.session_state.ai_list = 获取真实AI推荐(市场, 策略类型, 引擎)
@@ -455,6 +456,7 @@ def 显示(引擎, 策略加载器, AI引擎):
                 "现价": round(当前价格, 4),
                 "浮动盈亏": round(浮动盈亏, 2)
             })
-        st.dataframe(持仓数据, use_container_width=True)
+        # 修复：use_container_width=True -> width='stretch'
+        st.dataframe(持仓数据, width='stretch', hide_index=True)
     else:
         st.info("暂无持仓")
