@@ -6,83 +6,37 @@ import os
 # 添加项目根目录到系统路径
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# ========== 导入模块（带容错） ==========
+# ========== 导入模块 ==========
 try:
     from 前端 import 首页, 策略中心, AI交易, 持仓管理, 资金曲线, 回测, 交易记录
 except Exception as e:
-    print(f"前端模块导入失败: {e}")
-    # 创建空模块避免崩溃
-    首页 = None
-    策略中心 = None
-    AI交易 = None
-    持仓管理 = None
-    资金曲线 = None
-    回测 = None
-    交易记录 = None
+    st.error(f"❌ 前端模块导入失败: {e}")
+    st.stop()
 
 try:
     from 核心 import 订单引擎
 except Exception as e:
-    print(f"订单引擎导入失败: {e}")
-    # 定义一个简单的订单引擎作为备选
-    class 订单引擎:
-        def __init__(self, 初始资金=1000000, **kwargs):
-            self.初始资金 = 初始资金
-            self.可用资金 = 初始资金
-            self.持仓市值 = 0
-            self.总盈亏 = 0
-            self.持仓 = {}
-            self.交易记录 = []
-        def 买入(self, *args, **kwargs):
-            return {"success": False, "error": "订单引擎未正确初始化"}
-        def 卖出(self, *args, **kwargs):
-            return {"success": False, "error": "订单引擎未正确初始化"}
-        def 获取总资产(self):
-            return self.可用资金 + self.持仓市值
-        def 获取可用资金(self):
-            return self.可用资金
-        def 获取持仓市值(self):
-            return self.持仓市值
-        def 获取总盈亏(self):
-            return self.总盈亏
-        def 获取初始资金(self):
-            return self.初始资金
-        def 获取持仓(self):
-            return self.持仓
+    st.error(f"❌ 订单引擎导入失败，请检查核心/订单引擎.py文件")
+    st.code(f"错误详情: {e}")
+    st.stop()
 
 try:
     from 工具 import 数据库
 except Exception as e:
-    print(f"数据库模块导入失败: {e}")
-    # 创建空数据库模块
-    class 数据库:
-        @staticmethod
-        def 初始化数据库():
-            pass
-        @staticmethod
-        def 清空所有持仓():
-            pass
-        @staticmethod
-        def 获取当前时间():
-            import datetime
-            return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    st.error(f"❌ 数据库模块导入失败: {e}")
+    st.stop()
 
 # ========== 初始化数据库 ==========
 try:
     数据库.初始化数据库()
-except:
-    pass
+except Exception as e:
+    st.warning(f"数据库初始化警告: {e}")
 
 # ========== 初始化 session_state ==========
-INITIAL_CAPITAL = 1000000  # 100万
+INITIAL_CAPITAL = 1000000
 
-# 初始化订单引擎（安全方式）
 if '订单引擎' not in st.session_state:
-    try:
-        st.session_state.订单引擎 = 订单引擎()
-    except Exception as e:
-        print(f"订单引擎初始化失败: {e}")
-        st.session_state.订单引擎 = 订单引擎(初始资金=INITIAL_CAPITAL)
+    st.session_state.订单引擎 = 订单引擎(初始资金=INITIAL_CAPITAL)
 
 # 初始化策略加载器（兼容处理）
 if '策略加载器' not in st.session_state:
