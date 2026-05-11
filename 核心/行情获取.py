@@ -8,6 +8,7 @@
 import pandas as pd
 import requests
 import time
+from datetime import datetime, timedelta
 
 # ==================== 新浪财经实时行情配置 ====================
 def 获取新浪实时行情(代码):
@@ -284,6 +285,140 @@ def 获取YFinance实时价格(代码):
     return None
 
 
+# ==================== ==================== ====================
+# ==================== 新增：K线数据获取 ====================
+# ==================== ==================== ====================
+
+def 获取K线数据(代码, 周期="1d", 长度=60):
+    """
+    获取K线数据用于图表显示
+    参数:
+        代码: 品种代码 (如 AAPL, BTC-USD, 000001)
+        周期: 时间周期 (1d=日线, 1wk=周线, 1h=小时线)
+        长度: 获取多少根K线
+    返回:
+        DataFrame 包含 日期, 开盘, 最高, 最低, 收盘, 成交量
+    """
+    try:
+        市场 = 判断市场类型(代码)
+        
+        if 市场 == "A股":
+            # A股使用 Tushare 获取历史数据
+            if TUSHARE_AVAILABLE and pro:
+                # 转换代码格式
+                if len(str(代码)) == 6:
+                    if 代码.startswith('6'):
+                        ts_code = f"{代码}.SH"
+                    else:
+                        ts_code = f"{代码}.SZ"
+                else:
+                    ts_code = 代码
+                
+                # 计算开始日期（根据长度估算）
+                if 周期 == "1d":
+                    天数 = 长度 * 2  # 多取一些确保够用
+                elif 周期 == "1wk":
+                    天数 = 长度 * 7 * 2
+                else:
+                    天数 = 长度 * 30
+                
+                end_date = datetime.now().strftime('%Y%m%d')
+                start_date = (datetime.now() - timedelta(days=天数)).strftime('%Y%m%d')
+                
+                df = pro.daily(ts_code=ts_code, start_date=start_date, end_date=end_date)
+                if df is not None and not df.empty:
+                    df = df.sort_values('trade_date')
+                    df = df.tail(长度)
+                    df['日期'] = pd.to_datetime(df['trade_date'])
+                    return df[['日期', 'open', 'high', 'low', 'close', 'vol']].rename(columns={
+                        'open': '开盘', 'high': '最高', 'low': '最低', 'close': '收盘', 'vol': '成交量'
+                    })
+        
+        elif 市场 in ["美股", "加密货币", "外汇"]:
+            # 使用 yfinance 获取数据
+            if YFINANCE_AVAILABLE:
+                # 周期映射
+                周期映射 = {
+                    "1d": "1d",
+                    "1wk": "1wk", 
+                    "1h": "1h"
+                }
+                yf_period = 周期映射.get(周期, "1d")
+                
+                # 计算获取的天数
+                if 周期 == "1d":
+                    get_days = 长度 + 20
+                elif 周期 == "1wk":
+                    get_days = 长度 * 7 + 30
+                else:
+                    get_days = 长度 * 2 + 10
+                
+                ticker = yf.Ticker(代码)
+                df = ticker.history(period=f"{get_days}d", interval=yf_period)
+                
+                if not df.empty:
+                    df = df.reset_index()
+                    df = df.tail(长度)
+                    return df[['Datetime', 'Open', 'High', 'Low', 'Close', 'Volume']].rename(columns={
+                        'Datetime': '日期', 'Open': '开盘', 'High': '最高', 'Low': '最低', 'Close': '收盘', 'Volume': '成交量'
+                    })
+        
+        return pd.DataFrame()
+    except Exception as e:
+        print(f"获取K线数据失败: {e}")
+        return pd.DataFrame()
+
+
+def 计算技术指标(df):
+    """
+    计算常用技术指标
+    返回: 包含均线等指标的DataFrame
+    """
+    if df.empty:
+        return df
+    
+    df_copy = df.copy()
+    
+    # 确保有收盘价
+    if '收盘' not in df_copy.columns:
+        return df_copy
+    
+    # 简单移动平均线
+    df_copy['MA5'] = df_copy['收盘'].rolling(window=5).mean()   # 5日均线
+    df_copy['MA10'] = df_copy['收盘'].rolling(window=10).mean() # 10日均线
+    df_copy['MA20'] = df_copy['收盘'].rolling(window=20).mean() # 20日均线
+    df_copy['MA60'] = df_copy['收盘'].rolling(window=60).mean() # 60日均线
+    
+    # 指数移动平均线
+    df_copy['EMA12'] = df_copy['收盘'].ewm(span=12, adjust=False).mean()
+    df_copy['EMA26'] = df_copy['收盘'].ewm(span=26, adjust=False).mean()
+    
+    # MACD
+    df_copy['MACD'] = df_copy['EMA12'] - df_copy['EMA26']
+    df_copy['MACD_Signal'] = df_copy['MACD'].ewm(span=9, adjust=False).mean()
+    df_copy['MACD_Histogram'] = df_copy['MACD'] - df_copy['MACD_Signal']
+    
+    # RSI (相对强弱指数)
+    delta = df_copy['收盘'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / loss
+    df_copy['RSI'] = 100 - (100 / (1 + rs))
+    
+    # 布林带
+    df_copy['BB_Middle'] = df_copy['收盘'].rolling(window=20).mean()
+    bb_std = df_copy['收盘'].rolling(window=20).std()
+    df_copy['BB_Upper'] = df_copy['BB_Middle'] + 2 * bb_std
+    df_copy['BB_Lower'] = df_copy['BB_Middle'] - 2 * bb_std
+    
+    # 成交量均线
+    if '成交量' in df_copy.columns:
+        df_copy['VOL_MA5'] = df_copy['成交量'].rolling(window=5).mean()
+        df_copy['VOL_MA10'] = df_copy['成交量'].rolling(window=10).mean()
+    
+    return df_copy
+
+
 # ==================== 实时价格获取（统一入口） ====================
 def 获取价格(代码):
     """
@@ -397,3 +532,18 @@ if __name__ == "__main__":
     result = 获取价格('000001')
     if result:
         print(f"价格: {result.价格}")
+    
+    # 测试K线数据
+    print("\n4. 测试K线数据 (AAPL):")
+    df = 获取K线数据('AAPL', '1d', 20)
+    if not df.empty:
+        print(f"获取 {len(df)} 根K线")
+        print(df.head())
+    else:
+        print("获取失败")
+    
+    # 测试技术指标
+    print("\n5. 测试技术指标计算:")
+    if not df.empty:
+        df_tech = 计算技术指标(df)
+        print(f"技术指标列: {list(df_tech.columns)}")
