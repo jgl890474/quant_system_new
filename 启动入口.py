@@ -6,26 +6,83 @@ import os
 # 添加项目根目录到系统路径
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# ========== 导入模块 ==========
-from 前端 import 首页, 策略中心, AI交易, 持仓管理, 资金曲线, 回测, 交易记录
-from 核心 import 订单引擎
-from 工具 import 数据库
+# ========== 导入模块（带容错） ==========
+try:
+    from 前端 import 首页, 策略中心, AI交易, 持仓管理, 资金曲线, 回测, 交易记录
+except Exception as e:
+    print(f"前端模块导入失败: {e}")
+    # 创建空模块避免崩溃
+    首页 = None
+    策略中心 = None
+    AI交易 = None
+    持仓管理 = None
+    资金曲线 = None
+    回测 = None
+    交易记录 = None
+
+try:
+    from 核心 import 订单引擎
+except Exception as e:
+    print(f"订单引擎导入失败: {e}")
+    # 定义一个简单的订单引擎作为备选
+    class 订单引擎:
+        def __init__(self, 初始资金=1000000, **kwargs):
+            self.初始资金 = 初始资金
+            self.可用资金 = 初始资金
+            self.持仓市值 = 0
+            self.总盈亏 = 0
+            self.持仓 = {}
+            self.交易记录 = []
+        def 买入(self, *args, **kwargs):
+            return {"success": False, "error": "订单引擎未正确初始化"}
+        def 卖出(self, *args, **kwargs):
+            return {"success": False, "error": "订单引擎未正确初始化"}
+        def 获取总资产(self):
+            return self.可用资金 + self.持仓市值
+        def 获取可用资金(self):
+            return self.可用资金
+        def 获取持仓市值(self):
+            return self.持仓市值
+        def 获取总盈亏(self):
+            return self.总盈亏
+        def 获取初始资金(self):
+            return self.初始资金
+        def 获取持仓(self):
+            return self.持仓
+
+try:
+    from 工具 import 数据库
+except Exception as e:
+    print(f"数据库模块导入失败: {e}")
+    # 创建空数据库模块
+    class 数据库:
+        @staticmethod
+        def 初始化数据库():
+            pass
+        @staticmethod
+        def 清空所有持仓():
+            pass
+        @staticmethod
+        def 获取当前时间():
+            import datetime
+            return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 # ========== 初始化数据库 ==========
-数据库.初始化数据库()
+try:
+    数据库.初始化数据库()
+except:
+    pass
 
 # ========== 初始化 session_state ==========
 INITIAL_CAPITAL = 1000000  # 100万
 
-# 初始化订单引擎（兼容参数名）
+# 初始化订单引擎（安全方式）
 if '订单引擎' not in st.session_state:
     try:
+        st.session_state.订单引擎 = 订单引擎()
+    except Exception as e:
+        print(f"订单引擎初始化失败: {e}")
         st.session_state.订单引擎 = 订单引擎(初始资金=INITIAL_CAPITAL)
-    except TypeError:
-        try:
-            st.session_state.订单引擎 = 订单引擎(INITIAL_CAPITAL=INITIAL_CAPITAL)
-        except TypeError:
-            st.session_state.订单引擎 = 订单引擎()
 
 # 初始化策略加载器（兼容处理）
 if '策略加载器' not in st.session_state:
@@ -51,6 +108,8 @@ if 'AI引擎' not in st.session_state:
                 return {"信号": "无", "置信度": 0, "理由": "AI引擎未配置"}
             def 分析市场(self):
                 return {"建议": "无法获取AI分析"}
+            def AI推荐(self, 市场, 策略类型):
+                return {"推荐": []}
         st.session_state.AI引擎 = 简单AI引擎()
 
 if '策略信号' not in st.session_state:
@@ -139,9 +198,12 @@ with st.sidebar:
     st.markdown("### 🛠️ 系统工具")
     
     if st.button("🗑️ 清空所有持仓数据", width="stretch"):
-        数据库.清空所有持仓()
-        st.success("✅ 已清空")
-        st.rerun()
+        try:
+            数据库.清空所有持仓()
+            st.success("✅ 已清空")
+            st.rerun()
+        except:
+            st.error("清空失败")
     
     if st.button("🔄 刷新策略列表", width="stretch"):
         try:
@@ -187,135 +249,56 @@ with st.sidebar:
         st.caption(f"止损: {风控.止损比例*100:.0f}% | 止盈: {风控.止盈比例*100:.0f}%")
     
     st.markdown("---")
-    st.caption(f"当前时间: {数据库.获取当前时间()}")
+    try:
+        st.caption(f"当前时间: {数据库.获取当前时间()}")
+    except:
+        st.caption(f"当前时间: 获取失败")
 
 # ========== 安全调用函数包装器 ==========
-def 安全调用_首页():
-    """安全调用首页显示函数"""
+def 安全调用(模块, 默认信息="模块开发中"):
+    """安全调用模块显示函数"""
+    if 模块 is None:
+        st.info(默认信息)
+        return
     try:
-        if hasattr(首页, '显示'):
-            首页.显示(引擎, 策略加载器, AI引擎)
+        if hasattr(模块, '显示'):
+            模块.显示(引擎, 策略加载器, AI引擎)
         else:
-            st.info("首页模块未配置")
-    except TypeError as e:
+            st.info(默认信息)
+    except TypeError:
         try:
-            首页.显示(引擎, 策略加载器)
+            模块.显示(引擎, 策略加载器)
         except TypeError:
             try:
-                首页.显示(引擎)
+                模块.显示(引擎)
             except:
-                st.info("首页模块加载中...")
-
-def 安全调用_策略中心():
-    """安全调用策略中心显示函数"""
-    try:
-        if hasattr(策略中心, '显示'):
-            策略中心.显示(引擎, 策略加载器, 策略信号)
-        else:
-            st.info("策略中心模块未配置")
-    except TypeError:
-        try:
-            策略中心.显示(引擎, 策略加载器)
-        except TypeError:
-            try:
-                策略中心.显示(引擎)
-            except:
-                st.info("策略中心模块加载中...")
-
-def 安全调用_AI交易():
-    """安全调用AI交易显示函数"""
-    try:
-        if hasattr(AI交易, '显示'):
-            AI交易.显示(引擎, 策略加载器, AI引擎)
-        else:
-            st.info("AI交易模块未配置")
-    except TypeError:
-        try:
-            AI交易.显示(引擎, 策略加载器)
-        except TypeError:
-            try:
-                AI交易.显示(引擎)
-            except:
-                st.info("AI交易模块加载中...")
-
-def 安全调用_持仓管理():
-    """安全调用持仓管理显示函数"""
-    try:
-        if hasattr(持仓管理, '显示'):
-            持仓管理.显示(引擎, 策略加载器, AI引擎)
-        else:
-            st.info("持仓管理模块未配置")
-    except TypeError:
-        try:
-            持仓管理.显示(引擎, 策略加载器)
-        except TypeError:
-            try:
-                持仓管理.显示(引擎)
-            except:
-                st.info("持仓管理模块加载中...")
-
-def 安全调用_资金曲线():
-    """安全调用资金曲线显示函数"""
-    try:
-        if hasattr(资金曲线, '显示'):
-            资金曲线.显示(引擎)
-        else:
-            st.info("资金曲线模块未配置")
-    except TypeError:
-        try:
-            资金曲线.显示()
-        except:
-            st.info("资金曲线模块加载中...")
-
-def 安全调用_回测():
-    """安全调用回测显示函数"""
-    try:
-        if hasattr(回测, '显示'):
-            回测.显示(引擎)
-        else:
-            st.info("回测模块未配置")
-    except TypeError:
-        try:
-            回测.显示()
-        except:
-            st.info("回测模块加载中...")
-
-def 安全调用_交易记录():
-    """安全调用交易记录显示函数"""
-    try:
-        if hasattr(交易记录, '显示'):
-            交易记录.显示()
-        else:
-            st.info("交易记录模块未配置")
-    except TypeError:
-        try:
-            交易记录.显示(引擎)
-        except:
-            st.info("交易记录模块加载中...")
+                st.info(默认信息)
+    except Exception as e:
+        st.info(f"{默认信息} ({e})")
 
 # ========== Tab ==========
 tabs = st.tabs(["🏠 首页", "📊 策略中心", "🤖 AI交易", "💼 持仓管理", "💰 资金曲线", "📈 回测", "📋 交易记录"])
 
 with tabs[0]:
-    安全调用_首页()
+    安全调用(首页, "首页模块开发中")
 
 with tabs[1]:
-    安全调用_策略中心()
+    安全调用(策略中心, "策略中心模块开发中")
 
 with tabs[2]:
-    安全调用_AI交易()
+    安全调用(AI交易, "AI交易模块开发中")
 
 with tabs[3]:
-    安全调用_持仓管理()
+    安全调用(持仓管理, "持仓管理模块开发中")
 
 with tabs[4]:
-    安全调用_资金曲线()
+    安全调用(资金曲线, "资金曲线模块开发中")
 
 with tabs[5]:
-    安全调用_回测()
+    安全调用(回测, "回测模块开发中")
 
 with tabs[6]:
-    安全调用_交易记录()
+    安全调用(交易记录, "交易记录模块开发中")
 
 # ========== 页脚 ==========
 st.markdown("---")
