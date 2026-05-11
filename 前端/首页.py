@@ -3,12 +3,13 @@ import streamlit as st
 import os
 from 核心 import 行情获取
 
-def 显示(引擎, 策略加载器=None, AI引擎=None):   # ← 修改这里
+def 显示(引擎, 策略加载器=None, AI引擎=None):
     # 计算资金指标
     总资产 = 引擎.获取总资产()
     总盈亏 = 引擎.获取总盈亏()
     持仓市值 = 引擎.获取持仓市值()
     可用资金 = 引擎.获取可用资金()
+    初始资金 = 引擎.获取初始资金() if hasattr(引擎, '获取初始资金') else 1000000
     
     # 顶部指标卡片
     col1, col2, col3, col4 = st.columns(4)
@@ -20,7 +21,8 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):   # ← 修改这里
     with col3:
         st.metric("持仓市值", f"¥{持仓市值:,.0f}")
     with col4:
-        st.metric("总盈亏", f"¥{总盈亏:+,.0f}", delta=f"{(总盈亏/引擎.初始资金)*100:.1f}%")
+        收益率 = (总盈亏 / 初始资金) * 100 if 初始资金 > 0 else 0
+        st.metric("总盈亏", f"¥{总盈亏:+,.0f}", delta=f"{收益率:+.1f}%")
     
     # 实时行情
     st.markdown("### 📈 实时行情")
@@ -31,8 +33,15 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):   # ← 修改这里
     for i, 品种 in enumerate(行情品种):
         with 行情列[i]:
             try:
-                价格 = 行情获取.获取价格(品种).价格
-                st.metric(品种, f"${价格:.2f}")
+                结果 = 行情获取.获取价格(品种)
+                if 结果 and hasattr(结果, '价格'):
+                    价格 = 结果.价格
+                else:
+                    价格 = None
+                if 价格:
+                    st.metric(品种, f"${价格:.2f}")
+                else:
+                    st.metric(品种, "—")
             except:
                 st.metric(品种, "—")
     
@@ -58,8 +67,12 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):   # ← 修改这里
         买入品种 = st.selectbox("选择品种", 可买品种列表, key="buy_symbol_select")
         
         try:
-            当前买入价 = 行情获取.获取价格(买入品种).价格
-            st.caption(f"当前价格: ${当前买入价:.4f}")
+            行情结果 = 行情获取.获取价格(买入品种)
+            if 行情结果 and hasattr(行情结果, '价格'):
+                当前买入价 = 行情结果.价格
+            else:
+                当前买入价 = 0
+            st.caption(f"当前价格: ${当前买入价:.4f}" if 当前买入价 > 0 else "获取价格失败")
         except:
             当前买入价 = 0
             st.caption("获取价格失败")
@@ -102,13 +115,15 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):   # ← 修改这里
             st.caption(f"预计花费: ¥{预计花费:,.0f}")
         
         if st.button("买入", type="primary", use_container_width=True, key="buy_button"):
-            try:
-                价格 = 行情获取.获取价格(买入品种).价格
-                st.info(f"正在买入: {买入品种} {买入数量}手 @ {价格:.4f}")
-                引擎.买入(买入品种, 价格, 买入数量)
-                st.rerun()
-            except Exception as e:
-                st.error(f"买入失败: {e}")
+            if 当前买入价 <= 0:
+                st.error("无法获取价格，请稍后再试")
+            else:
+                try:
+                    引擎.买入(买入品种, 当前买入价, 买入数量)
+                    st.success(f"✅ 已买入 {买入品种} {买入数量} 单位")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"买入失败: {e}")
     
     # ========== 卖出区域 ==========
     with col2:
@@ -130,10 +145,15 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):   # ← 修改这里
             st.caption(f"持仓成本: ${引擎.持仓[卖品种].平均成本:.4f}")
             
             try:
-                当前卖出价 = 行情获取.获取价格(卖品种).价格
-                st.caption(f"当前价格: ${当前卖出价:.4f}")
+                行情结果 = 行情获取.获取价格(卖品种)
+                if 行情结果 and hasattr(行情结果, '价格'):
+                    当前卖出价 = 行情结果.价格
+                else:
+                    当前卖出价 = 0
+                st.caption(f"当前价格: ${当前卖出价:.4f}" if 当前卖出价 > 0 else "获取价格失败")
             except:
                 当前卖出价 = 0
+                st.caption("获取价格失败")
             
             卖出数量 = st.number_input(
                 "数量", 
@@ -148,12 +168,15 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):   # ← 修改这里
             st.caption(f"预计收入: ¥{预计收入:,.0f}")
             
             if st.button("卖出", use_container_width=True, key="sell_button"):
-                try:
-                    价格 = 行情获取.获取价格(卖品种).价格
-                    引擎.卖出(卖品种, 价格, 卖出数量)
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"卖出失败: {e}")
+                if 当前卖出价 <= 0:
+                    st.error("无法获取价格，请稍后再试")
+                else:
+                    try:
+                        引擎.卖出(卖品种, 当前卖出价, 卖出数量)
+                        st.success(f"✅ 已卖出 {卖品种} {卖出数量} 单位")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"卖出失败: {e}")
         else:
             st.info("暂无持仓")
             st.selectbox("选择持仓品种", ["无持仓"], disabled=True, key="sell_symbol_disabled")
