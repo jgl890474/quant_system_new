@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from 核心 import 行情获取
 from datetime import datetime
 
@@ -59,7 +61,6 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         
         if 数据:
             df = pd.DataFrame(数据)
-            # 修复：use_container_width=True -> width='stretch'
             st.dataframe(df, width='stretch', hide_index=True)
             
             # 显示总盈亏
@@ -71,6 +72,239 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                     except:
                         pass
             st.caption(f"📊 持仓总盈亏: ¥{总盈亏:+,.2f}")
+            
+            # ========== 新增：K线图表区域 ==========
+            st.markdown("---")
+            st.markdown("### 📈 品种K线图分析")
+            
+            # 选择要查看的品种
+            品种列表 = [d["品种"] for d in 数据]
+            选中品种 = st.selectbox("选择品种查看K线图", 品种列表, key="kline_select")
+            
+            if 选中品种:
+                with st.spinner(f"正在加载 {选中品种} 的K线数据..."):
+                    # 周期选择
+                    周期选项 = st.selectbox("选择周期", ["日线", "周线", "60分钟"], key="period_select")
+                    
+                    if 周期选项 == "日线":
+                        周期 = "1d"
+                        长度 = 60
+                    elif 周期选项 == "周线":
+                        周期 = "1wk"
+                        长度 = 50
+                    else:
+                        周期 = "1h"
+                        长度 = 100
+                    
+                    # 获取K线数据
+                    df_kline = 行情获取.获取K线数据(选中品种, 周期, 长度)
+                    
+                    if not df_kline.empty:
+                        # 计算技术指标
+                        df_indicators = 行情获取.计算技术指标(df_kline)
+                        
+                        # 创建子图：K线图 + 成交量 + MACD
+                        fig = make_subplots(
+                            rows=3, cols=1,
+                            shared_xaxes=True,
+                            vertical_spacing=0.03,
+                            row_heights=[0.55, 0.2, 0.25],
+                            subplot_titles=(f'{选中品种} - K线图', '成交量', 'MACD')
+                        )
+                        
+                        # ===== K线图 =====
+                        fig.add_trace(go.Candlestick(
+                            x=df_indicators['日期'],
+                            open=df_indicators['开盘'],
+                            high=df_indicators['最高'],
+                            low=df_indicators['最低'],
+                            close=df_indicators['收盘'],
+                            name='K线',
+                            showlegend=False
+                        ), row=1, col=1)
+                        
+                        # 添加均线
+                        if 'MA5' in df_indicators.columns:
+                            fig.add_trace(go.Scatter(
+                                x=df_indicators['日期'],
+                                y=df_indicators['MA5'],
+                                mode='lines',
+                                name='MA5',
+                                line=dict(color='#FF6B6B', width=1.5)
+                            ), row=1, col=1)
+                        
+                        if 'MA10' in df_indicators.columns:
+                            fig.add_trace(go.Scatter(
+                                x=df_indicators['日期'],
+                                y=df_indicators['MA10'],
+                                mode='lines',
+                                name='MA10',
+                                line=dict(color='#4ECDC4', width=1.5)
+                            ), row=1, col=1)
+                        
+                        if 'MA20' in df_indicators.columns:
+                            fig.add_trace(go.Scatter(
+                                x=df_indicators['日期'],
+                                y=df_indicators['MA20'],
+                                mode='lines',
+                                name='MA20',
+                                line=dict(color='#FFE66D', width=1.5)
+                            ), row=1, col=1)
+                        
+                        # 添加布林带
+                        if 'BB_Upper' in df_indicators.columns:
+                            fig.add_trace(go.Scatter(
+                                x=df_indicators['日期'],
+                                y=df_indicators['BB_Upper'],
+                                mode='lines',
+                                name='布林上轨',
+                                line=dict(color='#95A5A6', width=1, dash='dash'),
+                                showlegend=True
+                            ), row=1, col=1)
+                            fig.add_trace(go.Scatter(
+                                x=df_indicators['日期'],
+                                y=df_indicators['BB_Lower'],
+                                mode='lines',
+                                name='布林下轨',
+                                line=dict(color='#95A5A6', width=1, dash='dash'),
+                                fill='tonexty',
+                                fillcolor='rgba(149,165,166,0.1)',
+                                showlegend=True
+                            ), row=1, col=1)
+                        
+                        # ===== 成交量图 =====
+                        # 根据涨跌设置颜色
+                        if len(df_indicators) > 0:
+                            颜色 = ['#2ECC71' if c >= o else '#E74C3C' 
+                                   for c, o in zip(df_indicators['收盘'], df_indicators['开盘'])]
+                        else:
+                            颜色 = ['#2ECC71'] * len(df_indicators)
+                        
+                        fig.add_trace(go.Bar(
+                            x=df_indicators['日期'],
+                            y=df_indicators['成交量'] if '成交量' in df_indicators.columns else [0]*len(df_indicators),
+                            name='成交量',
+                            marker_color=颜色,
+                            opacity=0.5,
+                            showlegend=False
+                        ), row=2, col=1)
+                        
+                        # ===== MACD图 =====
+                        if 'MACD' in df_indicators.columns:
+                            # MACD柱状图
+                            macd_colors = ['#2ECC71' if x >= 0 else '#E74C3C' for x in df_indicators['MACD_Histogram']]
+                            fig.add_trace(go.Bar(
+                                x=df_indicators['日期'],
+                                y=df_indicators['MACD_Histogram'],
+                                name='MACD柱',
+                                marker_color=macd_colors,
+                                opacity=0.5,
+                                showlegend=False
+                            ), row=3, col=1)
+                            
+                            # MACD线
+                            fig.add_trace(go.Scatter(
+                                x=df_indicators['日期'],
+                                y=df_indicators['MACD'],
+                                mode='lines',
+                                name='MACD',
+                                line=dict(color='#3498DB', width=1.5)
+                            ), row=3, col=1)
+                            
+                            # 信号线
+                            fig.add_trace(go.Scatter(
+                                x=df_indicators['日期'],
+                                y=df_indicators['MACD_Signal'],
+                                mode='lines',
+                                name='信号线',
+                                line=dict(color='#E74C3C', width=1.5)
+                            ), row=3, col=1)
+                        
+                        # 更新布局
+                        fig.update_layout(
+                            title=f"{选中品种} 技术分析图表",
+                            height=750,
+                            xaxis_rangeslider_visible=False,
+                            showlegend=True,
+                            legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
+                            plot_bgcolor='#0a0c10',
+                            paper_bgcolor='#0a0c10',
+                            font_color='#e6e6e6'
+                        )
+                        
+                        fig.update_xaxes(title_text="日期", row=3, col=1, gridcolor='#2a2e3a')
+                        fig.update_yaxes(title_text="价格", row=1, col=1, gridcolor='#2a2e3a')
+                        fig.update_yaxes(title_text="成交量", row=2, col=1, gridcolor='#2a2e3a')
+                        fig.update_yaxes(title_text="MACD", row=3, col=1, gridcolor='#2a2e3a')
+                        
+                        st.plotly_chart(fig, width='stretch')
+                        
+                        # ===== 技术指标摘要 =====
+                        with st.expander("📊 技术指标摘要", expanded=False):
+                            最新数据 = df_indicators.iloc[-1]
+                            
+                            col1, col2, col3, col4 = st.columns(4)
+                            
+                            with col1:
+                                st.metric("当前价格", f"¥{最新数据['收盘']:.2f}")
+                                if 'MA5' in 最新数据:
+                                    st.metric("5日均线", f"¥{最新数据['MA5']:.2f}")
+                                if 'MA20' in 最新数据:
+                                    st.metric("20日均线", f"¥{最新数据['MA20']:.2f}")
+                            
+                            with col2:
+                                if 'MA10' in 最新数据:
+                                    st.metric("10日均线", f"¥{最新数据['MA10']:.2f}")
+                                if 'MA60' in 最新数据:
+                                    st.metric("60日均线", f"¥{最新数据['MA60']:.2f}")
+                            
+                            with col3:
+                                if 'RSI' in 最新数据:
+                                    rsi = 最新数据['RSI']
+                                    st.metric("RSI", f"{rsi:.1f}")
+                                    if rsi > 70:
+                                        st.caption("🔴 超买区域 (RSI > 70)")
+                                    elif rsi < 30:
+                                        st.caption("🟢 超卖区域 (RSI < 30)")
+                                    else:
+                                        st.caption("🟡 中性区域")
+                            
+                            with col4:
+                                if 'MACD' in 最新数据和 'MACD_Signal' in 最新数据:
+                                    st.metric("MACD", f"{最新数据['MACD']:.4f}")
+                                    st.metric("信号线", f"{最新数据['MACD_Signal']:.4f}")
+                                    if 最新数据['MACD'] > 最新数据['MACD_Signal']:
+                                        st.caption("🟢 MACD金叉信号")
+                                    else:
+                                        st.caption("🔴 MACD死叉信号")
+                            
+                            # 趋势判断
+                            st.markdown("---")
+                            st.markdown("**📈 趋势判断**")
+                            
+                            趋势列表 = []
+                            if 'MA5' in 最新数据和 'MA10' in 最新数据:
+                                if 最新数据['MA5'] > 最新数据['MA10']:
+                                    趋势列表.append("🟢 短期均线多头排列")
+                                else:
+                                    趋势列表.append("🔴 短期均线空头排列")
+                            
+                            if '价格' in locals() and 'MA20' in 最新数据:
+                                if 最新数据['收盘'] > 最新数据['MA20']:
+                                    趋势列表.append("🟢 价格站上20日均线")
+                                else:
+                                    趋势列表.append("🔴 价格跌破20日均线")
+                            
+                            if 'BB_Upper' in 最新数据和 'BB_Lower' in 最新数据:
+                                if 最新数据['收盘'] > 最新数据['BB_Upper']:
+                                    趋势列表.append("🟡 价格突破布林上轨（强势）")
+                                elif 最新数据['收盘'] < 最新数据['BB_Lower']:
+                                    趋势列表.append("🟡 价格跌破布林下轨（弱势）")
+                            
+                            for 趋势 in 趋势列表:
+                                st.write(趋势)
+                    else:
+                        st.warning(f"无法获取 {选中品种} 的K线数据")
     else:
         st.caption("暂无持仓")
     
@@ -132,7 +366,6 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                 key="trailing_stop_back"
             )
     
-    # 修复：use_container_width=True -> width='stretch'
     if st.button("应用风控参数", width='stretch', key="apply_risk"):
         if '风控引擎' in st.session_state:
             st.session_state.风控引擎.止损比例 = 止损比例 / 100
@@ -147,7 +380,6 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
     
     # ========== 手动平仓按钮 ==========
     if 引擎.持仓:
-        # 修复：use_container_width=True -> width='stretch'
         if st.button("🗑️ 一键平仓所有持仓", width='stretch', key="close_all"):
             for 品种 in list(引擎.持仓.keys()):
                 try:
