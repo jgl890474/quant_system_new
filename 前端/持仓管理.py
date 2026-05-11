@@ -59,7 +59,8 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         
         if 数据:
             df = pd.DataFrame(数据)
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            # 修复：use_container_width=True -> width='stretch'
+            st.dataframe(df, width='stretch', hide_index=True)
             
             # 显示总盈亏
             总盈亏 = 0.0
@@ -131,8 +132,8 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                 key="trailing_stop_back"
             )
     
-    # 应用按钮
-    if st.button("应用风控参数", use_container_width=True, key="apply_risk"):
+    # 修复：use_container_width=True -> width='stretch'
+    if st.button("应用风控参数", width='stretch', key="apply_risk"):
         if '风控引擎' in st.session_state:
             st.session_state.风控引擎.止损比例 = 止损比例 / 100
             st.session_state.风控引擎.止盈比例 = 止盈比例 / 100
@@ -146,7 +147,8 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
     
     # ========== 手动平仓按钮 ==========
     if 引擎.持仓:
-        if st.button("🗑️ 一键平仓所有持仓", use_container_width=True, key="close_all"):
+        # 修复：use_container_width=True -> width='stretch'
+        if st.button("🗑️ 一键平仓所有持仓", width='stretch', key="close_all"):
             for 品种 in list(引擎.持仓.keys()):
                 try:
                     价格结果 = 行情获取.获取价格(品种)
