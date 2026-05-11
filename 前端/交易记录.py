@@ -14,7 +14,8 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
     with st.expander("🛠️ 数据维护工具"):
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("🗑️ 删除所有异常记录（盈亏 > 10万）", type="secondary"):
+            # 修复：use_container_width=True -> width='stretch'
+            if st.button("🗑️ 删除所有异常记录（盈亏 > 10万）", type="secondary", width='stretch'):
                 try:
                     conn = 获取连接()
                     cursor = conn.cursor()
@@ -28,7 +29,8 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                     st.error(f"删除失败: {e}")
         
         with col2:
-            if st.button("📊 查看异常记录统计", type="secondary"):
+            # 修复：use_container_width=True -> width='stretch'
+            if st.button("📊 查看异常记录统计", type="secondary", width='stretch'):
                 try:
                     conn = 获取连接()
                     cursor = conn.cursor()
@@ -127,9 +129,10 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
         
         # ========== 显示表格 ==========
         st.markdown("### 📋 交易明细")
+        # 修复：use_container_width=True -> width='stretch'
         st.dataframe(
             df_display[["时间", "品种", "动作", "价格", "数量", "盈亏", "策略名称"]], 
-            use_container_width=True, 
+            width='stretch', 
             hide_index=True,
             column_config={
                 "时间": st.column_config.TextColumn("时间", width="small"),
@@ -226,7 +229,8 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                     hovermode='x unified',
                     plot_bgcolor='white'
                 )
-                st.plotly_chart(fig_bar, use_container_width=True)
+                # 修复：use_container_width=True -> width='stretch'
+                st.plotly_chart(fig_bar, width='stretch')
             
             with col2:
                 st.markdown("#### 盈亏占比")
@@ -242,7 +246,8 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                     textinfo='label+percent'
                 )])
                 fig_pie.update_layout(title="盈亏金额占比", height=400)
-                st.plotly_chart(fig_pie, use_container_width=True)
+                # 修复：use_container_width=True -> width='stretch'
+                st.plotly_chart(fig_pie, width='stretch')
             
             st.markdown("---")
             
@@ -268,7 +273,8 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                 hovermode='x unified',
                 plot_bgcolor='white'
             )
-            st.plotly_chart(fig_line, use_container_width=True)
+            # 修复：use_container_width=True -> width='stretch'
+            st.plotly_chart(fig_line, width='stretch')
             
             # 额外统计
             st.markdown("---")
