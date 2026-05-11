@@ -6,7 +6,6 @@
 """
 
 import pandas as pd
-import time
 
 # ==================== Tushare Pro 配置 ====================
 try:
@@ -131,6 +130,7 @@ def 获取价格(代码):
     """
     获取单个品种的实时价格
     这是兼容原有接口的函数名
+    返回一个带有 .价格 属性的对象
     """
     市场 = 判断市场类型(代码)
     
@@ -147,7 +147,6 @@ def 获取价格(代码):
                 
                 df = pro.daily(ts_code=ts_code, limit=1)
                 if df is not None and not df.empty:
-                    # 返回一个简单的对象，包含价格属性
                     class PriceObj:
                         pass
                     result = PriceObj()
