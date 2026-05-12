@@ -3,23 +3,38 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
-from 工具.数据库 import 获取交易记录, 获取连接
+from 工具.数据库 import 获取交易记录, 获取连接, 清空所有持仓, 数据库
 
 
 def 显示(引擎=None, 策略加载器=None, AI引擎=None):
     """显示交易记录页面（带筛选功能）"""
     st.subheader("📋 交易记录")
     
-    # ========== 添加清理按钮（仅管理员可见） ==========
+    # ========== 数据维护工具 ==========
     with st.expander("🛠️ 数据维护工具"):
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
+        
         with col1:
-            # 修复：use_container_width=True -> width='stretch'
-            if st.button("🗑️ 删除所有异常记录（盈亏 > 10万）", type="secondary", width='stretch'):
+            if st.button("🗑️ 清空所有交易记录", width='stretch', type="secondary"):
                 try:
                     conn = 获取连接()
                     cursor = conn.cursor()
-                    cursor.execute("DELETE FROM 交易记录 WHERE ABS(盈亏) > 100000")
+                    cursor.execute("DELETE FROM 交易记录")
+                    cursor.execute("DELETE FROM 持仓快照")
+                    删除数量 = cursor.rowcount
+                    conn.commit()
+                    conn.close()
+                    st.success(f"✅ 已清空所有交易记录和持仓")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"清空失败: {e}")
+        
+        with col2:
+            if st.button("🗑️ 删除异常记录（盈亏 > 10万）", width='stretch', type="secondary"):
+                try:
+                    conn = 获取连接()
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM 交易记录 WHERE ABS(盈亏) > 100000 OR 盈亏 IS NULL")
                     删除数量 = cursor.rowcount
                     conn.commit()
                     conn.close()
@@ -28,24 +43,20 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                 except Exception as e:
                     st.error(f"删除失败: {e}")
         
-        with col2:
-            # 修复：use_container_width=True -> width='stretch'
-            if st.button("📊 查看异常记录统计", type="secondary", width='stretch'):
+        with col3:
+            if st.button("🔧 修复时间格式", width='stretch', type="secondary"):
                 try:
                     conn = 获取连接()
                     cursor = conn.cursor()
-                    cursor.execute("SELECT COUNT(*), SUM(盈亏), MAX(盈亏), MIN(盈亏) FROM 交易记录 WHERE ABS(盈亏) > 100000")
-                    row = cursor.fetchone()
+                    # 修复时间格式：删除时间字段为空的记录
+                    cursor.execute("DELETE FROM 交易记录 WHERE 时间 IS NULL OR 时间 = ''")
+                    删除数量 = cursor.rowcount
+                    conn.commit()
                     conn.close()
-                    if row[0] > 0:
-                        st.warning(f"发现 {row[0]} 条异常记录")
-                        st.write(f"总异常金额: {row[1]:.2f}")
-                        st.write(f"最大异常盈利: {row[2]:.2f}")
-                        st.write(f"最大异常亏损: {row[3]:.2f}")
-                    else:
-                        st.info("没有发现异常记录")
+                    st.success(f"✅ 已修复 {删除数量} 条时间异常记录")
+                    st.rerun()
                 except Exception as e:
-                    st.error(f"查询失败: {e}")
+                    st.error(f"修复失败: {e}")
     
     try:
         # 获取交易记录
@@ -62,16 +73,35 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
             st.info("暂无交易记录")
             return
         
-        # 统一解析时间
-        df["时间_解析"] = pd.to_datetime(df["时间"], errors='coerce')
-        df = df.dropna(subset=["时间_解析"])
+        # ========== 清理和验证数据 ==========
+        # 删除品种为空或空白的记录
+        df = df[df["品种"].notna()]
+        df = df[df["品种"].astype(str).str.strip() != ""]
+        
+        # 删除盈亏为空的记录
+        df = df[df["盈亏"].notna()]
+        
+        # 删除时间为空的记录
+        df = df[df["时间"].notna()]
+        df = df[df["时间"].astype(str).str.strip() != ""]
+        
+        # 修复时间格式
+        try:
+            df["时间_解析"] = pd.to_datetime(df["时间"], errors='coerce')
+            # 删除无法解析时间的记录
+            df = df.dropna(subset=["时间_解析"])
+            # 添加格式化的时间列
+            df["时间_显示"] = df["时间_解析"].dt.strftime("%Y-%m-%d %H:%M:%S")
+        except Exception as e:
+            st.warning(f"时间解析警告: {e}")
+            if "时间" in df.columns:
+                df["时间_显示"] = df["时间"].astype(str)
+            else:
+                df["时间_显示"] = "未知"
         
         if df.empty:
             st.info("暂无有效交易记录")
             return
-        
-        # 添加格式化的时间列用于显示
-        df["时间_显示"] = df["时间_解析"].dt.strftime("%Y-%m-%d %H:%M:%S")
         
         # ========== 筛选器 ==========
         st.markdown("### 🔍 筛选条件")
@@ -102,7 +132,7 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
         if 筛选动作 != "全部":
             df_filtered = df_filtered[df_filtered["动作"] == 筛选动作]
         
-        if 筛选时间 != "全部":
+        if 筛选时间 != "全部" and "时间_解析" in df_filtered.columns:
             now = datetime.now()
             if 筛选时间 == "最近7天":
                 cutoff = now - timedelta(days=7)
@@ -125,17 +155,16 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
         
         # 准备显示用的数据框
         df_display = df_filtered.copy()
-        df_display["时间"] = df_display["时间_显示"]
+        df_display["时间"] = df_display["时间_显示"] if "时间_显示" in df_display.columns else df_display["时间"].astype(str)
         
         # ========== 显示表格 ==========
         st.markdown("### 📋 交易明细")
-        # 修复：use_container_width=True -> width='stretch'
         st.dataframe(
             df_display[["时间", "品种", "动作", "价格", "数量", "盈亏", "策略名称"]], 
             width='stretch', 
             hide_index=True,
             column_config={
-                "时间": st.column_config.TextColumn("时间", width="small"),
+                "时间": st.column_config.TextColumn("时间", width="medium"),
                 "品种": st.column_config.TextColumn("品种", width="small"),
                 "动作": st.column_config.TextColumn("动作", width="small"),
                 "价格": st.column_config.NumberColumn("价格", format="%.2f"),
@@ -161,6 +190,9 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
         # 盈亏统计（只统计卖出记录）
         卖出记录 = df_filtered[df_filtered["动作"] == "卖出"]
         
+        # 过滤异常盈亏
+        卖出记录 = 卖出记录[卖出记录["盈亏"].between(-100000, 100000)]
+        
         if not 卖出记录.empty:
             总盈亏 = 卖出记录["盈亏"].sum()
             盈利次数 = len(卖出记录[卖出记录["盈亏"] > 0])
@@ -177,16 +209,16 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                 
                 # 显示异常警告
                 if abs(总盈亏) > 1000000:
-                    st.warning(f"⚠️ 总盈亏异常（{总盈亏:,.2f}），可能存在错误数据，请使用上方「数据维护工具」清理")
+                    st.warning(f"⚠️ 总盈亏异常（{总盈亏:,.2f}），可能存在错误数据")
         else:
             col3.metric("总盈亏", "¥0.00")
             col4.metric("盈利/亏损次数", "0 / 0")
-            st.info("暂无卖出记录，无法统计盈亏")
+            st.info("暂无有效卖出记录，无法统计盈亏")
         
         st.markdown("---")
         
         # ==================== 盈亏分布 ====================
-        if not 卖出记录.empty:
+        if not 卖出记录.empty and "时间_解析" in 卖出记录.columns:
             st.subheader("📊 盈亏分布")
             
             盈亏数据 = 卖出记录.sort_values("时间_解析")
@@ -202,7 +234,7 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                 盈利数据 = 盈亏数据[盈亏数据["盈亏"] > 0]
                 if not 盈利数据.empty:
                     fig_bar.add_trace(go.Bar(
-                        x=盈利数据["时间_显示"],
+                        x=盈利数据["时间_显示"] if "时间_显示" in 盈利数据.columns else 盈利数据.index,
                         y=盈利数据["盈亏"],
                         name="盈利",
                         marker_color='#2ECC71',
@@ -213,7 +245,7 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                 亏损数据 = 盈亏数据[盈亏数据["盈亏"] < 0]
                 if not 亏损数据.empty:
                     fig_bar.add_trace(go.Bar(
-                        x=亏损数据["时间_显示"],
+                        x=亏损数据["时间_显示"] if "时间_显示" in 亏损数据.columns else 亏损数据.index,
                         y=亏损数据["盈亏"],
                         name="亏损",
                         marker_color='#E74C3C',
@@ -229,7 +261,6 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                     hovermode='x unified',
                     plot_bgcolor='white'
                 )
-                # 修复：use_container_width=True -> width='stretch'
                 st.plotly_chart(fig_bar, width='stretch')
             
             with col2:
@@ -246,7 +277,6 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                     textinfo='label+percent'
                 )])
                 fig_pie.update_layout(title="盈亏金额占比", height=400)
-                # 修复：use_container_width=True -> width='stretch'
                 st.plotly_chart(fig_pie, width='stretch')
             
             st.markdown("---")
@@ -273,7 +303,6 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
                 hovermode='x unified',
                 plot_bgcolor='white'
             )
-            # 修复：use_container_width=True -> width='stretch'
             st.plotly_chart(fig_line, width='stretch')
             
             # 额外统计
