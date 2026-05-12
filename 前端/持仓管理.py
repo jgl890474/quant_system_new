@@ -83,8 +83,12 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             
             if 选中品种:
                 with st.spinner(f"正在加载 {选中品种} 的K线数据..."):
-                    # 周期选择
-                    周期选项 = st.selectbox("选择周期", ["日线", "周线", "60分钟"], key="period_select")
+                    # 周期选择 - 增加30分钟和10分钟
+                    周期选项 = st.selectbox(
+                        "选择周期", 
+                        ["日线", "周线", "60分钟", "30分钟", "10分钟"], 
+                        key="period_select"
+                    )
                     
                     if 周期选项 == "日线":
                         周期 = "1d"
@@ -92,9 +96,15 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                     elif 周期选项 == "周线":
                         周期 = "1wk"
                         长度 = 50
-                    else:
+                    elif 周期选项 == "60分钟":
                         周期 = "1h"
                         长度 = 100
+                    elif 周期选项 == "30分钟":
+                        周期 = "30m"
+                        长度 = 120
+                    else:  # 10分钟
+                        周期 = "10m"
+                        长度 = 150
                     
                     # 获取K线数据
                     df_kline = 行情获取.获取K线数据(选中品种, 周期, 长度)
@@ -102,6 +112,9 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                     if not df_kline.empty:
                         # 计算技术指标
                         df_indicators = 行情获取.计算技术指标(df_kline)
+                        
+                        # ===== 获取策略信号标注 =====
+                        买入标注, 卖出标注 = 获取策略信号标注(选中品种, df_kline, 策略加载器)
                         
                         # 创建子图
                         fig = make_subplots(
@@ -170,6 +183,63 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                                 fill='tonexty',
                                 fillcolor='rgba(149,165,166,0.1)',
                                 showlegend=True
+                            ), row=1, col=1)
+                        
+                        # ===== 添加策略买入/卖出标注 =====
+                        # 买入标注（绿色向上箭头）
+                        for 标注 in 买入标注:
+                            fig.add_annotation(
+                                x=标注['日期'],
+                                y=标注['价格'],
+                                text="买入",
+                                showarrow=True,
+                                arrowhead=2,
+                                                arrowsize=1.5,
+                                arrowwidth=2,
+                                arrowcolor="#2ECC71",
+                                ax=0,
+                                ay=-35,
+                                font=dict(color="#2ECC71", size=10),
+                                bgcolor="rgba(0,0,0,0.7)",
+                                borderpad=2
+                            )
+                            
+                            # 添加标记点
+                            fig.add_trace(go.Scatter(
+                                x=[标注['日期']],
+                                y=[标注['价格']],
+                                mode='markers',
+                                name='买入信号',
+                                marker=dict(symbol='triangle-up', size=12, color='#2ECC71'),
+                                showlegend=False
+                            ), row=1, col=1)
+                        
+                        # 卖出标注（红色向下箭头）
+                        for 标注 in 卖出标注:
+                            fig.add_annotation(
+                                x=标注['日期'],
+                                y=标注['价格'],
+                                text="卖出",
+                                showarrow=True,
+                                arrowhead=2,
+                                arrowsize=1.5,
+                                arrowwidth=2,
+                                arrowcolor="#E74C3C",
+                                ax=0,
+                                ay=35,
+                                font=dict(color="#E74C3C", size=10),
+                                bgcolor="rgba(0,0,0,0.7)",
+                                borderpad=2
+                            )
+                            
+                            # 添加标记点
+                            fig.add_trace(go.Scatter(
+                                x=[标注['日期']],
+                                y=[标注['价格']],
+                                mode='markers',
+                                name='卖出信号',
+                                marker=dict(symbol='triangle-down', size=12, color='#E74C3C'),
+                                showlegend=False
                             ), row=1, col=1)
                         
                         # 成交量图
@@ -282,6 +352,12 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                                         st.caption("🟢 MACD金叉信号")
                                     else:
                                         st.caption("🔴 MACD死叉信号")
+                            
+                            # 显示策略信号摘要
+                            if 买入标注 or 卖出标注:
+                                st.markdown("---")
+                                st.markdown("**📊 策略信号统计**")
+                                st.caption(f"买入信号: {len(买入标注)} 个 | 卖出信号: {len(卖出标注)} 个")
                     else:
                         st.warning(f"无法获取 {选中品种} 的K线数据")
     else:
@@ -376,3 +452,95 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
     
     st.markdown("---")
     st.caption(f"最后更新: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+
+# ==================== 辅助函数 ====================
+def 获取策略信号标注(品种, df_kline, 策略加载器):
+    """
+    根据策略实时计算买入/卖出信号，返回标注列表
+    参数:
+        品种: 品种代码
+        df_kline: K线数据
+        策略加载器: 策略加载器实例
+    返回:
+        买入标注: [{"日期": xxx, "价格": xxx, "策略": xxx}, ...]
+        卖出标注: [{"日期": xxx, "价格": xxx, "策略": xxx}, ...]
+    """
+    买入标注 = []
+    卖出标注 = []
+    
+    if 策略加载器 is None:
+        return 买入标注, 卖出标注
+    
+    try:
+        # 获取所有策略
+        策略列表 = 策略加载器.获取策略()
+        
+        for 策略 in 策略列表:
+            策略品种 = 策略.get("品种", "")
+            # 只处理匹配当前品种的策略
+            if 策略品种 != 品种 and 策略品种 != 品种.replace(".SS", "").replace(".SZ", ""):
+                continue
+            
+            策略名称 = 策略.get("名称", "未知")
+            
+            # 为每个K线点计算策略信号
+            for i in range(len(df_kline)):
+                当前日期 = df_kline['日期'].iloc[i]
+                当前价格 = df_kline['收盘'].iloc[i]
+                
+                # 获取当前行情数据
+                行情数据 = {'close': 当前价格}
+                
+                # 运行策略获取信号
+                try:
+                    信号 = 策略运行器.运行(策略, 行情数据)
+                    if 信号 == "buy":
+                        买入标注.append({
+                            "日期": 当前日期,
+                            "价格": 当前价格,
+                            "策略": 策略名称
+                        })
+                    elif 信号 == "sell":
+                        卖出标注.append({
+                            "日期": 当前日期,
+                            "价格": 当前价格,
+                            "策略": 策略名称
+                        })
+                except:
+                    pass
+    
+    except Exception as e:
+        print(f"获取策略信号失败: {e}")
+    
+    # 去重（同一时间点可能有多个策略信号）
+    买入标注_去重 = []
+    卖出标注_去重 = []
+    买入日期集合 = set()
+    卖出日期集合 = set()
+    
+    for 标注 in 买入标注:
+        日期_str = 标注["日期"].strftime("%Y-%m-%d %H:%M")
+        if 日期_str not in 买入日期集合:
+            买入日期集合.add(日期_str)
+            买入标注_去重.append(标注)
+    
+    for 标注 in 卖出标注:
+        日期_str = 标注["日期"].strftime("%Y-%m-%d %H:%M")
+        if 日期_str not in 卖出日期集合:
+            卖出日期集合.add(日期_str)
+            卖出标注_去重.append(标注)
+    
+    # 只保留最近的10个信号，避免标注过多
+    return 买入标注_去重[-10:], 卖出标注_去重[-10:]
+
+
+# 导入策略运行器
+try:
+    from 核心.策略运行器 import 策略运行器
+except ImportError:
+    # 如果导入失败，定义一个简单的策略运行器
+    class 策略运行器:
+        @staticmethod
+        def 运行(策略信息, 行情数据):
+            return 'hold'
