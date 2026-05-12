@@ -15,27 +15,24 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
     # ==================== 先刷新持仓（从数据库恢复） ====================
     if 引擎 and hasattr(引擎, '_恢复持仓'):
         引擎._恢复持仓()
-        # 更新 session_state
         st.session_state.订单引擎 = 引擎
     
-    # ==================== 先更新所有持仓的当前价格 ====================
+    # ==================== 更新持仓价格 ====================
     if 引擎 and hasattr(引擎, '持仓') and 引擎.持仓:
         for 品种 in list(引擎.持仓.keys()):
             try:
                 结果 = 行情获取.获取价格(品种)
                 if 结果 and hasattr(结果, '价格'):
                     当前价格 = 结果.价格
-                    if 当前价格 and 当前价格 > 0:
-                        if 品种 in 引擎.持仓:
-                            引擎.持仓[品种].当前价格 = 当前价格
+                    if 当前价格 and 当前价格 > 0 and 品种 in 引擎.持仓:
+                        引擎.持仓[品种].当前价格 = 当前价格
             except Exception:
                 pass
     
-    # ==================== 获取基础数据 ====================
-    初始资金 = 引擎.获取初始资金() if hasattr(引擎, '获取初始资金') else 1000000
-    可用资金 = 引擎.获取可用资金()
+    # ==================== 计算资产 ====================
+    初始资金 = getattr(引擎, '初始资金', 1000000)
+    可用资金 = 引擎.获取可用资金() if hasattr(引擎, '获取可用资金') else 引擎.可用资金
     
-    # 计算持仓市值（按现价）和总成本
     总市值 = 0
     for 品种, pos in 引擎.持仓.items():
         数量 = getattr(pos, '数量', 0)
@@ -43,7 +40,6 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         现价 = getattr(pos, '当前价格', 成本价)
         总市值 += 数量 * 现价
     
-    # 正确计算各项指标
     持仓市值 = 总市值
     总资产 = 可用资金 + 持仓市值
     总盈亏 = 总资产 - 初始资金
@@ -51,7 +47,6 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
     
     # ==================== 指标卡片 ====================
     col1, col2, col3, col4 = st.columns(4)
-    
     with col1:
         st.metric("总资产", f"¥{总资产:,.0f}")
     with col2:
@@ -74,7 +69,6 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
     ]
     
     行情列 = st.columns(len(行情品种配置))
-    
     for i, 品种 in enumerate(行情品种配置):
         with 行情列[i]:
             try:
@@ -91,18 +85,14 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
     
     # ==================== 快捷交易 ====================
     st.markdown("### 🚀 快捷交易")
-    
     col1, col2 = st.columns(2)
     
-    # ========== 买入区域 ==========
+    # ========== 买入 ==========
     with col1:
         st.markdown("#### 买入")
-        
         可买品种列表 = ["EURUSD", "BTC-USD", "GC=F", "000001.SS", "AAPL"]
         st.caption(f"📊 可交易品种: {可买品种列表}")
-        
         买入品种 = st.selectbox("选择品种", 可买品种列表, key="buy_symbol_select")
-        
         买入代码 = 转换品种代码(买入品种)
         
         try:
@@ -113,29 +103,15 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             st.caption("获取价格失败")
         
         if 买入品种 == "000001.SS":
-            单位提示 = "手 (1手=100股)"
-            默认数量 = 1
-            步长 = 1
+            单位提示, 默认数量, 步长 = "手 (1手=100股)", 1, 1
         elif 买入品种 == "EURUSD":
-            单位提示 = "手 (1手=10000单位)"
-            默认数量 = 1
-            步长 = 1
+            单位提示, 默认数量, 步长 = "手 (1手=10000单位)", 1, 1
         elif 买入品种 == "BTC-USD":
-            单位提示 = "个"
-            默认数量 = 1
-            步长 = 1
+            单位提示, 默认数量, 步长 = "个", 1, 1
         else:
-            单位提示 = "股"
-            默认数量 = 100
-            步长 = 10
+            单位提示, 默认数量, 步长 = "股", 100, 10
         
-        买入数量 = st.number_input(
-            f"数量 ({单位提示})", 
-            min_value=1, 
-            value=默认数量, 
-            step=步长, 
-            key="buy_qty_input"
-        )
+        买入数量 = st.number_input(f"数量 ({单位提示})", min_value=1, value=默认数量, step=步长, key="buy_qty_input")
         
         if 买入品种 == "000001.SS":
             实际股数 = 买入数量 * 100
@@ -151,13 +127,12 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         
         if st.button("买入", type="primary", width='stretch', key="buy_button"):
             if not 当前买入价 or 当前买入价 <= 0:
-                st.error("无法获取价格，请稍后再试")
+                st.error("无法获取价格")
             else:
                 try:
                     结果 = 引擎.买入(买入品种, 当前买入价, 买入数量)
                     if 结果.get("success"):
                         st.success(f"✅ 已买入 {买入品种} {买入数量} 单位")
-                        # 更新 session_state
                         st.session_state.订单引擎 = 引擎
                         st.rerun()
                     else:
@@ -165,48 +140,33 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                 except Exception as e:
                     st.error(f"买入失败: {e}")
     
-    # ========== 卖出区域（彻底修复版） ==========
+    # ========== 卖出 ==========
     with col2:
         st.markdown("#### 卖出")
         
-        # 先刷新持仓
+        # 刷新持仓
         if hasattr(引擎, '_恢复持仓'):
             引擎._恢复持仓()
             st.session_state.订单引擎 = 引擎
         
-        # 获取持仓列表
         持仓品种列表 = list(引擎.持仓.keys())
         
-        # 调试：打印持仓
-        print(f"📊 当前持仓品种: {持仓品种列表}")
-        
         if 持仓品种列表:
-            # 构建卖出选项
             卖出选项 = []
             for 品种 in 持仓品种列表:
                 pos = 引擎.持仓[品种]
                 数量 = pos.数量
                 if 品种 in ["ETH-USD", "BTC-USD", "SOL-USD", "BNB-USD"]:
-                    数量显示 = f"{数量:.4f}"
+                    卖出选项.append(f"{品种} (持仓: {数量:.4f})")
                 else:
-                    数量显示 = f"{int(数量)}"
-                卖出选项.append(f"{品种} (持仓: {数量显示})")
+                    卖出选项.append(f"{品种} (持仓: {int(数量)})")
             
-            卖出选项索引 = st.selectbox(
-                "选择持仓品种", 
-                range(len(卖出选项)), 
-                format_func=lambda i: 卖出选项[i], 
-                key="sell_symbol_select_main"
-            )
+            卖出选项索引 = st.selectbox("选择持仓品种", range(len(卖出选项)), format_func=lambda i: 卖出选项[i], key="sell_select")
             卖品种 = 持仓品种列表[卖出选项索引]
-            
-            # 获取持仓对象
             pos = 引擎.持仓[卖品种]
             最大可卖数量 = pos.数量
             
             st.caption(f"持仓成本: ${pos.平均成本:.4f}")
-            
-            # 显示当前持仓数量
             if 卖品种 in ["ETH-USD", "BTC-USD", "SOL-USD", "BNB-USD"]:
                 st.caption(f"当前持仓数量: {最大可卖数量:.4f}")
             else:
@@ -214,91 +174,57 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             
             try:
                 当前卖出价 = 获取行情的价格(卖品种)
-                if 当前卖出价 and 当前卖出价 > 0:
-                    st.caption(f"当前价格: ${当前卖出价:.4f}")
-                else:
-                    st.caption("当前价格: 获取失败")
+                st.caption(f"当前价格: ${当前卖出价:.4f}" if 当前卖出价 and 当前卖出价 > 0 else "价格获取失败")
             except:
                 当前卖出价 = 0
-                st.caption("当前价格: 获取失败")
             
-            # 卖出数量输入
             if 卖品种 in ["ETH-USD", "BTC-USD", "SOL-USD", "BNB-USD"]:
-                卖出数量 = st.number_input(
-                    "数量", 
-                    min_value=0.0, 
-                    max_value=float(最大可卖数量), 
-                    value=min(0.1, float(最大可卖数量)), 
-                    step=0.01,
-                    format="%.4f",
-                    key="sell_qty_input_main"
-                )
+                卖出数量 = st.number_input("数量", min_value=0.0, max_value=float(最大可卖数量), value=min(0.1, float(最大可卖数量)), step=0.01, format="%.4f", key="sell_qty")
             else:
-                max_qty = int(最大可卖数量) if 最大可卖数量 > 0 else 1
-                卖出数量 = st.number_input(
-                    "数量", 
-                    min_value=1, 
-                    max_value=max_qty, 
-                    value=min(1, max_qty), 
-                    step=1, 
-                    key="sell_qty_input_main"
-                )
+                max_qty = int(最大可卖数量)
+                卖出数量 = st.number_input("数量", min_value=1, max_value=max_qty, value=min(1, max_qty), step=1, key="sell_qty")
             
             预计收入 = 当前卖出价 * 卖出数量 if 当前卖出价 else 0
             st.caption(f"预计收入: ¥{预计收入:,.2f}" if 当前卖出价 else "无法计算收入")
             
-            # ========== 卖出按钮（彻底修复） ==========
-            if st.button("卖出", width='stretch', key="sell_button_main"):
+            if st.button("卖出", width='stretch', key="sell_button"):
                 if not 当前卖出价 or 当前卖出价 <= 0:
-                    st.error("无法获取价格，请稍后再试")
+                    st.error("无法获取价格")
                 elif 卖出数量 <= 0:
-                    st.error("请输入有效的卖出数量")
+                    st.error("请输入数量")
                 else:
                     try:
-                        print(f"🔍 准备卖出: {卖品种}, 数量: {卖出数量}, 价格: {当前卖出价}")
-                        
                         结果 = 引擎.卖出(卖品种, 当前卖出价, 卖出数量)
-                        print(f"📊 卖出结果: {结果}")
-                        
                         if 结果.get("success"):
                             st.success(f"✅ 已卖出 {卖品种} {卖出数量} 单位")
-                            
-                            # ===== 关键修复：强制重新加载引擎 =====
-                            # 1. 重新创建引擎或重新加载持仓
+                            # 关键：重新加载并刷新
                             if hasattr(引擎, '_恢复持仓'):
                                 引擎._恢复持仓()
-                            
-                            # 2. 更新 session_state
                             st.session_state.订单引擎 = 引擎
-                            
-                            # 3. 强制刷新页面
                             st.rerun()
                         else:
                             st.error(f"卖出失败: {结果.get('error')}")
                     except Exception as e:
-                        st.error(f"卖出异常: {str(e)}")
+                        st.error(f"卖出异常: {e}")
         else:
             st.info("暂无持仓")
-            st.selectbox("选择持仓品种", ["无持仓"], disabled=True, key="sell_symbol_disabled_main")
-            st.number_input("数量", min_value=1, value=100, disabled=True, key="sell_qty_disabled_main")
-            st.button("卖出", disabled=True, width='stretch', key="sell_button_disabled_main")
+            st.selectbox("选择持仓品种", ["无持仓"], disabled=True, key="sell_disabled1")
+            st.number_input("数量", min_value=1, value=100, disabled=True, key="sell_disabled2")
+            st.button("卖出", disabled=True, width='stretch', key="sell_disabled3")
 
 
-# ==================== 辅助函数 ====================
 def 获取行情的价格(代码):
-    """获取行情价格"""
     try:
         结果 = 行情获取.获取价格(代码)
         if 结果 and hasattr(结果, '价格'):
             return 结果.价格
         return None
     except Exception as e:
-        print(f"获取 {代码} 价格失败: {e}")
+        print(f"获取价格失败 {代码}: {e}")
         return None
 
 
 def 转换品种代码(品种):
-    """将显示品种转换为代码"""
     代码映射 = {
         "EURUSD": "EURUSD=X",
         "BTC-USD": "BTC-USD",
