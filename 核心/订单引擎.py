@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import time
 from datetime import datetime
+import pytz
 import 工具.数据库 as 数据库
 
 
@@ -16,6 +17,29 @@ class 订单引擎:
         self.交易记录 = []
         self._last_price = {}
         self._恢复持仓()
+    
+    def _获取当前时间(self, 品种):
+        """
+        根据品种类型获取对应的时区时间
+        - A股：北京时间 (Asia/Shanghai)
+        - 加密货币：UTC 时间
+        """
+        try:
+            # 判断是否为A股（纯数字或特定后缀）
+            if 品种 and (str(品种).isdigit() or str(品种).endswith('.SS') or str(品种).endswith('.SZ')):
+                # A股使用北京时间
+                tz = pytz.timezone('Asia/Shanghai')
+                now_utc = datetime.now(pytz.UTC)
+                now_local = now_utc.astimezone(tz)
+                return now_local.strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                # 加密货币等其他品种使用 UTC 时间
+                now_utc = datetime.now(pytz.UTC)
+                return now_utc.strftime("%Y-%m-%d %H:%M:%S")
+        except Exception as e:
+            # 如果 pytz 不可用，降级使用本地时间
+            print(f"时区获取失败: {e}")
+            return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     def 买入(self, 品种, 价格, 数量, 手续费率=None):
         """买入 - 修复数量类型问题"""
@@ -213,8 +237,11 @@ class 订单引擎:
         return self
     
     def _记录交易(self, 动作, 品种, 价格, 数量, 盈亏=0, 手续费=0):
+        """记录交易 - 根据品种类型使用不同时区"""
+        交易时间 = self._获取当前时间(品种)
+        
         交易 = {
-            "时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "时间": 交易时间,
             "品种": 品种,
             "动作": 动作,
             "价格": 价格,
@@ -225,6 +252,7 @@ class 订单引擎:
         }
         self.交易记录.append(交易)
         数据库.保存交易记录(交易)
+        print(f"📝 交易记录已保存: {动作} {品种} {数量} @ {价格} ({交易时间})")
     
     def _保存持仓(self):
         try:
