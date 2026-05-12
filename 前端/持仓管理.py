@@ -35,7 +35,7 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         
         for 品种, pos in 持仓列表:
             try:
-                # 直接从pos对象获取数据（这是唯一正确来源）
+                # 直接从pos对象获取数据
                 数量 = float(getattr(pos, '数量', 0))
                 成本价 = float(getattr(pos, '平均成本', 0))
                 
@@ -60,7 +60,6 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                 
                 # 根据品种类型决定显示格式
                 if 品种 in ["ETH-USD", "BTC-USD", "SOL-USD", "BNB-USD"]:
-                    # 加密货币显示小数
                     数量显示 = f"{数量:.4f}"
                 else:
                     数量显示 = f"{int(数量)}" if 数量 == int(数量) else f"{数量:.2f}"
@@ -71,11 +70,10 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                     "成本": f"{成本价:.2f}",
                     "现价": f"{现价:.2f}",
                     "盈亏": f"¥{盈亏:+,.2f}",
-                    "盈亏率": f"{盈亏率:+.2f}%"
+                    "盈亏率": f"{盈亏率:+.2f}%",
+                    "_数量": 数量,      # 隐藏字段，用于卖出
+                    "_成本价": 成本价   # 隐藏字段，用于卖出
                 })
-                
-                # 调试打印
-                print(f"📊 {品种}: 数量={数量}, 成本={成本价}, 现价={现价}, 盈亏={盈亏}")
                 
             except Exception as e:
                 print(f"处理 {品种} 时出错: {e}")
@@ -89,8 +87,12 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                 })
         
         if 数据:
+            # 显示持仓表格
             df = pd.DataFrame(数据)
-            st.dataframe(df, width='stretch', hide_index=True)
+            
+            # 选择要显示的列（去掉隐藏字段）
+            显示列 = ["品种", "数量", "成本", "现价", "盈亏", "盈亏率"]
+            st.dataframe(df[显示列], width='stretch', hide_index=True)
             
             # 显示总盈亏
             总盈亏 = 0.0
@@ -103,11 +105,60 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                         pass
             st.caption(f"📊 持仓总盈亏: ¥{总盈亏:+,.2f}")
             
+            # ========== 新增：单个品种卖出按钮 ==========
+            st.markdown("---")
+            st.markdown("### 📤 平仓操作")
+            
+            col1, col2, col3 = st.columns([2, 1, 1])
+            with col1:
+                卖出品种选择 = st.selectbox("选择要平仓的品种", [d["品种"] for d in 数据], key="sell_select")
+            with col2:
+                卖出比例 = st.selectbox("卖出比例", ["100%", "75%", "50%", "25%"], key="sell_ratio")
+            with col3:
+                st.markdown(" ")  # 占位
+                if st.button("✈️ 执行平仓", key="sell_position_btn"):
+                    # 找到选中的品种
+                    选中数据 = None
+                    for d in 数据:
+                        if d["品种"] == 卖出品种选择:
+                            选中数据 = d
+                            break
+                    
+                    if 选中数据:
+                        数量 = float(选中数据["_数量"])
+                        成本价 = float(选中数据["_成本价"])
+                        
+                        # 根据比例计算卖出数量
+                        if 卖出比例 == "100%":
+                            卖出数量 = 数量
+                        elif 卖出比例 == "75%":
+                            卖出数量 = 数量 * 0.75
+                        elif 卖出比例 == "50%":
+                            卖出数量 = 数量 * 0.5
+                        else:
+                            卖出数量 = 数量 * 0.25
+                        
+                        # 获取当前价格
+                        价格结果 = 行情获取.获取价格(卖出品种选择)
+                        if hasattr(价格结果, '价格'):
+                            当前价格 = 价格结果.价格
+                        else:
+                            当前价格 = 价格结果 if isinstance(价格结果, (int, float)) else 0
+                        
+                        if 当前价格 > 0:
+                            结果 = 引擎.卖出(卖出品种选择, 当前价格, 卖出数量)
+                            if 结果.get("success"):
+                                st.success(f"✅ 成功卖出 {卖出品种选择} {卖出数量} 股")
+                                st.rerun()  # 强制刷新页面
+                            else:
+                                st.error(f"卖出失败: {结果.get('error')}")
+                        else:
+                            st.error("获取当前价格失败")
+            
             # ========== K线图表区域 ==========
             st.markdown("---")
             st.markdown("### 📈 品种K线图分析")
             
-            # 选择要查看的品种
             品种列表 = [d["品种"] for d in 数据]
             选中品种 = st.selectbox("选择品种查看K线图", 品种列表, key="kline_select")
             
@@ -304,12 +355,6 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                         st.warning(f"无法获取 {选中品种} 的K线数据")
     else:
         st.caption("暂无持仓")
-        
-        # 显示调试信息
-        if 引擎 and hasattr(引擎, '交易记录') and 引擎.交易记录:
-            with st.expander("📋 最近交易记录", expanded=True):
-                for t in 引擎.交易记录[-10:]:
-                    st.write(f"{t['时间']} - {t['动作']} {t['品种']} {t['数量']} @ {t['价格']}")
     
     st.markdown("---")
     
@@ -355,20 +400,25 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
     
     # ========== 手动平仓按钮 ==========
     if 引擎 and hasattr(引擎, '持仓') and 引擎.持仓:
-        if st.button("🗑️ 一键平仓所有持仓", width='stretch'):
-            for 品种 in list(引擎.持仓.keys()):
-                try:
-                    价格结果 = 行情获取.获取价格(品种)
-                    if hasattr(价格结果, '价格'):
-                        现价 = 价格结果.价格
-                    else:
-                        现价 = 价格结果 if isinstance(价格结果, (int, float)) else 0
-                    if 现价 > 0:
-                        引擎.卖出(品种, 现价, 引擎.持仓[品种].数量)
-                except:
-                    pass
-            st.success("✅ 已执行一键平仓")
-            st.rerun()
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🗑️ 一键平仓所有持仓", width='stretch'):
+                for 品种 in list(引擎.持仓.keys()):
+                    try:
+                        价格结果 = 行情获取.获取价格(品种)
+                        if hasattr(价格结果, '价格'):
+                            现价 = 价格结果.价格
+                        else:
+                            现价 = 价格结果 if isinstance(价格结果, (int, float)) else 0
+                        if 现价 > 0:
+                            引擎.卖出(品种, 现价, 引擎.持仓[品种].数量)
+                    except:
+                        pass
+                st.success("✅ 已执行一键平仓")
+                st.rerun()
+        with col2:
+            if st.button("🔄 刷新页面", width='stretch'):
+                st.rerun()
     
     st.markdown("---")
     st.caption(f"最后更新: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
