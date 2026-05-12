@@ -4,8 +4,8 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from 核心 import 行情获取
-from datetime import datetime
-import random
+from datetime import datetime, timedelta
+import numpy as np
 
 
 def 显示(引擎, 策略加载器=None, AI引擎=None):
@@ -80,10 +80,8 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         
         if 数据:
             显示列 = ["品种", "数量", "成本", "现价", "盈亏", "盈亏率"]
-            df_持仓 = pd.DataFrame(数据)
-            st.dataframe(df_持仓[显示列], width='stretch', hide_index=True)
+            st.dataframe(pd.DataFrame(数据)[显示列], width='stretch', hide_index=True)
             
-            # 显示总盈亏
             总盈亏 = 0.0
             for d in 数据:
                 if d["盈亏"] != "---":
@@ -100,19 +98,11 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             
             col1, col2, col3 = st.columns([2, 1, 1])
             with col1:
-                卖出品种选择 = st.selectbox(
-                    "选择要平仓的品种", 
-                    [d["品种"] for d in 数据], 
-                    key="sell_select_main_001"
-                )
+                卖出品种选择 = st.selectbox("选择要平仓的品种", [d["品种"] for d in 数据], key="sell_select")
             with col2:
-                卖出比例 = st.selectbox(
-                    "卖出比例", 
-                    ["100%", "75%", "50%", "25%"], 
-                    key="sell_ratio_main_001"
-                )
+                卖出比例 = st.selectbox("卖出比例", ["100%", "75%", "50%", "25%"], key="sell_ratio")
             with col3:
-                if st.button("✈️ 执行平仓", key="sell_position_btn_001"):
+                if st.button("✈️ 执行平仓", key="sell_position_btn"):
                     选中数据 = None
                     for d in 数据:
                         if d["品种"] == 卖出品种选择:
@@ -153,11 +143,7 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             st.markdown("### 📈 品种K线图分析")
             
             品种列表 = [d["品种"] for d in 数据]
-            选中品种 = st.selectbox(
-                "选择品种查看K线图", 
-                品种列表, 
-                key="kline_select_001"
-            )
+            选中品种 = st.selectbox("选择品种查看K线图", 品种列表, key="kline_select")
             
             if 选中品种:
                 # 周期选择
@@ -166,34 +152,17 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                     周期选项 = st.selectbox(
                         "K线周期",
                         ["日线", "周线", "60分钟", "30分钟", "10分钟"],
-                        key="period_select_001"
+                        key="period_select"
                     )
                 with col2:
-                    数据长度 = st.selectbox(
-                        "K线根数", 
-                        [30, 60, 90, 120], 
-                        index=1, 
-                        key="length_select_001"
-                    )
+                    数据长度 = st.selectbox("K线根数", [30, 60, 90, 120], index=1, key="length_select")
                 with col3:
-                    显示买卖点 = st.checkbox(
-                        "显示买卖点", 
-                        value=True, 
-                        key="show_signals_001"
-                    )
-                
-                # 周期映射
-                周期映射 = {
-                    "日线": "1d",
-                    "周线": "1wk",
-                    "60分钟": "1h",
-                    "30分钟": "30m",
-                    "10分钟": "10m"
-                }
+                    显示买卖点 = st.checkbox("显示买卖点", value=True, key="show_signals")
                 
                 with st.spinner(f"正在加载 {选中品种} 的{周期选项}数据..."):
                     try:
-                        df_kline = 获取K线数据模拟(选中品种, 周期映射.get(周期选项, "1d"), 数据长度)
+                        # 获取K线数据
+                        df_kline = 获取K线数据模拟(选中品种, 周期选项, 数据长度)
                         
                         if df_kline is not None and not df_kline.empty:
                             # 获取买卖点标注
@@ -210,20 +179,9 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                         else:
                             st.info(f"暂无 {选中品种} 的{周期选项}数据")
                     except Exception as e:
-                        st.info(f"K线数据暂不可用: {str(e)[:80]}")
+                        st.info(f"K线数据暂不可用: {str(e)[:50]}")
     else:
         st.caption("暂无持仓")
-        
-        if st.button("🔄 尝试恢复持仓数据", key="recover_btn_001"):
-            try:
-                from 工具 import 数据库
-                持仓数据 = 数据库.加载持仓快照()
-                if 持仓数据:
-                    st.info(f"从数据库找到 {len(持仓数据)} 条持仓记录，请刷新页面")
-                else:
-                    st.info("数据库中没有持仓记录")
-            except:
-                pass
     
     st.markdown("---")
     
@@ -244,37 +202,18 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
     
     col1, col2, col3 = st.columns(3)
     with col1:
-        止损比例 = st.number_input(
-            "止损比例 (%)", 
-            min_value=0.5, max_value=20.0, 
-            value=当前止损, step=0.5,
-            key="stop_loss_001"
-        )
+        止损比例 = st.number_input("止损比例 (%)", min_value=0.5, max_value=20.0, value=当前止损, step=0.5, key="stop_loss")
     with col2:
-        止盈比例 = st.number_input(
-            "止盈比例 (%)", 
-            min_value=0.5, max_value=50.0, 
-            value=当前止盈, step=0.5,
-            key="take_profit_001"
-        )
+        止盈比例 = st.number_input("止盈比例 (%)", min_value=0.5, max_value=50.0, value=当前止盈, step=0.5, key="take_profit")
     with col3:
-        移动止损 = st.checkbox(
-            "开启移动止损", 
-            value=当前移动止损,
-            key="trailing_stop_001"
-        )
+        移动止损 = st.checkbox("开启移动止损", value=当前移动止损, key="trailing_stop")
     
     if 移动止损:
         col4, col5, col6 = st.columns(3)
         with col4:
-            移动止损回撤 = st.number_input(
-                "移动止损回撤 (%)", 
-                min_value=0.5, max_value=10.0, 
-                value=当前回撤, step=0.5,
-                key="trailing_back_001"
-            )
+            移动止损回撤 = st.number_input("移动止损回撤 (%)", min_value=0.5, max_value=10.0, value=当前回撤, step=0.5, key="trailing_back")
     
-    if st.button("应用风控参数", width='stretch', key="apply_risk_001"):
+    if st.button("应用风控参数", width='stretch', key="apply_risk"):
         if '风控引擎' in st.session_state:
             st.session_state.风控引擎.止损比例 = 止损比例 / 100
             st.session_state.风控引擎.止盈比例 = 止盈比例 / 100
@@ -290,7 +229,7 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
     if 引擎 and hasattr(引擎, '持仓') and 引擎.持仓:
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("🗑️ 一键平仓所有持仓", width='stretch', key="close_all_001"):
+            if st.button("🗑️ 一键平仓所有持仓", width='stretch', key="close_all"):
                 for 品种 in list(引擎.持仓.keys()):
                     try:
                         价格结果 = 行情获取.获取价格(品种)
@@ -306,36 +245,65 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                 st.success("✅ 已执行一键平仓")
                 st.rerun()
         with col2:
-            if st.button("🔄 刷新页面", width='stretch', key="refresh_page_001"):
+            if st.button("🔄 刷新页面", width='stretch', key="refresh_page"):
                 st.rerun()
     
     st.markdown("---")
     st.caption(f"最后更新: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 
-def 获取K线数据模拟(代码, 周期="1d", 长度=60):
-    """获取K线数据（模拟）"""
+def 获取K线数据模拟(代码, 周期, 长度):
+    """生成模拟K线数据"""
     import numpy as np
-    from datetime import datetime, timedelta
     
-    dates = pd.date_range(end=datetime.now(), periods=长度, freq='D')
+    # 根据周期设置时间间隔
+    if 周期 == "日线":
+        freq = 'D'
+    elif 周期 == "周线":
+        freq = 'W'
+    elif 周期 == "60分钟":
+        freq = 'H'
+        长度 = 长度 * 24  # 转换为小时
+    elif 周期 == "30分钟":
+        freq = '30min'
+        长度 = 长度 * 48
+    elif 周期 == "10分钟":
+        freq = '10min'
+        长度 = 长度 * 144
+    else:
+        freq = 'D'
+    
+    # 生成日期范围
+    if freq == 'W':
+        dates = pd.date_range(end=datetime.now(), periods=长度, freq='W')
+    elif freq in ['H', '30min', '10min']:
+        dates = pd.date_range(end=datetime.now(), periods=长度, freq=freq)
+    else:
+        dates = pd.date_range(end=datetime.now(), periods=长度, freq='D')
+    
+    # 随机生成价格
+    np.random.seed(hash(代码) % 10000 + 12345)
     base_price = 100
     
-    np.random.seed(hash(代码) % 10000)
-    returns = np.random.randn(长度) * 0.02
-    price_series = base_price * np.cumprod(1 + returns)
+    # 生成趋势
+    trend = np.cumsum(np.random.randn(长度) * 0.5)
+    price_series = base_price + trend
     price_series = np.maximum(price_series, 0.01)
     
+    # 生成OHLC
     df = pd.DataFrame({
         '日期': dates,
-        '开盘': price_series * (1 + np.random.randn(长度) * 0.005),
-        '最高': price_series * (1 + abs(np.random.randn(长度) * 0.01)),
-        '最低': price_series * (1 - abs(np.random.randn(长度) * 0.01)),
+        '开盘': price_series * (1 + np.random.randn(长度) * 0.01),
+        '最高': price_series * (1 + abs(np.random.randn(长度) * 0.02)),
+        '最低': price_series * (1 - abs(np.random.randn(长度) * 0.02)),
         '收盘': price_series,
-        '成交量': np.random.randint(1000, 100000, 长度)
+        '成交量': np.random.randint(10000, 1000000, 长度)
     })
+    
+    # 确保最高>=最低
     df['最高'] = df[['最高', '开盘', '收盘']].max(axis=1)
     df['最低'] = df[['最低', '开盘', '收盘']].min(axis=1)
+    
     return df
 
 
@@ -364,11 +332,10 @@ def 获取策略信号标注(品种, df_kline, 引擎):
                     
                     for i in range(len(df_kline)):
                         日期 = df_kline['日期'].iloc[i]
-                        if abs((日期 - 交易时间_dt).total_seconds()) < 86400:
+                        if abs((日期 - 交易时间_dt).total_seconds()) < 86400 * 3:
                             标注 = {
                                 "日期": 日期,
-                                "价格": 交易价格,
-                                "显示文字": "买入" if 交易动作 == "买入" else "卖出"
+                                "价格": 交易价格
                             }
                             if 交易动作 == "买入":
                                 买入标注.append(标注)
@@ -378,7 +345,7 @@ def 获取策略信号标注(品种, df_kline, 引擎):
                 except Exception as e:
                     print(f"处理标注失败: {e}")
     
-    return 买入标注[-15:], 卖出标注[-15:]
+    return 买入标注[-10:], 卖出标注[-10:]
 
 
 def 绘制K线图(df_kline, 品种名称, 周期名称, 买入标注, 卖出标注):
@@ -386,6 +353,7 @@ def 绘制K线图(df_kline, 品种名称, 周期名称, 买入标注, 卖出标�
     
     dates = df_kline['日期'].tolist()
     
+    # 创建子图
     fig = make_subplots(
         rows=2, cols=1,
         shared_xaxes=True,
@@ -405,16 +373,28 @@ def 绘制K线图(df_kline, 品种名称, 周期名称, 买入标注, 卖出标�
         showlegend=False
     ), row=1, col=1)
     
+    # 添加均线
+    ma5 = df_kline['收盘'].rolling(window=5).mean()
+    ma10 = df_kline['收盘'].rolling(window=10).mean()
+    ma20 = df_kline['收盘'].rolling(window=20).mean()
+    
+    fig.add_trace(go.Scatter(x=dates, y=ma5, mode='lines', name='MA5', line=dict(color='#FF6B6B', width=1.5)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=dates, y=ma10, mode='lines', name='MA10', line=dict(color='#4ECDC4', width=1.5)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=dates, y=ma20, mode='lines', name='MA20', line=dict(color='#FFE66D', width=1.5)), row=1, col=1)
+    
     # 买入标注
     for 标注 in 买入标注:
         fig.add_annotation(
             x=标注['日期'], y=标注['价格'],
             text="🟢 买入",
-            showarrow=True, arrowhead=2, arrowcolor="#2ECC71",
-            ax=0, ay=-40,
-            font=dict(color="#2ECC71", size=11),
-            bgcolor="rgba(0,0,0,0.7)", borderpad=4,
-            borderwidth=1, borderColor="#2ECC71"
+            showarrow=True,
+            arrowhead=2,
+            arrowcolor="#2ECC71",
+            ax=0,
+            ay=-35,
+            font=dict(color="#2ECC71", size=10),
+            bgcolor="rgba(0,0,0,0.6)",
+            borderpad=2
         )
     
     # 卖出标注
@@ -422,11 +402,14 @@ def 绘制K线图(df_kline, 品种名称, 周期名称, 买入标注, 卖出标�
         fig.add_annotation(
             x=标注['日期'], y=标注['价格'],
             text="🔴 卖出",
-            showarrow=True, arrowhead=2, arrowcolor="#E74C3C",
-            ax=0, ay=40,
-            font=dict(color="#E74C3C", size=11),
-            bgcolor="rgba(0,0,0,0.7)", borderpad=4,
-            borderwidth=1, borderColor="#E74C3C"
+            showarrow=True,
+            arrowhead=2,
+            arrowcolor="#E74C3C",
+            ax=0,
+            ay=35,
+            font=dict(color="#E74C3C", size=10),
+            bgcolor="rgba(0,0,0,0.6)",
+            borderpad=2
         )
     
     # 成交量
@@ -435,19 +418,30 @@ def 绘制K线图(df_kline, 品种名称, 周期名称, 买入标注, 卖出标�
     
     fig.add_trace(go.Bar(
         x=dates, y=df_kline['成交量'],
-        name='成交量', marker_color=成交量颜色,
-        opacity=0.5, showlegend=False
+        name='成交量',
+        marker_color=成交量颜色,
+        opacity=0.5,
+        showlegend=False
     ), row=2, col=1)
     
+    # 布局
     fig.update_layout(
-        title=f"{品种名称} - 技术分析图表",
-        height=600,
+        title=dict(text=f"{品种名称} - {周期名称} 技术分析图表", x=0.5),
+        height=550,
         xaxis_rangeslider_visible=False,
-        plot_bgcolor='#0a0c10', paper_bgcolor='#0a0c10', font_color='#e6e6e6'
+        showlegend=True,
+        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
+        plot_bgcolor='#0a0c10',
+        paper_bgcolor='#0a0c10',
+        font_color='#e6e6e6'
     )
     
     fig.update_xaxes(title_text="日期", row=2, col=1, gridcolor='#2a2e3a')
     fig.update_yaxes(title_text="价格", row=1, col=1, gridcolor='#2a2e3a')
     fig.update_yaxes(title_text="成交量", row=2, col=1, gridcolor='#2a2e3a')
+    
+    # 设置x轴角度
+    fig.update_xaxes(tickangle=-45, row=1, col=1)
+    fig.update_xaxes(tickangle=-45, row=2, col=1)
     
     return fig
