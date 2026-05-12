@@ -154,6 +154,9 @@ with st.sidebar:
     if st.button("🗑️ 清空所有持仓数据", width="stretch"):
         try:
             数据库.清空所有持仓()
+            # 重新加载引擎
+            st.session_state.订单引擎 = 订单引擎(初始资金=INITIAL_CAPITAL)
+            引擎 = st.session_state.订单引擎
             st.success("✅ 已清空")
             st.rerun()
         except:
@@ -164,6 +167,16 @@ with st.sidebar:
             if hasattr(st.session_state.策略加载器, '刷新'):
                 st.session_state.策略加载器.刷新()
             st.success("✅ 策略列表已刷新")
+            st.rerun()
+        except Exception as e:
+            st.error(f"刷新失败: {e}")
+    
+    # 添加手动刷新持仓按钮
+    if st.button("🔄 刷新持仓数据", width="stretch"):
+        try:
+            if hasattr(引擎, '_恢复持仓'):
+                引擎._恢复持仓()
+            st.success("✅ 持仓已刷新")
             st.rerun()
         except Exception as e:
             st.error(f"刷新失败: {e}")
@@ -181,7 +194,7 @@ with st.sidebar:
             盈亏 = (现价 - 平均成本) * 数量
             st.metric(
                 label=f"{品种}",
-                value=f"{数量}股",
+                value=f"{int(数量)}股",
                 delta=f"成本: ¥{平均成本:.2f} | 盈亏: ¥{盈亏:+.2f}"
             )
         st.markdown("---")
@@ -193,6 +206,11 @@ with st.sidebar:
             st.metric("💵 可用资金", "计算中")
     else:
         st.info("暂无持仓")
+        # 显示调试信息（仅开发模式）
+        if hasattr(引擎, '交易记录') and 引擎.交易记录:
+            with st.expander("📋 最近交易记录", expanded=False):
+                for t in 引擎.交易记录[-5:]:
+                    st.write(f"{t['时间']} - {t['动作']} {t['品种']} {t['数量']}股 @ {t['价格']}")
     
     st.markdown("---")
     st.markdown("### 🛡️ 风控设置")
@@ -228,7 +246,15 @@ def 安全调用(模块, 默认信息="模块开发中"):
             except:
                 st.info(默认信息)
     except Exception as e:
-        st.info(f"{默认信息} ({e})")
+        st.info(f"{默认信息} ({str(e)[:50]})")
+
+# ========== 页面刷新监听 ==========
+# 检查是否需要刷新持仓（从URL参数获取）
+query_params = st.query_params
+if query_params.get("refresh") == "true":
+    if hasattr(引擎, '_恢复持仓'):
+        引擎._恢复持仓()
+    st.query_params.clear()
 
 # ========== Tab ==========
 tabs = st.tabs(["🏠 首页", "📊 策略中心", "🤖 AI交易", "💼 持仓管理", "💰 资金曲线", "📈 回测", "📋 交易记录"])
