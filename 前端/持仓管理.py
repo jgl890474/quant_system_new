@@ -12,6 +12,15 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
     
     st.markdown("### 💼 当前持仓")
     
+    # ==================== 调试信息（临时，查看问题） ====================
+    if 引擎 and hasattr(引擎, '持仓') and 引擎.持仓:
+        with st.expander("🔍 调试信息（原始数据）", expanded=False):
+            for 品种, pos in 引擎.持仓.items():
+                数量 = getattr(pos, '数量', 0)
+                成本价 = getattr(pos, '平均成本', 0)
+                现价 = getattr(pos, '当前价格', 成本价)
+                st.write(f"{品种}: 数量={数量}, 成本价={成本价}, 现价={现价}")
+    
     # ==================== 先更新所有持仓的当前价格 ====================
     if 引擎 and hasattr(引擎, '持仓') and 引擎.持仓:
         for 品种 in list(引擎.持仓.keys()):
@@ -35,10 +44,9 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         
         for 品种, pos in 持仓列表:
             try:
-                # 获取实时价格（带容错）
+                # 获取实时价格
                 价格结果 = 行情获取.获取价格(品种)
                 
-                # 兼容不同的返回格式
                 if hasattr(价格结果, '价格'):
                     现价 = float(价格结果.价格)
                 elif hasattr(价格结果, 'price'):
@@ -51,27 +59,31 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                 # 更新持仓当前价格
                 pos.当前价格 = 现价
                 
-                # 计算盈亏（修正公式）
+                # 获取正确的数值
                 成本价 = float(pos.平均成本)
                 数量 = float(pos.数量)
                 
-                # 正确计算盈亏 = (现价 - 成本价) * 数量
+                # 打印调试信息
+                print(f"📊 {品种}: 数量={数量}, 成本={成本价}, 现价={现价}")
+                
+                # 计算盈亏 = (现价 - 成本价) * 数量
                 盈亏 = (现价 - 成本价) * 数量
                 盈亏率 = ((现价 - 成本价) / 成本价) * 100 if 成本价 > 0 else 0
                 
                 数据.append({
                     "品种": 品种,
-                    "数量": f"{int(数量)}",
+                    "数量": f"{int(数量)}" if 数量 > 0 else "0",
                     "成本": f"{成本价:.2f}",
                     "现价": f"{现价:.2f}",
                     "盈亏": f"¥{盈亏:+,.2f}",
                     "盈亏率": f"{盈亏率:+.2f}%"
                 })
             except Exception as e:
+                print(f"处理 {品种} 时出错: {e}")
                 数据.append({
                     "品种": 品种,
-                    "数量": f"{int(pos.数量)}" if hasattr(pos, '数量') else "?",
-                    "成本": f"{pos.平均成本:.2f}" if hasattr(pos, '平均成本') else "?",
+                    "数量": "?",
+                    "成本": "?",
                     "现价": "获取失败",
                     "盈亏": "---",
                     "盈亏率": "---"
@@ -81,12 +93,11 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             df = pd.DataFrame(数据)
             st.dataframe(df, width='stretch', hide_index=True)
             
-            # 显示总盈亏（修正）
+            # 显示总盈亏
             总盈亏 = 0.0
             for d in 数据:
                 if d["盈亏"] != "---":
                     try:
-                        # 解析盈亏字符串中的数字
                         盈亏值 = float(d["盈亏"].replace("¥", "").replace(",", ""))
                         总盈亏 += 盈亏值
                     except:
@@ -103,7 +114,6 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             
             if 选中品种:
                 with st.spinner(f"正在加载 {选中品种} 的K线数据..."):
-                    # 周期选择
                     周期选项 = st.selectbox(
                         "选择周期", 
                         ["日线", "周线", "60分钟", "30分钟", "10分钟"], 
@@ -122,23 +132,16 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                     elif 周期选项 == "30分钟":
                         周期 = "30m"
                         长度 = 120
-                    else:  # 10分钟
+                    else:
                         周期 = "10m"
                         长度 = 150
                     
-                    # 获取K线数据
                     df_kline = 行情获取.获取K线数据(选中品种, 周期, 长度)
                     
                     if not df_kline.empty:
-                        # 计算技术指标
                         df_indicators = 行情获取.计算技术指标(df_kline)
+                        买入标注, 卖出标注 = 获取策略信号标注(选中品种, df_kline, 策略加载器, 引擎)
                         
-                        # ===== 获取策略信号标注（包含实际成交记录） =====
-                        买入标注, 卖出标注 = 获取策略信号标注(
-                            选中品种, df_kline, 策略加载器, 引擎
-                        )
-                        
-                        # 创建子图
                         fig = make_subplots(
                             rows=3, cols=1,
                             shared_xaxes=True,
@@ -158,7 +161,7 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                             showlegend=False
                         ), row=1, col=1)
                         
-                        # 添加均线
+                        # 均线
                         if 'MA5' in df_indicators.columns:
                             fig.add_trace(go.Scatter(
                                 x=df_indicators['日期'],
@@ -193,8 +196,7 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                                 y=df_indicators['BB_Upper'],
                                 mode='lines',
                                 name='布林上轨',
-                                line=dict(color='#95A5A6', width=1, dash='dash'),
-                                showlegend=True
+                                line=dict(color='#95A5A6', width=1, dash='dash')
                             ), row=1, col=1)
                             fig.add_trace(go.Scatter(
                                 x=df_indicators['日期'],
@@ -203,11 +205,10 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                                 name='布林下轨',
                                 line=dict(color='#95A5A6', width=1, dash='dash'),
                                 fill='tonexty',
-                                fillcolor='rgba(149,165,166,0.1)',
-                                showlegend=True
+                                fillcolor='rgba(149,165,166,0.1)'
                             ), row=1, col=1)
                         
-                        # ===== 添加策略买入/卖出标注 =====
+                        # 买卖标注
                         for 标注 in 买入标注:
                             fig.add_annotation(
                                 x=标注['日期'],
@@ -215,27 +216,13 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                                 text=标注.get('显示文字', '买入'),
                                 showarrow=True,
                                 arrowhead=2,
-                                arrowsize=1.5,
-                                arrowwidth=2,
                                 arrowcolor="#2ECC71",
                                 ax=0,
                                 ay=-35,
                                 font=dict(color="#2ECC71", size=11),
                                 bgcolor="rgba(0,0,0,0.8)",
-                                borderpad=4,
-                                borderwidth=1,
-                                bordercolor="#2ECC71"
+                                borderpad=4
                             )
-                            
-                            fig.add_trace(go.Scatter(
-                                x=[标注['日期']],
-                                y=[标注['价格']],
-                                mode='markers',
-                                name='买入信号',
-                                marker=dict(symbol='triangle-up', size=14, color='#2ECC71', line=dict(width=1, color='white')),
-                                showlegend=False,
-                                hovertemplate=f"<b>{标注.get('显示文字', '买入')}</b><br>日期: {标注['日期']}<br>价格: {标注['价格']:.2f}<extra></extra>"
-                            ), row=1, col=1)
                         
                         for 标注 in 卖出标注:
                             fig.add_annotation(
@@ -244,38 +231,18 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                                 text=标注.get('显示文字', '卖出'),
                                 showarrow=True,
                                 arrowhead=2,
-                                arrowsize=1.5,
-                                arrowwidth=2,
                                 arrowcolor="#E74C3C",
                                 ax=0,
                                 ay=35,
                                 font=dict(color="#E74C3C", size=11),
                                 bgcolor="rgba(0,0,0,0.8)",
-                                borderpad=4,
-                                borderwidth=1,
-                                bordercolor="#E74C3C"
+                                borderpad=4
                             )
-                            
-                            fig.add_trace(go.Scatter(
-                                x=[标注['日期']],
-                                y=[标注['价格']],
-                                mode='markers',
-                                name='卖出信号',
-                                marker=dict(symbol='triangle-down', size=14, color='#E74C3C', line=dict(width=1, color='white')),
-                                showlegend=False,
-                                hovertemplate=f"<b>{标注.get('显示文字', '卖出')}</b><br>日期: {标注['日期']}<br>价格: {标注['价格']:.2f}<extra></extra>"
-                            ), row=1, col=1)
                         
-                        # 成交量图
+                        # 成交量
                         if len(df_indicators) > 0:
-                            颜色 = []
-                            for i in range(len(df_indicators)):
-                                c = df_indicators['收盘'].iloc[i]
-                                o = df_indicators['开盘'].iloc[i]
-                                if c >= o:
-                                    颜色.append('#2ECC71')
-                                else:
-                                    颜色.append('#E74C3C')
+                            颜色 = ['#2ECC71' if c >= o else '#E74C3C' 
+                                   for c, o in zip(df_indicators['收盘'], df_indicators['开盘'])]
                         else:
                             颜色 = []
                         
@@ -288,14 +255,9 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                             showlegend=False
                         ), row=2, col=1)
                         
-                        # MACD图
+                        # MACD
                         if 'MACD' in df_indicators.columns:
-                            macd_colors = []
-                            for x in df_indicators['MACD_Histogram']:
-                                if x >= 0:
-                                    macd_colors.append('#2ECC71')
-                                else:
-                                    macd_colors.append('#E74C3C')
+                            macd_colors = ['#2ECC71' if x >= 0 else '#E74C3C' for x in df_indicators['MACD_Histogram']]
                             
                             fig.add_trace(go.Bar(
                                 x=df_indicators['日期'],
@@ -339,61 +301,16 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                         fig.update_yaxes(title_text="MACD", row=3, col=1, gridcolor='#2a2e3a')
                         
                         st.plotly_chart(fig, width='stretch')
-                        
-                        # 技术指标摘要
-                        with st.expander("📊 技术指标摘要", expanded=False):
-                            最新数据 = df_indicators.iloc[-1]
-                            
-                            col1, col2, col3, col4 = st.columns(4)
-                            
-                            with col1:
-                                st.metric("当前价格", f"¥{最新数据['收盘']:.2f}")
-                                if 'MA5' in 最新数据.index:
-                                    st.metric("5日均线", f"¥{最新数据['MA5']:.2f}")
-                            
-                            with col2:
-                                if 'MA10' in 最新数据.index:
-                                    st.metric("10日均线", f"¥{最新数据['MA10']:.2f}")
-                                if 'MA20' in 最新数据.index:
-                                    st.metric("20日均线", f"¥{最新数据['MA20']:.2f}")
-                            
-                            with col3:
-                                if 'RSI' in 最新数据.index:
-                                    rsi = 最新数据['RSI']
-                                    st.metric("RSI", f"{rsi:.1f}")
-                                    if rsi > 70:
-                                        st.caption("🔴 超买区域")
-                                    elif rsi < 30:
-                                        st.caption("🟢 超卖区域")
-                                    else:
-                                        st.caption("🟡 中性区域")
-                            
-                            with col4:
-                                if 'MACD' in 最新数据.index and 'MACD_Signal' in 最新数据.index:
-                                    st.metric("MACD", f"{最新数据['MACD']:.4f}")
-                                    if 最新数据['MACD'] > 最新数据['MACD_Signal']:
-                                        st.caption("🟢 MACD金叉信号")
-                                    else:
-                                        st.caption("🔴 MACD死叉信号")
-                            
-                            if 买入标注 or 卖出标注:
-                                st.markdown("---")
-                                st.markdown("**📊 策略信号统计**")
-                                col_a, col_b = st.columns(2)
-                                with col_a:
-                                    st.metric("买入信号", len(买入标注))
-                                with col_b:
-                                    st.metric("卖出信号", len(卖出标注))
                     else:
                         st.warning(f"无法获取 {选中品种} 的K线数据")
     else:
         st.caption("暂无持仓")
         
-        # 显示调试信息：交易记录
+        # 显示调试信息
         if 引擎 and hasattr(引擎, '交易记录') and 引擎.交易记录:
             with st.expander("📋 最近交易记录", expanded=True):
                 for t in 引擎.交易记录[-10:]:
-                    st.write(f"{t['时间']} - {t['动作']} {t['品种']} {t['数量']}股 @ {t['价格']}")
+                    st.write(f"{t['时间']} - {t['动作']} {t['品种']} {t['数量']} @ {t['价格']}")
     
     st.markdown("---")
     
@@ -458,13 +375,11 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
     st.caption(f"最后更新: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 
-# ==================== 辅助函数 ====================
 def 获取策略信号标注(品种, df_kline, 策略加载器, 引擎):
     """获取买入/卖出信号标注"""
     买入标注 = []
     卖出标注 = []
     
-    # 从实际成交记录获取标注
     if 引擎 and hasattr(引擎, '交易记录') and 引擎.交易记录:
         for 交易 in 引擎.交易记录:
             交易品种 = 交易.get("品种", "")
@@ -488,19 +403,9 @@ def 获取策略信号标注(品种, df_kline, 策略加载器, 引擎):
                         日期 = df_kline['日期'].iloc[i]
                         if abs((日期 - 交易时间_dt).total_seconds()) < 86400:
                             if 交易动作 == "买入":
-                                买入标注.append({
-                                    "日期": 日期,
-                                    "价格": 交易价格,
-                                    "策略": "实际成交",
-                                    "显示文字": "买入"
-                                })
+                                买入标注.append({"日期": 日期, "价格": 交易价格, "显示文字": "买入"})
                             elif 交易动作 == "卖出":
-                                卖出标注.append({
-                                    "日期": 日期,
-                                    "价格": 交易价格,
-                                    "策略": "实际成交",
-                                    "显示文字": "卖出"
-                                })
+                                卖出标注.append({"日期": 日期, "价格": 交易价格, "显示文字": "卖出"})
                             break
                 except:
                     pass
