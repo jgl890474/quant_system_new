@@ -1,17 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-行情获取模块 - 稳定版
-数据源：
-- A股实时：新浪财经
-- A股历史/备用：Tushare
-- 加密货币/美股：演示数据（接近真实价格）
-- 外汇：ExchangeRate-API
+行情获取模块 - Tushare + 演示数据
+- A股：Tushare Pro 实时数据
+- 其他：演示数据（接近真实）
 """
 
-import requests
 import pandas as pd
+import numpy as np
 from datetime import datetime, timedelta
-import random
 
 
 class 行情数据:
@@ -23,74 +19,29 @@ class 行情数据:
 # ==================== Tushare 配置 ====================
 TUSHARE_TOKEN = 'a58ac285333f6f8ecc93063924c3dfd8906a1e01c1865cb624f097ac'
 
-def 获取Tushare日线(代码, 开始日期, 结束日期):
-    """获取A股历史日线"""
+def 获取Tushare实时价格(代码):
+    """使用 Tushare 获取A股实时价格"""
     try:
         import tushare as ts
         ts.set_token(TUSHARE_TOKEN)
         pro = ts.pro_api()
         
+        # 转换代码格式
         if str(代码).startswith('6'):
             ts_code = f"{代码}.SH"
         else:
             ts_code = f"{代码}.SZ"
         
-        df = pro.daily(ts_code=ts_code, 
-                       start_date=开始日期.replace('-', ''), 
-                       end_date=结束日期.replace('-', ''))
-        
+        # 获取最新日线数据
+        df = pro.daily(ts_code=ts_code, limit=1)
         if df is not None and not df.empty:
-            df = df.rename(columns={
-                'trade_date': '日期',
-                'open': '开盘',
-                'high': '最高',
-                'low': '最低',
-                'close': '收盘',
-                'vol': '成交量'
-            })
-            df['日期'] = pd.to_datetime(df['日期'])
-            return df[['日期', '开盘', '最高', '最低', '收盘', '成交量']]
+            return float(df['close'].iloc[-1])
     except Exception as e:
         print(f"Tushare获取失败: {e}")
     return None
 
 
-# ==================== 新浪实时行情（A股） ====================
-def 获取新浪实时价格(代码):
-    """从新浪获取A股实时价格"""
-    try:
-        if str(代码).startswith('6'):
-            symbol = f"sh{代码}"
-        else:
-            symbol = f"sz{代码}"
-        
-        url = f"https://hq.sinajs.cn/list={symbol}"
-        headers = {'Referer': 'https://finance.sina.com.cn'}
-        r = requests.get(url, headers=headers, timeout=5)
-        r.encoding = 'gbk'
-        data = r.text.split(',')
-        
-        if len(data) > 3 and data[3]:
-            return float(data[3])
-    except Exception as e:
-        print(f"新浪获取失败: {e}")
-    return None
-
-
-# ==================== 外汇实时汇率 ====================
-def 获取外汇价格(品种):
-    """获取外汇实时汇率"""
-    try:
-        if 品种 == "EURUSD":
-            url = "https://api.exchangerate-api.com/v4/latest/EUR"
-            r = requests.get(url, timeout=5)
-            return float(r.json()['rates']['USD'])
-    except Exception as e:
-        print(f"外汇获取失败: {e}")
-    return 1.08  # 默认值
-
-
-# ==================== 演示数据（美股/加密货币） ====================
+# ==================== 演示数据（美股/加密货币/外汇/期货） ====================
 def 获取演示价格(品种):
     """返回接近真实市场的演示价格"""
     演示价格表 = {
@@ -105,6 +56,10 @@ def 获取演示价格(品种):
         "BNB-USD": 580,
         "GC=F": 1950,
         "CL=F": 78,
+        "EURUSD": 1.08,
+        "GBPUSD=X": 1.27,
+        "000001": 11.24,
+        "600036": 37.90,
     }
     return 演示价格表.get(品种, 100)
 
@@ -114,18 +69,12 @@ def 获取价格(品种代码):
     """统一价格获取入口"""
     print(f"🔍 获取: {品种代码}")
     
-    # A股：使用新浪实时
+    # A股：优先使用 Tushare
     if 品种代码.isdigit() or (len(str(品种代码)) == 6 and str(品种代码).isdigit()):
-        price = 获取新浪实时价格(品种代码)
+        price = 获取Tushare实时价格(品种代码)
         if price and price > 0:
-            print(f"✅ [新浪] {品种代码} = {price}")
+            print(f"✅ [Tushare] {品种代码} = {price}")
             return 行情数据(品种代码, price)
-    
-    # 外汇
-    if 品种代码 == "EURUSD":
-        price = 获取外汇价格(品种代码)
-        print(f"✅ [外汇] {品种代码} = {price}")
-        return 行情数据(品种代码, price)
     
     # 其他品种使用演示数据
     price = 获取演示价格(品种代码)
@@ -135,20 +84,43 @@ def 获取价格(品种代码):
 
 def 获取K线数据(代码, 周期="1d", 长度=60):
     """获取K线数据"""
-    # 优先使用 Tushare 获取A股K线
+    # A股尝试从 Tushare 获取
     if str(代码).isdigit() and len(str(代码)) == 6:
-        end_date = datetime.now().strftime('%Y-%m-%d')
-        start_date = (datetime.now() - timedelta(days=长度*2)).strftime('%Y-%m-%d')
-        df = 获取Tushare日线(代码, start_date, end_date)
-        if df is not None and not df.empty:
-            return df.tail(长度)
+        try:
+            import tushare as ts
+            ts.set_token(TUSHARE_TOKEN)
+            pro = ts.pro_api()
+            
+            if str(代码).startswith('6'):
+                ts_code = f"{代码}.SH"
+            else:
+                ts_code = f"{代码}.SZ"
+            
+            end_date = datetime.now().strftime('%Y%m%d')
+            start_date = (datetime.now() - timedelta(days=长度*2)).strftime('%Y%m%d')
+            
+            df = pro.daily(ts_code=ts_code, start_date=start_date, end_date=end_date)
+            if df is not None and not df.empty:
+                df = df.rename(columns={
+                    'trade_date': '日期',
+                    'open': '开盘',
+                    'high': '最高',
+                    'low': '最低',
+                    'close': '收盘',
+                    'vol': '成交量'
+                })
+                df['日期'] = pd.to_datetime(df['日期'])
+                df = df.sort_values('日期')
+                return df.tail(长度)[['日期', '开盘', '最高', '最低', '收盘', '成交量']]
+        except Exception as e:
+            print(f"Tushare K线获取失败: {e}")
     
     # 生成模拟K线
     dates = pd.date_range(end=datetime.now(), periods=长度, freq='D')
-    import numpy as np
+    base_price = 获取演示价格(代码)
     np.random.seed(hash(代码) % 10000)
-    price = 获取演示价格(代码)
-    price_series = price * np.cumprod(1 + np.random.randn(长度) * 0.02)
+    returns = np.random.randn(长度) * 0.02
+    price_series = base_price * np.cumprod(1 + returns)
     
     df = pd.DataFrame({
         '日期': dates,
