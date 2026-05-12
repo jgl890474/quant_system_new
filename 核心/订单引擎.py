@@ -3,7 +3,6 @@ import time
 from datetime import datetime
 import pytz
 import 工具.数据库 as 数据库
-from 核心 import 行情获取
 
 
 class 订单引擎:
@@ -18,7 +17,6 @@ class 订单引擎:
         self.交易记录 = []
         self._last_price = {}
         
-        # 从数据库恢复持仓
         self._恢复持仓()
         print(f"✅ 订单引擎初始化完成，初始资金: {self.初始资金}")
     
@@ -36,17 +34,27 @@ class 订单引擎:
         except Exception:
             return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
+    def _获取实时价格(self, 品种):
+        """内部方法：获取实时价格（避免循环导入）"""
+        try:
+            # 延迟导入，避免循环依赖
+            from 核心 import 行情获取
+            结果 = 行情获取.获取价格(品种)
+            if 结果 and hasattr(结果, '价格') and 结果.价格 > 0:
+                return 结果.价格
+        except Exception as e:
+            print(f"获取实时价格失败: {e}")
+        return None
+    
     def 买入(self, 品种, 价格=None, 数量=None, 手续费率=None):
         """买入 - 自动获取实时价格作为成本"""
         try:
             # 获取实时价格
             if 价格 is None or 价格 <= 0:
-                实时价格结果 = 行情获取.获取价格(品种)
-                if 实时价格结果 and hasattr(实时价格结果, '价格') and 实时价格结果.价格 > 0:
-                    价格 = 实时价格结果.价格
-                    print(f"📊 获取实时价格作为成本: {品种} = {价格}")
-                else:
+                价格 = self._获取实时价格(品种)
+                if 价格 is None or 价格 <= 0:
                     return {"success": False, "error": f"无法获取 {品种} 的实时价格"}
+                print(f"📊 获取实时价格作为成本: {品种} = {价格}")
             
             print(f"🔵 买入请求: {品种}, 价格={价格}, 数量={数量}")
             
@@ -98,12 +106,10 @@ class 订单引擎:
         try:
             # 获取实时价格
             if 价格 is None or 价格 <= 0:
-                实时价格结果 = 行情获取.获取价格(品种)
-                if 实时价格结果 and hasattr(实时价格结果, '价格') and 实时价格结果.价格 > 0:
-                    价格 = 实时价格结果.价格
-                    print(f"📊 获取实时价格作为卖出价: {品种} = {价格}")
-                else:
+                价格 = self._获取实时价格(品种)
+                if 价格 is None or 价格 <= 0:
                     return {"success": False, "error": f"无法获取 {品种} 的实时价格"}
+                print(f"📊 获取实时价格作为卖出价: {品种} = {价格}")
             
             print(f"🔴 卖出请求: {品种}, 价格={价格}, 数量={数量}")
             
@@ -150,14 +156,7 @@ class 订单引擎:
     def 获取实时持仓市值(self):
         总市值 = 0
         for 品种, 持仓 in self.持仓.items():
-            try:
-                实时价格结果 = 行情获取.获取价格(品种)
-                if 实时价格结果 and hasattr(实时价格结果, '价格') and 实时价格结果.价格 > 0:
-                    现价 = 实时价格结果.价格
-                else:
-                    现价 = getattr(持仓, '当前价格', 持仓.平均成本)
-            except:
-                现价 = getattr(持仓, '当前价格', 持仓.平均成本)
+            现价 = getattr(持仓, '当前价格', 持仓.平均成本)
             总市值 += 持仓.数量 * 现价
         return 总市值
     
