@@ -8,9 +8,15 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
     首页 - 资金概览和实时行情
     """
     
+    # ==================== 强制从 session_state 获取最新引擎 ====================
+    if '订单引擎' in st.session_state:
+        引擎 = st.session_state.订单引擎
+    
     # ==================== 先刷新持仓（从数据库恢复） ====================
     if 引擎 and hasattr(引擎, '_恢复持仓'):
         引擎._恢复持仓()
+        # 更新 session_state
+        st.session_state.订单引擎 = 引擎
     
     # ==================== 先更新所有持仓的当前价格 ====================
     if 引擎 and hasattr(引擎, '持仓') and 引擎.持仓:
@@ -20,11 +26,8 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                 if 结果 and hasattr(结果, '价格'):
                     当前价格 = 结果.价格
                     if 当前价格 and 当前价格 > 0:
-                        if hasattr(引擎, '更新持仓价格'):
-                            引擎.更新持仓价格(品种, 当前价格)
-                        else:
-                            if 品种 in 引擎.持仓:
-                                引擎.持仓[品种].当前价格 = 当前价格
+                        if 品种 in 引擎.持仓:
+                            引擎.持仓[品种].当前价格 = 当前价格
             except Exception:
                 pass
     
@@ -34,7 +37,6 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
     
     # 计算持仓市值（按现价）和总成本
     总市值 = 0
-    
     for 品种, pos in 引擎.持仓.items():
         数量 = getattr(pos, '数量', 0)
         成本价 = getattr(pos, '平均成本', 0)
@@ -62,7 +64,6 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
     # ==================== 实时行情 ====================
     st.markdown("### 📈 实时行情")
     
-    # 定义行情品种及其对应的代码格式
     行情品种配置 = [
         {"显示名": "AAPL", "代码": "AAPL"},
         {"显示名": "BTC-USD", "代码": "BTC-USD"},
@@ -85,7 +86,7 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                         st.metric(品种["显示名"], f"${价格:.2f}")
                 else:
                     st.metric(品种["显示名"], "—")
-            except Exception as e:
+            except Exception:
                 st.metric(品种["显示名"], "—")
     
     # ==================== 快捷交易 ====================
@@ -102,7 +103,6 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         
         买入品种 = st.selectbox("选择品种", 可买品种列表, key="buy_symbol_select")
         
-        # 获取买入品种对应的代码格式
         买入代码 = 转换品种代码(买入品种)
         
         try:
@@ -157,36 +157,37 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                     结果 = 引擎.买入(买入品种, 当前买入价, 买入数量)
                     if 结果.get("success"):
                         st.success(f"✅ 已买入 {买入品种} {买入数量} 单位")
+                        # 更新 session_state
+                        st.session_state.订单引擎 = 引擎
                         st.rerun()
                     else:
                         st.error(f"买入失败: {结果.get('error')}")
                 except Exception as e:
                     st.error(f"买入失败: {e}")
     
-    # ========== 卖出区域 ==========
+    # ========== 卖出区域（修复版） ==========
     with col2:
         st.markdown("#### 卖出")
         
         # 先刷新持仓
         if hasattr(引擎, '_恢复持仓'):
             引擎._恢复持仓()
+            st.session_state.订单引擎 = 引擎
         
         # 获取持仓列表
         持仓品种列表 = list(引擎.持仓.keys())
         
-        # 调试显示
         if 持仓品种列表:
-            st.caption(f"📊 当前持仓品种: {', '.join(持仓品种列表)}")
-            for 品种 in 持仓品种列表:
-                pos = 引擎.持仓[品种]
-                st.caption(f"   {品种}: {pos.数量}股, 成本: {pos.平均成本:.2f}")
-        
-        if 持仓品种列表:
-            # 构建卖出选项（显示品种和数量）
+            # 构建卖出选项
             卖出选项 = []
             for 品种 in 持仓品种列表:
                 pos = 引擎.持仓[品种]
-                数量显示 = int(pos.数量) if pos.数量 == int(pos.数量) else f"{pos.数量:.4f}"
+                数量 = pos.数量
+                # 格式化数量显示
+                if 品种 in ["ETH-USD", "BTC-USD", "SOL-USD", "BNB-USD"]:
+                    数量显示 = f"{数量:.4f}"
+                else:
+                    数量显示 = f"{int(数量)}"
                 卖出选项.append(f"{品种} (持仓: {数量显示})")
             
             卖出选项索引 = st.selectbox(
@@ -202,7 +203,7 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             最大可卖数量 = pos.数量
             
             st.caption(f"持仓成本: ${pos.平均成本:.4f}")
-            st.caption(f"当前持仓数量: {最大可卖数量}")
+            st.caption(f"当前持仓数量: {最大可卖数量:.4f}" if 卖品种 in ["ETH-USD", "BTC-USD", "SOL-USD", "BNB-USD"] else f"当前持仓数量: {int(最大可卖数量)}")
             
             try:
                 当前卖出价 = 获取行情的价格(卖品种)
@@ -223,18 +224,21 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                     key="sell_qty_input"
                 )
             else:
+                # 确保最大可卖数量是整数
+                max_qty = int(最大可卖数量) if 最大可卖数量 > 0 else 1
                 卖出数量 = st.number_input(
                     "数量", 
                     min_value=1, 
-                    max_value=int(最大可卖数量), 
-                    value=min(100, int(最大可卖数量)), 
-                    step=10, 
+                    max_value=max_qty, 
+                    value=min(1, max_qty), 
+                    step=1, 
                     key="sell_qty_input"
                 )
             
             预计收入 = 当前卖出价 * 卖出数量 if 当前卖出价 else 0
             st.caption(f"预计收入: ¥{预计收入:,.2f}" if 当前卖出价 else "无法计算收入")
             
+            # 卖出按钮
             if st.button("卖出", width='stretch', key="sell_button"):
                 if not 当前卖出价 or 当前卖出价 <= 0:
                     st.error("无法获取价格，请稍后再试")
@@ -242,15 +246,19 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                     st.error("请输入有效的卖出数量")
                 else:
                     try:
+                        print(f"🔍 准备卖出: {卖品种}, 数量: {卖出数量}, 价格: {当前卖出价}")
                         结果 = 引擎.卖出(卖品种, 当前卖出价, 卖出数量)
+                        print(f"📊 卖出结果: {结果}")
                         if 结果.get("success"):
                             st.success(f"✅ 已卖出 {卖品种} {卖出数量} 单位")
-                            # 刷新页面
+                            # 关键：更新 session_state 中的引擎
+                            st.session_state.订单引擎 = 引擎
+                            # 强制刷新页面
                             st.rerun()
                         else:
                             st.error(f"卖出失败: {结果.get('error')}")
                     except Exception as e:
-                        st.error(f"卖出失败: {e}")
+                        st.error(f"卖出异常: {str(e)}")
         else:
             st.info("暂无持仓")
             st.selectbox("选择持仓品种", ["无持仓"], disabled=True, key="sell_symbol_disabled")
@@ -264,30 +272,9 @@ def 获取行情的价格(代码):
     获取行情价格，支持多种代码格式
     """
     try:
-        # 优先使用行情获取模块
         结果 = 行情获取.获取价格(代码)
         if 结果 and hasattr(结果, '价格'):
             return 结果.价格
-        
-        # 如果失败，尝试使用 yfinance 直接获取
-        import yfinance as yf
-        ticker = yf.Ticker(代码)
-        
-        # 尝试获取实时价格
-        try:
-            info = ticker.info
-            if 'regularMarketPrice' in info:
-                return info['regularMarketPrice']
-            if 'currentPrice' in info:
-                return info['currentPrice']
-        except:
-            pass
-        
-        # 方法2：通过历史数据
-        data = ticker.history(period="1d")
-        if not data.empty:
-            return float(data['Close'].iloc[-1])
-        
         return None
     except Exception as e:
         print(f"获取 {代码} 价格失败: {e}")
