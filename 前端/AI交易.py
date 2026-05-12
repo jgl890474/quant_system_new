@@ -5,263 +5,174 @@ import time
 import datetime
 
 
-# ==================== Tushare 配置 ====================
+# ==================== 导入行情获取模块 ====================
 try:
-    import tushare as ts
-    ts.set_token('a58ac285333f6f8ecc93063924c3dfd8906a1e01c1865cb624f097ac')
-    pro = ts.pro_api()
-    TUSHARE_AVAILABLE = True
-    print("✅ Tushare Pro 已连接")
+    from 核心 import 行情获取
+    HAS_QUOTE = True
+    print("✅ 行情获取模块已加载")
 except Exception as e:
-    TUSHARE_AVAILABLE = False
-    print(f"⚠️ Tushare Pro 连接失败: {e}")
-    pro = None
+    HAS_QUOTE = False
+    print(f"⚠️ 行情获取模块加载失败: {e}")
 
 
-# ==================== 获取A股实时数据（Tushare） ====================
-@st.cache_data(ttl=60)
-def 获取A股实时行情():
-    """使用 Tushare 获取A股实时行情"""
-    if not TUSHARE_AVAILABLE or pro is None:
-        return pd.DataFrame()
-    
-    try:
-        today = datetime.datetime.now().strftime('%Y%m%d')
-        
-        trade_cal = pro.trade_cal(exchange='SSE', start_date=today, end_date=today)
-        if trade_cal.empty or trade_cal['is_open'].iloc[0] == 0:
-            trade_cal = pro.trade_cal(exchange='SSE', start_date='20240101', end_date=today)
-            trade_cal = trade_cal[trade_cal['is_open'] == 1]
-            if not trade_cal.empty:
-                latest_trade_date = trade_cal['cal_date'].iloc[-1]
-            else:
-                latest_trade_date = today
-        else:
-            latest_trade_date = today
-        
-        股票列表 = [
-            {"ts_code": "000001.SZ", "symbol": "000001", "name": "平安银行"},
-            {"ts_code": "000858.SZ", "symbol": "000858", "name": "五粮液"},
-            {"ts_code": "002415.SZ", "symbol": "002415", "name": "海康威视"},
-            {"ts_code": "600036.SH", "symbol": "600036", "name": "招商银行"},
-            {"ts_code": "600519.SH", "symbol": "600519", "name": "贵州茅台"},
-            {"ts_code": "601318.SH", "symbol": "601318", "name": "中国平安"},
-            {"ts_code": "300750.SZ", "symbol": "300750", "name": "宁德时代"},
-            {"ts_code": "002594.SZ", "symbol": "002594", "name": "比亚迪"},
-        ]
-        
-        result = []
-        for 股票 in 股票列表:
-            try:
-                df = pro.daily(ts_code=股票["ts_code"], start_date=latest_trade_date, end_date=latest_trade_date)
-                if not df.empty:
-                    result.append({
-                        "代码": 股票["symbol"],
-                        "名称": 股票["name"],
-                        "最新价": round(df['close'].iloc[0], 2),
-                        "涨跌幅": round(df['pct_chg'].iloc[0], 2) if 'pct_chg' in df.columns else 0,
-                        "开盘": round(df['open'].iloc[0], 2),
-                        "最高": round(df['high'].iloc[0], 2),
-                        "最低": round(df['low'].iloc[0], 2),
-                        "成交量": df['vol'].iloc[0],
-                    })
-            except Exception as e:
-                print(f"获取 {股票['name']} 数据失败: {e}")
-                continue
-        
-        return pd.DataFrame(result)
-    except Exception as e:
-        print(f"获取A股实时行情失败: {e}")
-        return pd.DataFrame()
-
-
-def 获取A股价格(代码):
-    try:
-        df = 获取A股实时行情()
-        if df.empty:
-            return None
-        row = df[df['代码'] == 代码]
-        if not row.empty:
-            return float(row['最新价'].iloc[0])
-    except:
-        pass
-    return None
-
-
-def 获取加密货币价格(代码):
-    try:
-        import requests
-        symbol = 代码.replace("-", "").upper()
-        url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
-        res = requests.get(url, timeout=5)
-        data = res.json()
-        if "price" in data:
-            return float(data["price"])
-    except:
-        pass
-    模拟价格 = {"BTCUSD": 65000, "ETHUSD": 3500, "SOLUSD": 150, "BNBUSD": 600}
-    return 模拟价格.get(代码.replace("-", "").upper(), 100)
-
-
-def 获取美股价格(代码):
-    try:
-        import yfinance as yf
-        ticker = yf.Ticker(代码)
-        data = ticker.history(period="1d")
-        if not data.empty:
-            return float(data['Close'].iloc[-1])
-    except:
-        pass
-    模拟价格 = {"AAPL": 175, "GOOGL": 140, "MSFT": 420, "NVDA": 120, "TSLA": 170}
-    return 模拟价格.get(代码, 100)
-
-
-def 获取外汇价格(货币对):
-    模拟价格 = {"EUR/USD": 1.0890, "GBP/USD": 1.2670, "USD/JPY": 148.50}
-    return 模拟价格.get(货币对, 1.0)
-
-
-def 获取期货价格(品种):
-    模拟价格 = {"GC=F": 2350.0, "CL=F": 78.50}
-    return 模拟价格.get(品种, 100.0)
-
-
+# ==================== 获取真实AI推荐（使用行情获取模块） ====================
 def 获取真实AI推荐(市场, 策略类型, 引擎):
-    """获取真实的AI推荐"""
+    """获取真实的AI推荐 - 统一使用行情获取模块"""
     推荐列表 = []
     
     if 市场 == "A股":
-        df = 获取A股实时行情()
-        if not df.empty:
-            for _, row in df.iterrows():
-                代码 = row['代码']
-                名称 = row['名称']
-                价格 = row['最新价']
-                涨跌幅 = row['涨跌幅']
-                
-                if 价格 and 价格 > 0:
-                    if 涨跌幅 > 0:
-                        得分 = int(50 + min(涨跌幅 * 8, 50))
-                        趋势 = "上涨" if 涨跌幅 < 5 else "强势"
-                        理由 = f"涨幅{涨跌幅:.2f}%"
-                    elif 涨跌幅 < 0:
-                        得分 = int(50 + max(涨跌幅 * 2, -20))
-                        趋势 = "下跌"
-                        理由 = f"跌幅{abs(涨跌幅):.2f}%"
+        # A股列表
+        a股列表 = [
+            {"代码": "000001", "名称": "平安银行"},
+            {"代码": "600036", "名称": "招商银行"},
+            {"代码": "600519", "名称": "贵州茅台"},
+            {"代码": "300750", "名称": "宁德时代"},
+            {"代码": "002415", "名称": "海康威视"},
+            {"代码": "601318", "名称": "中国平安"},
+        ]
+        
+        for 股票 in a股列表:
+            try:
+                if HAS_QUOTE:
+                    价格结果 = 行情获取.获取价格(股票["代码"])
+                    if 价格结果 and 价格结果.价格 > 0:
+                        价格 = 价格结果.价格
+                        推荐列表.append({
+                            "代码": 股票["代码"],
+                            "名称": 股票["名称"],
+                            "价格": 价格,
+                            "趋势": "观望",
+                            "得分": 50,
+                            "理由": f"当前价格 ¥{价格:.2f}",
+                            "市场": "A股"
+                        })
                     else:
-                        得分 = 45
-                        趋势 = "平盘"
-                        理由 = f"当前价格 ¥{价格:.2f}"
-                    
+                        推荐列表.append({
+                            "代码": 股票["代码"],
+                            "名称": 股票["名称"],
+                            "价格": 100,
+                            "趋势": "观望",
+                            "得分": 50,
+                            "理由": "行情获取中",
+                            "市场": "A股"
+                        })
+                else:
                     推荐列表.append({
-                        "代码": 代码,
-                        "名称": 名称,
-                        "价格": 价格,
-                        "趋势": 趋势,
-                        "得分": 得分,
-                        "理由": 理由,
+                        "代码": 股票["代码"],
+                        "名称": 股票["名称"],
+                        "价格": 100,
+                        "趋势": "观望",
+                        "得分": 50,
+                        "理由": "行情模块未连接",
                         "市场": "A股"
                     })
-        else:
-            for 代码, 名称 in [("000001", "平安银行"), ("600036", "招商银行"), ("600519", "贵州茅台")]:
+            except Exception as e:
+                print(f"获取 {股票['名称']} 价格失败: {e}")
                 推荐列表.append({
-                    "代码": 代码,
-                    "名称": 名称,
-                    "价格": 100.00,
+                    "代码": 股票["代码"],
+                    "名称": 股票["名称"],
+                    "价格": 100,
                     "趋势": "观望",
                     "得分": 50,
-                    "理由": "Tushare数据获取中",
+                    "理由": "获取失败",
                     "市场": "A股"
                 })
-        
-        推荐列表.sort(key=lambda x: x["得分"], reverse=True)
     
     elif 市场 == "加密货币":
-        候选品种 = [
+        币种列表 = [
             {"代码": "BTC-USD", "名称": "比特币"},
             {"代码": "ETH-USD", "名称": "以太坊"},
             {"代码": "SOL-USD", "名称": "Solana"},
             {"代码": "BNB-USD", "名称": "币安币"},
         ]
-        for 币种 in 候选品种:
+        for 币种 in 币种列表:
             try:
-                价格 = 获取加密货币价格(币种["代码"])
-                if 价格 and 价格 > 0:
-                    推荐列表.append({
-                        "代码": 币种["代码"],
-                        "名称": 币种["名称"],
-                        "价格": 价格,
-                        "趋势": "上涨",
-                        "得分": 75,
-                        "理由": f"当前价格 ${价格:.2f}",
-                        "市场": "加密货币"
-                    })
+                if HAS_QUOTE:
+                    价格结果 = 行情获取.获取价格(币种["代码"])
+                    if 价格结果 and 价格结果.价格 > 0:
+                        价格 = 价格结果.价格
+                        推荐列表.append({
+                            "代码": 币种["代码"],
+                            "名称": 币种["名称"],
+                            "价格": 价格,
+                            "趋势": "观望",
+                            "得分": 50,
+                            "理由": f"当前价格 ${价格:.2f}",
+                            "市场": "加密货币"
+                        })
             except:
                 continue
-        推荐列表.sort(key=lambda x: x["得分"], reverse=True)
     
     elif 市场 == "美股":
-        候选品种 = ["AAPL", "NVDA", "MSFT", "GOOGL", "TSLA"]
-        for 代码 in 候选品种:
+        美股列表 = ["AAPL", "NVDA", "MSFT", "GOOGL", "TSLA"]
+        for 代码 in 美股列表:
             try:
-                价格 = 获取美股价格(代码)
-                if 价格 and 价格 > 0:
-                    推荐列表.append({
-                        "代码": 代码,
-                        "名称": 代码,
-                        "价格": 价格,
-                        "趋势": "震荡",
-                        "得分": 65,
-                        "理由": f"当前价格 ${价格:.2f}",
-                        "市场": "美股"
-                    })
+                if HAS_QUOTE:
+                    价格结果 = 行情获取.获取价格(代码)
+                    if 价格结果 and 价格结果.价格 > 0:
+                        价格 = 价格结果.价格
+                        推荐列表.append({
+                            "代码": 代码,
+                            "名称": 代码,
+                            "价格": 价格,
+                            "趋势": "观望",
+                            "得分": 50,
+                            "理由": f"当前价格 ${价格:.2f}",
+                            "市场": "美股"
+                        })
             except:
                 continue
-        推荐列表.sort(key=lambda x: x["得分"], reverse=True)
     
     elif 市场 == "外汇":
-        候选品种 = ["EUR/USD", "GBP/USD"]
-        for 代码 in 候选品种:
-            价格 = 获取外汇价格(代码)
-            推荐列表.append({
-                "代码": 代码,
-                "名称": 代码,
-                "价格": 价格,
-                "趋势": "震荡",
-                "得分": 55,
-                "理由": f"当前汇率 {价格:.4f}",
-                "市场": "外汇"
-            })
+        外汇列表 = ["EURUSD", "GBPUSD"]
+        for 代码 in 外汇列表:
+            try:
+                if HAS_QUOTE:
+                    价格结果 = 行情获取.获取价格(代码)
+                    if 价格结果 and 价格结果.价格 > 0:
+                        价格 = 价格结果.价格
+                        推荐列表.append({
+                            "代码": 代码,
+                            "名称": 代码,
+                            "价格": 价格,
+                            "趋势": "观望",
+                            "得分": 50,
+                            "理由": f"当前汇率 {价格:.4f}",
+                            "市场": "外汇"
+                        })
+            except:
+                continue
     
     elif 市场 == "期货":
-        候选品种 = [{"代码": "GC=F", "名称": "黄金期货"}, {"代码": "CL=F", "名称": "原油期货"}]
-        for 品种 in 候选品种:
-            价格 = 获取期货价格(品种["代码"])
-            推荐列表.append({
-                "代码": 品种["代码"],
-                "名称": 品种["名称"],
-                "价格": 价格,
-                "趋势": "震荡",
-                "得分": 55,
-                "理由": f"当前价格 ${价格:.2f}",
-                "市场": "期货"
-            })
+        期货列表 = [{"代码": "GC=F", "名称": "黄金期货"}, {"代码": "CL=F", "名称": "原油期货"}]
+        for 品种 in 期货列表:
+            try:
+                if HAS_QUOTE:
+                    价格结果 = 行情获取.获取价格(品种["代码"])
+                    if 价格结果 and 价格结果.价格 > 0:
+                        价格 = 价格结果.价格
+                        推荐列表.append({
+                            "代码": 品种["代码"],
+                            "名称": 品种["名称"],
+                            "价格": 价格,
+                            "趋势": "观望",
+                            "得分": 50,
+                            "理由": f"当前价格 ${价格:.2f}",
+                            "市场": "期货"
+                        })
+            except:
+                continue
     
     return 推荐列表[:5]
 
 
 def 获取实时价格(代码, 市场类型):
+    """获取实时价格 - 使用行情获取模块"""
     try:
-        if 市场类型 == "A股":
-            return 获取A股价格(代码)
-        elif 市场类型 == "加密货币":
-            return 获取加密货币价格(代码)
-        elif 市场类型 == "美股":
-            return 获取美股价格(代码)
-        elif 市场类型 == "外汇":
-            return 获取外汇价格(代码)
-        elif 市场类型 == "期货":
-            return 获取期货价格(代码)
+        if HAS_QUOTE:
+            价格结果 = 行情获取.获取价格(代码)
+            if 价格结果 and 价格结果.价格 > 0:
+                return 价格结果.价格
     except:
         pass
     return None
@@ -310,13 +221,6 @@ def 显示(引擎, 策略加载器, AI引擎):
     
     可用资金 = 引擎.获取可用资金() if hasattr(引擎, '获取可用资金') else 0
     st.caption(f"💰 可用资金: ¥{可用资金:,.2f}")
-    
-    # ==================== 导入行情获取 ====================
-    try:
-        from 核心 import 行情获取
-        HAS_QUOTE = True
-    except:
-        HAS_QUOTE = False
     
     if "ai_list" not in st.session_state:
         st.session_state.ai_list = []
@@ -401,7 +305,7 @@ def 显示(引擎, 策略加载器, AI引擎):
     st.markdown("---")
     st.markdown("### 📦 当前持仓")
     
-    # ========== 持仓显示（修复版：获取实时价格） ==========
+    # ========== 持仓显示（获取实时价格） ==========
     if hasattr(引擎, '持仓') and 引擎.持仓:
         持仓数据 = []
         for sym, pos in 引擎.持仓.items():
@@ -421,19 +325,15 @@ def 显示(引擎, 策略加载器, AI引擎):
             except Exception:
                 当前价格 = 平均成本
             
-            # 更新持仓当前价格
             if hasattr(pos, '当前价格'):
                 pos.当前价格 = 当前价格
             
             浮动盈亏 = (当前价格 - 平均成本) * 数量
             
-            # 格式化数量显示
             if sym in ["ETH-USD", "BTC-USD", "SOL-USD", "BNB-USD"]:
                 数量显示 = f"{数量:.4f}"
-                数量值 = 数量
             else:
                 数量显示 = f"{int(数量)}"
-                数量值 = int(数量)
             
             持仓数据.append({
                 "品种": sym,
@@ -445,7 +345,6 @@ def 显示(引擎, 策略加载器, AI引擎):
         
         st.dataframe(持仓数据, width='stretch', hide_index=True)
         
-        # 显示总盈亏
         总盈亏 = sum([d["浮动盈亏"] for d in 持仓数据])
         st.caption(f"📊 持仓总盈亏: ¥{总盈亏:+,.2f}")
     else:
