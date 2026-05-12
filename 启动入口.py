@@ -26,6 +26,13 @@ except Exception as e:
     st.error(f"❌ 数据库模块导入失败: {e}")
     st.stop()
 
+# ========== 导入行情获取 ==========
+try:
+    from 核心 import 行情获取
+except ImportError:
+    行情获取 = None
+    st.warning("⚠️ 行情获取模块导入失败")
+
 # ========== 初始化数据库 ==========
 try:
     数据库.初始化数据库()
@@ -154,7 +161,6 @@ with st.sidebar:
     if st.button("🗑️ 清空所有持仓数据", width="stretch"):
         try:
             数据库.清空所有持仓()
-            # 重新加载引擎
             st.session_state.订单引擎 = 订单引擎(初始资金=INITIAL_CAPITAL)
             引擎 = st.session_state.订单引擎
             st.success("✅ 已清空")
@@ -171,13 +177,10 @@ with st.sidebar:
         except Exception as e:
             st.error(f"刷新失败: {e}")
     
-    # ========== 关键修复：添加强制刷新按钮 ==========
     if st.button("🔄 强制刷新持仓", width="stretch"):
         try:
-            # 从数据库重新加载持仓到引擎
             if hasattr(引擎, '_恢复持仓'):
                 引擎._恢复持仓()
-            # 更新 session_state
             st.session_state.订单引擎 = 引擎
             st.success(f"✅ 持仓已刷新，当前持仓: {len(引擎.持仓)} 个品种")
             st.rerun()
@@ -186,30 +189,59 @@ with st.sidebar:
     
     st.markdown("---")
     
+    # ========== 持仓监控（修复版：获取实时价格） ==========
     st.markdown("### 💼 持仓监控")
     
     if hasattr(引擎, '持仓') and 引擎.持仓:
         st.caption(f"📊 当前持仓数量: {len(引擎.持仓)}")
+        
+        # 计算实时总资产
+        实时总资产 = 引擎.获取可用资金() if hasattr(引擎, '获取可用资金') else getattr(引擎, '可用资金', INITIAL_CAPITAL)
+        
         for 品种, pos in 引擎.持仓.items():
-            现价 = getattr(pos, '当前价格', getattr(pos, '平均成本', 0))
             平均成本 = getattr(pos, '平均成本', 0)
             数量 = getattr(pos, '数量', 0)
+            
+            # 获取实时价格
+            try:
+                if 行情获取:
+                    价格结果 = 行情获取.获取价格(品种)
+                    if 价格结果 and hasattr(价格结果, '价格'):
+                        现价 = 价格结果.价格
+                    else:
+                        现价 = 平均成本
+                else:
+                    现价 = 平均成本
+            except Exception:
+                现价 = 平均成本
+            
+            # 更新持仓当前价格
+            if hasattr(pos, '当前价格'):
+                pos.当前价格 = 现价
+            
+            # 计算盈亏
             盈亏 = (现价 - 平均成本) * 数量
+            实时总资产 += 数量 * 现价
+            
+            # 格式化数量显示
+            if 品种 in ["ETH-USD", "BTC-USD", "SOL-USD", "BNB-USD"]:
+                数量显示 = f"{数量:.4f}股"
+            else:
+                数量显示 = f"{int(数量)}股"
+            
             st.metric(
                 label=f"{品种}",
-                value=f"{int(数量) if isinstance(数量, (int, float)) else 0}股",
+                value=数量显示,
                 delta=f"成本: ¥{平均成本:.2f} | 盈亏: ¥{盈亏:+.2f}"
             )
+        
         st.markdown("---")
-        try:
-            st.metric("💰 总资产", f"¥{引擎.获取总资产():,.0f}")
-            st.metric("💵 可用资金", f"¥{引擎.获取可用资金():,.0f}")
-        except:
-            st.metric("💰 总资产", "计算中")
-            st.metric("💵 可用资金", "计算中")
+        
+        # 显示总资产和可用资金（使用实时计算）
+        st.metric("💰 总资产", f"¥{实时总资产:,.0f}")
+        st.metric("💵 可用资金", f"¥{引擎.获取可用资金():,.0f}" if hasattr(引擎, '获取可用资金') else f"¥{getattr(引擎, '可用资金', 0):,.0f}")
     else:
         st.info("暂无持仓")
-        # 显示调试信息（仅开发模式）
         if hasattr(引擎, '交易记录') and 引擎.交易记录:
             with st.expander("📋 最近交易记录", expanded=False):
                 for t in 引擎.交易记录[-5:]:
@@ -218,7 +250,7 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 🛡️ 风控设置")
     
-    自动风控 = st.checkbox("🔴 开启自动止损止盈监控", value=False, help="开启后会自动检查持仓并执行止损止盈（谨慎使用）")
+    自动风控 = st.checkbox("🔴 开启自动止损止盈监控", value=False, help="开启后会自动检查持仓并执行止损止盈")
     
     if hasattr(风控, '止损比例'):
         st.caption(f"止损: {风控.止损比例*100:.0f}% | 止盈: {风控.止盈比例*100:.0f}%")
@@ -231,7 +263,6 @@ with st.sidebar:
 
 # ========== 安全调用函数包装器 ==========
 def 安全调用(模块, 默认信息="模块开发中"):
-    """安全调用模块显示函数"""
     if 模块 is None:
         st.info(默认信息)
         return
@@ -252,7 +283,6 @@ def 安全调用(模块, 默认信息="模块开发中"):
         st.info(f"{默认信息} ({str(e)[:50]})")
 
 # ========== 页面刷新监听 ==========
-# 检查是否需要刷新持仓（从URL参数获取）
 query_params = st.query_params
 if query_params.get("refresh") == "true":
     if hasattr(引擎, '_恢复持仓'):
@@ -284,6 +314,5 @@ with tabs[5]:
 with tabs[6]:
     安全调用(交易记录, "交易记录模块开发中")
 
-# ========== 页脚 ==========
 st.markdown("---")
 st.caption("⚠️ 风险提示：量化交易存在风险，历史回测结果不代表未来收益。请理性投资，注意风险控制。")
