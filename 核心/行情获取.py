@@ -45,12 +45,12 @@ def 获取Tushare实时价格(代码):
 def 获取外汇实时价格(品种):
     """获取外汇实时汇率"""
     try:
-        if 品种 == "EURUSD":
+        if 品种 in ["EURUSD", "EUR/USD", "EUR-USD"]:
             url = "https://api.exchangerate-api.com/v4/latest/EUR"
             r = requests.get(url, timeout=5)
             data = r.json()
             return float(data['rates']['USD'])
-        elif 品种 == "GBPUSD":
+        elif 品种 in ["GBPUSD", "GBP/USD"]:
             url = "https://api.exchangerate-api.com/v4/latest/GBP"
             r = requests.get(url, timeout=5)
             data = r.json()
@@ -63,6 +63,15 @@ def 获取外汇实时价格(品种):
 # ==================== 演示数据（美股/加密货币/期货） ====================
 def 获取演示价格(品种):
     """返回接近真实市场的演示价格"""
+    
+    # 外汇统一处理（支持多种格式）
+    if 品种 in ["EURUSD", "EUR/USD", "EUR-USD"]:
+        return 1.08
+    if 品种 in ["GBPUSD", "GBP/USD"]:
+        return 1.27
+    if 品种 in ["USDJPY", "USD/JPY"]:
+        return 148.50
+    
     演示价格表 = {
         # 美股
         "AAPL": 175.00,
@@ -84,16 +93,20 @@ def 获取演示价格(品种):
         "000001": 11.24,
         "600036": 37.90,
         "300750": 180.00,
-        # 外汇（备用）
-        "EURUSD": 1.08,
     }
-    return 演示价格表.get(品种, 100)
+    
+    # 默认返回 1.08（合理的外汇默认值），而不是 100
+    return 演示价格表.get(品种, 1.08)
 
 
 # ==================== 主入口 ====================
 def 获取价格(品种代码):
     """统一价格获取入口"""
     print(f"🔍 获取: {品种代码}")
+    
+    # 处理显示名称
+    if 品种代码 == "EUR/USD":
+        品种代码 = "EURUSD"
     
     # A股：优先使用 Tushare
     if 品种代码.isdigit() or (len(str(品种代码)) == 6 and str(品种代码).isdigit()):
@@ -107,7 +120,7 @@ def 获取价格(品种代码):
             return 行情数据(品种代码, price)
     
     # 外汇：优先实时API
-    if 品种代码 in ["EURUSD", "GBPUSD", "EUR/USD"]:
+    if 品种代码 in ["EURUSD", "GBPUSD", "USDJPY"]:
         price = 获取外汇实时价格(品种代码)
         if price and price > 0:
             print(f"✅ [外汇实时] {品种代码} = {price}")
