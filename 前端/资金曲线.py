@@ -107,7 +107,6 @@ def 显示(引擎):
         xaxis=dict(showgrid=True, gridwidth=0.3, gridcolor='#2a2e3a', tickformat="%m/%d"),
         yaxis=dict(showgrid=True, gridwidth=0.3, gridcolor='#2a2e3a', title="净值 (¥)")
     )
-    # 修复：use_container_width=True -> width='stretch'
     st.plotly_chart(fig, width='stretch')
     
     # ========== 持仓明细表格 ==========
@@ -116,8 +115,12 @@ def 显示(引擎):
         
         明细数据 = []
         for 品种, pos in 引擎.持仓.items():
+            # 跳过数量为0的持仓
+            if pos.数量 <= 0:
+                continue
+                
             try:
-                # 获取实时价格（带容错）
+                # 获取实时价格
                 价格结果 = 行情获取.获取价格(品种)
                 
                 if hasattr(价格结果, '价格'):
@@ -130,29 +133,41 @@ def 显示(引擎):
                     现价 = float(pos.平均成本)
                 
                 成本价 = float(pos.平均成本)
-                盈亏 = (现价 - 成本价) * pos.数量
-                盈亏率 = (现价 / 成本价 - 1) * 100 if 成本价 > 0 else 0
+                
+                if 成本价 > 0:
+                    盈亏 = (现价 - 成本价) * pos.数量
+                    盈亏率 = (现价 / 成本价 - 1) * 100
+                else:
+                    盈亏 = 0
+                    盈亏率 = 0
+                
+                # 格式化数量显示
+                if 品种 in ["ETH-USD", "BTC-USD", "SOL-USD", "BNB-USD"]:
+                    数量显示 = f"{pos.数量:.4f}"
+                else:
+                    数量显示 = f"{int(pos.数量)}"
                 
                 明细数据.append({
                     "品种": 品种,
-                    "数量": f"{pos.数量:.0f}",
+                    "数量": 数量显示,
                     "成本": f"{成本价:.2f}",
                     "现价": f"{现价:.2f}",
                     "盈亏": f"¥{盈亏:+,.2f}",
                     "盈亏率": f"{盈亏率:+.2f}%"
                 })
             except Exception as e:
+                print(f"获取 {品种} 行情失败: {e}")
+                # 即使获取失败也显示，用成本价代替
                 明细数据.append({
                     "品种": 品种,
-                    "数量": f"{pos.数量:.0f}",
+                    "数量": f"{int(pos.数量)}" if 品种 not in ["ETH-USD", "BTC-USD", "SOL-USD", "BNB-USD"] else f"{pos.数量:.4f}",
                     "成本": f"{pos.平均成本:.2f}",
-                    "现价": "获取失败",
-                    "盈亏": "---",
-                    "盈亏率": "---"
+                    "现价": f"{pos.平均成本:.2f}",
+                    "盈亏": f"¥0.00",
+                    "盈亏率": f"0.00%"
                 })
         
         if 明细数据:
-            # 修复：use_container_width=True -> width='stretch'
             st.dataframe(pd.DataFrame(明细数据), width='stretch', hide_index=True)
             
             # 显示盈亏汇总
@@ -160,7 +175,8 @@ def 显示(引擎):
             for item in 明细数据:
                 if item["盈亏"] != "---":
                     try:
-                        total_profit += float(item["盈亏"].replace("¥", "").replace(",", ""))
+                       盈亏值 = float(item["盈亏"].replace("¥", "").replace(",", ""))
+                       total_profit += 盈亏值
                     except:
                         pass
             st.caption(f"📊 持仓总盈亏: ¥{total_profit:+,.2f}")
@@ -203,7 +219,10 @@ def 显示(引擎):
                 st.markdown(f"<span style='color:{颜色}; font-size:14px;'>{箭头}</span> **{策略名}** : {收益率:+.1f}%", unsafe_allow_html=True)
     
     # ========== 持仓图表 ==========
-    if 引擎.持仓:
+    # 过滤掉数量为0的持仓
+    有效持仓 = {品种: pos for 品种, pos in 引擎.持仓.items() if pos.数量 > 0}
+    
+    if 有效持仓:
         st.markdown("### 📊 持仓分析")
         st.markdown("---")
         
@@ -211,7 +230,7 @@ def 显示(引擎):
         总市值 = 0.0
         总盈亏_实时 = 0.0
         
-        for 品种, pos in 引擎.持仓.items():
+        for 品种, pos in 有效持仓.items():
             try:
                 # 获取实时价格
                 价格结果 = 行情获取.获取价格(品种)
@@ -227,7 +246,7 @@ def 显示(引擎):
                 
                 成本价 = float(pos.平均成本)
                 
-                # 正确计算盈亏
+                # 计算盈亏
                 盈亏 = (现价 - 成本价) * pos.数量
                 市值 = pos.数量 * 现价
                 总市值 += 市值
@@ -244,25 +263,22 @@ def 显示(引擎):
         if 持仓数据:
             col_a, col_b = st.columns(2)
             
-            # ========== 盈亏柱状图（修复版：显示盈亏，不是市值） ==========
+            # 盈亏柱状图
             with col_a:
                 st.markdown("#### 盈亏柱状图")
                 df_bar = pd.DataFrame(持仓数据)
                 df_bar = df_bar.sort_values('盈亏', ascending=False)
                 
-                # 动态颜色：盈利绿色，亏损红色
                 盈亏颜色 = ['#ef4444' if x < 0 else '#10b981' for x in df_bar['盈亏']]
                 
                 fig_bar = go.Figure()
                 fig_bar.add_trace(go.Bar(
                     x=df_bar['品种'],
-                    y=df_bar['盈亏'],  # ✅ 修复：y轴用盈亏，不是市值
+                    y=df_bar['盈亏'],
                     marker_color=盈亏颜色,
                     text=df_bar['盈亏'].apply(lambda x: f"¥{x:+,.0f}"),
                     textposition='outside'
                 ))
-                
-                # 添加零线
                 fig_bar.add_hline(y=0, line_dash="dash", line_color="#94a3b8")
                 
                 fig_bar.update_layout(
@@ -274,10 +290,9 @@ def 显示(引擎):
                     xaxis_title="品种",
                     yaxis_title="盈亏 (¥)"
                 )
-                # 修复：use_container_width=True -> width='stretch'
                 st.plotly_chart(fig_bar, width='stretch')
             
-            # ========== 持仓市值条形图（保持不变） ==========
+            # 持仓市值条形图
             with col_b:
                 st.markdown("#### 持仓市值条形图")
                 df_bar_h = pd.DataFrame(持仓数据)
@@ -301,7 +316,6 @@ def 显示(引擎):
                     xaxis_title="市值 (¥)",
                     yaxis_title="品种"
                 )
-                # 修复：use_container_width=True -> width='stretch'
                 st.plotly_chart(fig_bar_h, width='stretch')
             
             # 总市值和总盈亏卡片
@@ -317,9 +331,9 @@ def 显示(引擎):
                 </div>
             </div>
             """, unsafe_allow_html=True)
-    
-    if not 引擎.持仓:
-        st.info("暂无持仓，请在首页或策略中心买入")
+    else:
+        if not 引擎.持仓:
+            st.info("暂无持仓，请在首页或策略中心买入")
     
     # 显示最后更新时间
     st.markdown("---")
