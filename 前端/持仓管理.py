@@ -34,13 +34,14 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         数据 = []
         持仓列表 = list(引擎.持仓.items())
         
-        # 调试：打印当前持仓数量
-        print(f"📊 当前持仓数量: {len(持仓列表)}")
-        
         for 品种, pos in 持仓列表:
             try:
                 数量 = float(getattr(pos, '数量', 0))
                 成本价 = float(getattr(pos, '平均成本', 0))
+                
+                # 跳过数量为0的持仓
+                if 数量 <= 0:
+                    continue
                 
                 # 获取实时价格
                 价格结果 = 行情获取.获取价格(品种)
@@ -58,10 +59,12 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                 盈亏 = (现价 - 成本价) * 数量
                 盈亏率 = ((现价 - 成本价) / 成本价) * 100 if 成本价 > 0 else 0
                 
+                # 修复数量显示：加密货币显示4位小数，其他显示整数
                 if 品种 in ["ETH-USD", "BTC-USD", "SOL-USD", "BNB-USD"]:
                     数量显示 = f"{数量:.4f}"
                 else:
-                    数量显示 = f"{int(数量)}" if 数量 == int(数量) else f"{数量:.2f}"
+                    # 确保数量显示为整数，不要有千位分隔符
+                    数量显示 = f"{int(数量)}"
                 
                 数据.append({
                     "品种": 品种,
@@ -76,14 +79,7 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                 
             except Exception as e:
                 print(f"处理 {品种} 时出错: {e}")
-                数据.append({
-                    "品种": 品种,
-                    "数量": "?",
-                    "成本": "?",
-                    "现价": "获取失败",
-                    "盈亏": "---",
-                    "盈亏率": "---"
-                })
+                continue
         
         if 数据:
             显示列 = ["品种", "数量", "成本", "现价", "盈亏", "盈亏率"]
@@ -157,139 +153,29 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             
             if 选中品种:
                 with st.spinner(f"正在加载 {选中品种} 的K线数据..."):
-                    周期选项 = st.selectbox(
-                        "选择周期", 
-                        ["日线", "周线", "60分钟", "30分钟", "10分钟"], 
-                        key="period_select"
-                    )
-                    
-                    if 周期选项 == "日线":
-                        周期 = "1d"
-                        长度 = 60
-                    elif 周期选项 == "周线":
-                        周期 = "1wk"
-                        长度 = 50
-                    elif 周期选项 == "60分钟":
-                        周期 = "1h"
-                        长度 = 100
-                    elif 周期选项 == "30分钟":
-                        周期 = "30m"
-                        长度 = 120
-                    else:
-                        周期 = "10m"
-                        长度 = 150
-                    
-                    df_kline = 行情获取.获取K线数据(选中品种, 周期, 长度)
-                    
-                    if not df_kline.empty and hasattr(行情获取, '计算技术指标'):
-                        df_indicators = 行情获取.计算技术指标(df_kline)
-                        # 获取策略信号标注（如果有）
-                        买入标注, 卖出标注 = [], []
-                        if 策略加载器:
-                            try:
-                                买入标注, 卖出标注 = 获取策略信号标注(选中品种, df_kline, 策略加载器, 引擎)
-                            except:
-                                pass
-                        
-                        fig = make_subplots(
-                            rows=3, cols=1,
-                            shared_xaxes=True,
-                            vertical_spacing=0.03,
-                            row_heights=[0.55, 0.2, 0.25],
-                            subplot_titles=(f'{选中品种} - K线图', '成交量', 'MACD')
-                        )
-                        
-                        fig.add_trace(go.Candlestick(
-                            x=df_indicators['日期'],
-                            open=df_indicators['开盘'],
-                            high=df_indicators['最高'],
-                            low=df_indicators['最低'],
-                            close=df_indicators['收盘'],
-                            name='K线',
-                            showlegend=False
-                        ), row=1, col=1)
-                        
-                        if 'MA5' in df_indicators.columns:
-                            fig.add_trace(go.Scatter(
-                                x=df_indicators['日期'],
-                                y=df_indicators['MA5'],
-                                mode='lines',
-                                name='MA5',
-                                line=dict(color='#FF6B6B', width=1.5)
-                            ), row=1, col=1)
-                        
-                        if 'MA10' in df_indicators.columns:
-                            fig.add_trace(go.Scatter(
-                                x=df_indicators['日期'],
-                                y=df_indicators['MA10'],
-                                mode='lines',
-                                name='MA10',
-                                line=dict(color='#4ECDC4', width=1.5)
-                            ), row=1, col=1)
-                        
-                        if 'MA20' in df_indicators.columns:
-                            fig.add_trace(go.Scatter(
-                                x=df_indicators['日期'],
-                                y=df_indicators['MA20'],
-                                mode='lines',
-                                name='MA20',
-                                line=dict(color='#FFE66D', width=1.5)
-                            ), row=1, col=1)
-                        
-                        if len(df_indicators) > 0:
-                            颜色 = ['#2ECC71' if c >= o else '#E74C3C' 
-                                   for c, o in zip(df_indicators['收盘'], df_indicators['开盘'])]
+                    # 尝试导入K线获取函数
+                    try:
+                        df_kline = 行情获取.获取K线数据(选中品种)
+                        if df_kline is not None and not df_kline.empty:
+                            st.line_chart(df_kline.set_index('日期')['收盘'] if '日期' in df_kline.columns else df_kline)
                         else:
-                            颜色 = []
-                        
-                        fig.add_trace(go.Bar(
-                            x=df_indicators['日期'],
-                            y=df_indicators['成交量'] if '成交量' in df_indicators.columns else [0]*len(df_indicators),
-                            name='成交量',
-                            marker_color=颜色,
-                            opacity=0.5,
-                            showlegend=False
-                        ), row=2, col=1)
-                        
-                        if 'MACD' in df_indicators.columns:
-                            macd_colors = ['#2ECC71' if x >= 0 else '#E74C3C' for x in df_indicators['MACD_Histogram']]
-                            fig.add_trace(go.Bar(
-                                x=df_indicators['日期'],
-                                y=df_indicators['MACD_Histogram'],
-                                name='MACD柱',
-                                marker_color=macd_colors,
-                                opacity=0.5,
-                                showlegend=False
-                            ), row=3, col=1)
-                            fig.add_trace(go.Scatter(
-                                x=df_indicators['日期'],
-                                y=df_indicators['MACD'],
-                                mode='lines',
-                                name='MACD',
-                                line=dict(color='#3498DB', width=1.5)
-                            ), row=3, col=1)
-                            fig.add_trace(go.Scatter(
-                                x=df_indicators['日期'],
-                                y=df_indicators['MACD_Signal'],
-                                mode='lines',
-                                name='信号线',
-                                line=dict(color='#E74C3C', width=1.5)
-                            ), row=3, col=1)
-                        
-                        fig.update_layout(
-                            title=f"{选中品种} 技术分析图表",
-                            height=750,
-                            xaxis_rangeslider_visible=False,
-                            plot_bgcolor='#0a0c10',
-                            paper_bgcolor='#0a0c10',
-                            font_color='#e6e6e6'
-                        )
-                        
-                        st.plotly_chart(fig, width='stretch')
-                    else:
-                        st.warning(f"无法获取 {选中品种} 的K线数据")
+                            st.info(f"暂无 {选中品种} 的K线数据")
+                    except Exception as e:
+                        st.info(f"K线数据暂不可用: {str(e)[:50]}")
     else:
         st.caption("暂无持仓")
+        
+        # 显示调试信息：尝试从数据库恢复
+        if st.button("🔄 尝试恢复持仓数据"):
+            try:
+                from 工具 import 数据库
+                持仓数据 = 数据库.加载持仓快照()
+                if 持仓数据:
+                    st.info(f"从数据库找到 {len(持仓数据)} 条持仓记录，请刷新页面")
+                else:
+                    st.info("数据库中没有持仓记录")
+            except:
+                pass
     
     st.markdown("---")
     
