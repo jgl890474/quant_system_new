@@ -287,9 +287,14 @@ def 获取YFinance实时价格(代码):
 
 
 # ==================== 生成模拟K线数据（备用） ====================
-def 生成模拟K线数据(品种代码, 长度=60):
+def 生成模拟K线数据(品种代码, 长度=60, 周期="1d"):
     """当无法获取真实K线数据时，生成模拟数据用于演示"""
-    dates = pd.date_range(end=datetime.now(), periods=长度, freq='D')
+    if 周期 == "30m" or 周期 == "10m":
+        # 分钟数据使用更密集的时间点
+        dates = pd.date_range(end=datetime.now(), periods=长度, freq='30min' if 周期 == "30m" else '10min')
+    else:
+        dates = pd.date_range(end=datetime.now(), periods=长度, freq='D')
+    
     np.random.seed(abs(hash(品种代码)) % 10000)
     
     # 生成随机价格走势
@@ -317,7 +322,7 @@ def 获取K线数据(代码, 周期="1d", 长度=60):
     获取K线数据用于图表显示
     参数:
         代码: 品种代码 (如 AAPL, BTC-USD, 000001)
-        周期: 时间周期 (1d=日线, 1wk=周线, 1h=小时线)
+        周期: 时间周期 (1d=日线, 1wk=周线, 1h=小时线, 30m=30分钟, 10m=10分钟)
         长度: 获取多少根K线
     返回:
         DataFrame 包含 日期, 开盘, 最高, 最低, 收盘, 成交量
@@ -326,7 +331,11 @@ def 获取K线数据(代码, 周期="1d", 长度=60):
         市场 = 判断市场类型(代码)
         
         if 市场 == "A股":
-            # A股使用 Tushare 获取历史数据
+            # A股不支持分钟线，降级为日线
+            if 周期 in ["30m", "10m", "1h"]:
+                print(f"A股不支持{周期}周期，使用日线")
+                周期 = "1d"
+            
             if TUSHARE_AVAILABLE and pro:
                 # 转换代码格式
                 if len(str(代码)) == 6:
@@ -352,45 +361,77 @@ def 获取K线数据(代码, 周期="1d", 长度=60):
                     })
         
         elif 市场 in ["美股", "加密货币", "外汇"]:
-            # 使用 yfinance 获取数据
             if YFINANCE_AVAILABLE:
                 # 周期映射
-                周期映射 = {"1d": "1d", "1wk": "1wk", "1h": "1h"}
-                yf_period = 周期映射.get(周期, "1d")
+                周期映射 = {
+                    "1d": "1d",
+                    "1wk": "1wk", 
+                    "1h": "1h",
+                    "30m": "30m",
+                    "10m": "10m"
+                }
+                yf_interval = 周期映射.get(周期, "1d")
                 
-                # 计算获取的天数
-                if 周期 == "1d":
-                    get_days = 长度 + 20
-                elif 周期 == "1wk":
-                    get_days = 长度 * 7 + 30
+                # 对于分钟数据，需要不同的period参数
+                if 周期 in ["30m", "10m", "1h"]:
+                    # 分钟数据获取最近几天的数据
+                    get_days = 7  # 获取7天数据
+                    try:
+                        ticker = yf.Ticker(代码)
+                        df = ticker.history(period=f"{get_days}d", interval=yf_interval)
+                        
+                        if not df.empty:
+                            df = df.reset_index()
+                            date_col = 'Datetime' if 'Datetime' in df.columns else 'Date'
+                            df = df.rename(columns={
+                                date_col: '日期',
+                                'Open': '开盘',
+                                'High': '最高',
+                                'Low': '最低',
+                                'Close': '收盘',
+                                'Volume': '成交量'
+                            })
+                            # 按时间排序
+                            df = df.sort_values('日期')
+                            df = df.tail(长度)
+                            return df[['日期', '开盘', '最高', '最低', '收盘', '成交量']]
+                        else:
+                            print(f"yfinance 未获取到 {周期} 数据，尝试使用模拟数据")
+                    except Exception as e:
+                        print(f"yfinance 获取分钟数据失败: {e}")
                 else:
-                    get_days = 长度 * 2 + 10
-                
-                ticker = yf.Ticker(代码)
-                df = ticker.history(period=f"{get_days}d", interval=yf_period)
-                
-                if not df.empty:
-                    df = df.reset_index()
-                    # 列名可能是 'Datetime' 或 'Date'
-                    date_col = 'Datetime' if 'Datetime' in df.columns else 'Date'
-                    df = df.rename(columns={
-                        date_col: '日期',
-                        'Open': '开盘',
-                        'High': '最高',
-                        'Low': '最低',
-                        'Close': '收盘',
-                        'Volume': '成交量'
-                    })
-                    df = df.tail(长度)
-                    return df[['日期', '开盘', '最高', '最低', '收盘', '成交量']]
+                    # 日线/周线数据
+                    if 周期 == "1d":
+                        get_days = 长度 + 20
+                    elif 周期 == "1wk":
+                        get_days = 长度 * 7 + 30
+                    else:
+                        get_days = 长度 + 20
+                    
+                    ticker = yf.Ticker(代码)
+                    df = ticker.history(period=f"{get_days}d", interval=yf_interval)
+                    
+                    if not df.empty:
+                        df = df.reset_index()
+                        date_col = 'Datetime' if 'Datetime' in df.columns else 'Date'
+                        df = df.rename(columns={
+                            date_col: '日期',
+                            'Open': '开盘',
+                            'High': '最高',
+                            'Low': '最低',
+                            'Close': '收盘',
+                            'Volume': '成交量'
+                        })
+                        df = df.tail(长度)
+                        return df[['日期', '开盘', '最高', '最低', '收盘', '成交量']]
         
         # 如果获取失败，返回模拟数据
-        print(f"获取 {代码} 真实K线数据失败，使用模拟数据")
-        return 生成模拟K线数据(代码, 长度)
+        print(f"获取 {代码} 真实K线数据失败，使用模拟数据 (周期: {周期})")
+        return 生成模拟K线数据(代码, 长度, 周期)
         
     except Exception as e:
         print(f"获取K线数据失败: {e}")
-        return 生成模拟K线数据(代码, 长度)
+        return 生成模拟K线数据(代码, 长度, 周期)
 
 
 def 计算技术指标(df):
@@ -544,8 +585,8 @@ if __name__ == "__main__":
     else:
         print("获取失败")
     
-    # 测试K线数据
-    print("\n2. 测试K线数据 (ETH-USD):")
+    # 测试K线数据 - 日线
+    print("\n2. 测试K线数据 (ETH-USD, 日线):")
     df = 获取K线数据('ETH-USD', '1d', 20)
     if not df.empty:
         print(f"获取 {len(df)} 根K线")
@@ -553,8 +594,18 @@ if __name__ == "__main__":
     else:
         print("获取失败")
     
+    # 测试K线数据 - 30分钟
+    print("\n3. 测试K线数据 (ETH-USD, 30分钟):")
+    df = 获取K线数据('ETH-USD', '30m', 30)
+    if not df.empty:
+        print(f"获取 {len(df)} 根30分钟K线")
+        print(df[['日期', '收盘']].head(3))
+    else:
+        print("获取失败（将使用模拟数据）")
+    
     # 测试技术指标
-    print("\n3. 测试技术指标计算:")
+    print("\n4. 测试技术指标计算:")
+    df = 获取K线数据('BTC-USD', '1d', 30)
     if not df.empty:
         df_tech = 计算技术指标(df)
         print(f"技术指标列: {list(df_tech.columns)}")
