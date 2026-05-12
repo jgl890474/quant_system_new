@@ -51,15 +51,17 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                 # 更新持仓当前价格
                 pos.当前价格 = 现价
                 
-                # 计算盈亏
+                # 计算盈亏（修正公式）
                 成本价 = float(pos.平均成本)
                 数量 = float(pos.数量)
-                盈亏 = 数量 * (现价 - 成本价)
-                盈亏率 = (现价 / 成本价 - 1) * 100 if 成本价 > 0 else 0
+                
+                # 正确计算盈亏 = (现价 - 成本价) * 数量
+                盈亏 = (现价 - 成本价) * 数量
+                盈亏率 = ((现价 - 成本价) / 成本价) * 100 if 成本价 > 0 else 0
                 
                 数据.append({
                     "品种": 品种,
-                    "数量": f"{数量:.0f}",
+                    "数量": f"{int(数量)}",
                     "成本": f"{成本价:.2f}",
                     "现价": f"{现价:.2f}",
                     "盈亏": f"¥{盈亏:+,.2f}",
@@ -68,8 +70,8 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             except Exception as e:
                 数据.append({
                     "品种": 品种,
-                    "数量": f"{pos.数量:.0f}",
-                    "成本": f"{pos.平均成本:.2f}",
+                    "数量": f"{int(pos.数量)}" if hasattr(pos, '数量') else "?",
+                    "成本": f"{pos.平均成本:.2f}" if hasattr(pos, '平均成本') else "?",
                     "现价": "获取失败",
                     "盈亏": "---",
                     "盈亏率": "---"
@@ -79,12 +81,14 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             df = pd.DataFrame(数据)
             st.dataframe(df, width='stretch', hide_index=True)
             
-            # 显示总盈亏
+            # 显示总盈亏（修正）
             总盈亏 = 0.0
             for d in 数据:
                 if d["盈亏"] != "---":
                     try:
-                        总盈亏 += float(d["盈亏"].replace("¥", "").replace(",", ""))
+                        # 解析盈亏字符串中的数字
+                        盈亏值 = float(d["盈亏"].replace("¥", "").replace(",", ""))
+                        总盈亏 += 盈亏值
                     except:
                         pass
             st.caption(f"📊 持仓总盈亏: ¥{总盈亏:+,.2f}")
@@ -204,7 +208,6 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                             ), row=1, col=1)
                         
                         # ===== 添加策略买入/卖出标注 =====
-                        # 买入标注（绿色向上箭头）
                         for 标注 in 买入标注:
                             fig.add_annotation(
                                 x=标注['日期'],
@@ -217,14 +220,13 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                                 arrowcolor="#2ECC71",
                                 ax=0,
                                 ay=-35,
-                                font=dict(color="#2ECC71", size=11, family="Microsoft YaHei"),
+                                font=dict(color="#2ECC71", size=11),
                                 bgcolor="rgba(0,0,0,0.8)",
                                 borderpad=4,
                                 borderwidth=1,
                                 bordercolor="#2ECC71"
                             )
                             
-                            # 添加标记点
                             fig.add_trace(go.Scatter(
                                 x=[标注['日期']],
                                 y=[标注['价格']],
@@ -232,10 +234,9 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                                 name='买入信号',
                                 marker=dict(symbol='triangle-up', size=14, color='#2ECC71', line=dict(width=1, color='white')),
                                 showlegend=False,
-                                hovertemplate=f"<b>{标注.get('显示文字', '买入')}</b><br>日期: {标注['日期']}<br>价格: {标注['价格']:.2f}<br>策略: {标注.get('策略', '未知')}<extra></extra>"
+                                hovertemplate=f"<b>{标注.get('显示文字', '买入')}</b><br>日期: {标注['日期']}<br>价格: {标注['价格']:.2f}<extra></extra>"
                             ), row=1, col=1)
                         
-                        # 卖出标注（红色向下箭头）
                         for 标注 in 卖出标注:
                             fig.add_annotation(
                                 x=标注['日期'],
@@ -248,14 +249,13 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                                 arrowcolor="#E74C3C",
                                 ax=0,
                                 ay=35,
-                                font=dict(color="#E74C3C", size=11, family="Microsoft YaHei"),
+                                font=dict(color="#E74C3C", size=11),
                                 bgcolor="rgba(0,0,0,0.8)",
                                 borderpad=4,
                                 borderwidth=1,
                                 bordercolor="#E74C3C"
                             )
                             
-                            # 添加标记点
                             fig.add_trace(go.Scatter(
                                 x=[标注['日期']],
                                 y=[标注['价格']],
@@ -263,7 +263,7 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                                 name='卖出信号',
                                 marker=dict(symbol='triangle-down', size=14, color='#E74C3C', line=dict(width=1, color='white')),
                                 showlegend=False,
-                                hovertemplate=f"<b>{标注.get('显示文字', '卖出')}</b><br>日期: {标注['日期']}<br>价格: {标注['价格']:.2f}<br>策略: {标注.get('策略', '未知')}<extra></extra>"
+                                hovertemplate=f"<b>{标注.get('显示文字', '卖出')}</b><br>日期: {标注['日期']}<br>价格: {标注['价格']:.2f}<extra></extra>"
                             ), row=1, col=1)
                         
                         # 成交量图
@@ -322,7 +322,6 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                                 line=dict(color='#E74C3C', width=1.5)
                             ), row=3, col=1)
                         
-                        # 更新布局
                         fig.update_layout(
                             title=f"{选中品种} 技术分析图表",
                             height=750,
@@ -377,32 +376,30 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                                     else:
                                         st.caption("🔴 MACD死叉信号")
                             
-                            # 显示策略信号摘要
                             if 买入标注 or 卖出标注:
                                 st.markdown("---")
                                 st.markdown("**📊 策略信号统计**")
                                 col_a, col_b = st.columns(2)
                                 with col_a:
                                     st.metric("买入信号", len(买入标注))
-                                    if 买入标注:
-                                        st.caption(f"最新: {买入标注[-1]['日期'].strftime('%m-%d %H:%M')}")
                                 with col_b:
                                     st.metric("卖出信号", len(卖出标注))
-                                    if 卖出标注:
-                                        st.caption(f"最新: {卖出标注[-1]['日期'].strftime('%m-%d %H:%M')}")
-                            else:
-                                st.info("当前暂无策略信号，请在策略中心运行策略")
                     else:
                         st.warning(f"无法获取 {选中品种} 的K线数据")
     else:
         st.caption("暂无持仓")
+        
+        # 显示调试信息：交易记录
+        if 引擎 and hasattr(引擎, '交易记录') and 引擎.交易记录:
+            with st.expander("📋 最近交易记录", expanded=True):
+                for t in 引擎.交易记录[-10:]:
+                    st.write(f"{t['时间']} - {t['动作']} {t['品种']} {t['数量']}股 @ {t['价格']}")
     
     st.markdown("---")
     
     # ========== 止损止盈设置 ==========
     st.markdown("### 🛡️ 止损止盈设置")
     
-    # 获取当前风控参数
     if '风控引擎' in st.session_state:
         风控 = st.session_state.风控引擎
         当前止损 = getattr(风控, '止损比例', 0.02) * 100
@@ -415,47 +412,20 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         当前移动止损 = True
         当前回撤 = 2.0
     
-    # 参数设置界面
     col1, col2, col3 = st.columns(3)
     with col1:
-        止损比例 = st.number_input(
-            "止损比例 (%)", 
-            min_value=0.5, 
-            max_value=20.0, 
-            value=当前止损, 
-            step=0.5,
-            key="stop_loss_input"
-        )
+        止损比例 = st.number_input("止损比例 (%)", min_value=0.5, max_value=20.0, value=当前止损, step=0.5)
     with col2:
-        止盈比例 = st.number_input(
-            "止盈比例 (%)", 
-            min_value=0.5, 
-            max_value=50.0, 
-            value=当前止盈, 
-            step=0.5,
-            key="take_profit_input"
-        )
+        止盈比例 = st.number_input("止盈比例 (%)", min_value=0.5, max_value=50.0, value=当前止盈, step=0.5)
     with col3:
-        移动止损 = st.checkbox(
-            "开启移动止损", 
-            value=当前移动止损,
-            key="trailing_stop"
-        )
+        移动止损 = st.checkbox("开启移动止损", value=当前移动止损)
     
-    # 移动止损回撤设置
     if 移动止损:
         col4, col5, col6 = st.columns(3)
         with col4:
-            移动止损回撤 = st.number_input(
-                "移动止损回撤 (%)", 
-                min_value=0.5, 
-                max_value=10.0, 
-                value=当前回撤, 
-                step=0.5,
-                key="trailing_stop_back"
-            )
+            移动止损回撤 = st.number_input("移动止损回撤 (%)", min_value=0.5, max_value=10.0, value=当前回撤, step=0.5)
     
-    if st.button("应用风控参数", width='stretch', key="apply_risk"):
+    if st.button("应用风控参数", width='stretch'):
         if '风控引擎' in st.session_state:
             st.session_state.风控引擎.止损比例 = 止损比例 / 100
             st.session_state.风控引擎.止盈比例 = 止盈比例 / 100
@@ -469,7 +439,7 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
     
     # ========== 手动平仓按钮 ==========
     if 引擎 and hasattr(引擎, '持仓') and 引擎.持仓:
-        if st.button("🗑️ 一键平仓所有持仓", width='stretch', key="close_all"):
+        if st.button("🗑️ 一键平仓所有持仓", width='stretch'):
             for 品种 in list(引擎.持仓.keys()):
                 try:
                     价格结果 = 行情获取.获取价格(品种)
@@ -490,20 +460,15 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
 
 # ==================== 辅助函数 ====================
 def 获取策略信号标注(品种, df_kline, 策略加载器, 引擎):
-    """
-    获取买入/卖出信号标注（包含策略信号 + 实际成交记录）
-    """
+    """获取买入/卖出信号标注"""
     买入标注 = []
     卖出标注 = []
     
-    # ==================== 1. 从实际成交记录获取标注 ====================
+    # 从实际成交记录获取标注
     if 引擎 and hasattr(引擎, '交易记录') and 引擎.交易记录:
         for 交易 in 引擎.交易记录:
             交易品种 = 交易.get("品种", "")
-            # 匹配品种
-            简化品种 = 品种
-            if 品种.endswith('.SS') or 品种.endswith('.SZ'):
-                简化品种 = 品种[:-3]
+            简化品种 = 品种.replace(".SS", "").replace(".SZ", "")
             
             if 交易品种 != 品种 and 交易品种 != 简化品种:
                 continue
@@ -514,16 +479,13 @@ def 获取策略信号标注(品种, df_kline, 策略加载器, 引擎):
             
             if 交易时间 and 交易价格 > 0:
                 try:
-                    # 解析时间
                     if isinstance(交易时间, str):
                         交易时间_dt = pd.to_datetime(交易时间)
                     else:
                         交易时间_dt = 交易时间
                     
-                    # 在K线数据中找到最接近的时间点
                     for i in range(len(df_kline)):
                         日期 = df_kline['日期'].iloc[i]
-                        # 24小时内的时间差
                         if abs((日期 - 交易时间_dt).total_seconds()) < 86400:
                             if 交易动作 == "买入":
                                 买入标注.append({
@@ -540,86 +502,7 @@ def 获取策略信号标注(品种, df_kline, 策略加载器, 引擎):
                                     "显示文字": "卖出"
                                 })
                             break
-                except Exception as e:
-                    print(f"解析交易时间失败: {e}")
+                except:
+                    pass
     
-    # ==================== 2. 从策略获取信号标注 ====================
-    if 策略加载器:
-        try:
-            # 获取所有策略
-            策略列表 = 策略加载器.获取策略()
-            
-            if not 策略列表:
-                return 买入标注, 卖出标注
-            
-            # 简化品种代码用于匹配
-            简化品种 = 品种
-            if 品种.endswith('.SS') or 品种.endswith('.SZ'):
-                简化品种 = 品种[:-3]
-            
-            # 导入策略运行器
-            try:
-                from 核心.策略运行器 import 策略运行器
-            except ImportError:
-                return 买入标注, 卖出标注
-            
-            for 策略 in 策略列表:
-                策略品种 = 策略.get("品种", "")
-                # 只处理匹配当前品种的策略
-                if 策略品种 != 品种 and 策略品种 != 简化品种:
-                    continue
-                
-                策略名称 = 策略.get("名称", "未知")
-                
-                # 为每个K线点计算策略信号
-                for i in range(len(df_kline)):
-                    当前日期 = df_kline['日期'].iloc[i]
-                    当前价格 = df_kline['收盘'].iloc[i]
-                    
-                    # 构建行情数据对象
-                    class 行情对象:
-                        pass
-                    行情对象.价格 = 当前价格
-                    
-                    try:
-                        信号 = 策略运行器.运行(策略, 行情对象)
-                        
-                        if 信号 == "buy":
-                            买入标注.append({
-                                "日期": 当前日期,
-                                "价格": 当前价格,
-                                "策略": 策略名称,
-                                "显示文字": "买入(策)"
-                            })
-                        elif 信号 == "sell":
-                            卖出标注.append({
-                                "日期": 当前日期,
-                                "价格": 当前价格,
-                                "策略": 策略名称,
-                                "显示文字": "卖出(策)"
-                            })
-                    except:
-                        pass
-        except Exception as e:
-            print(f"获取策略信号失败: {e}")
-    
-    # 去重
-    买入标注_去重 = []
-    卖出标注_去重 = []
-    买入_key = set()
-    卖出_key = set()
-    
-    for 标注 in 买入标注:
-        key = f"{标注['日期']}_{标注['价格']}"
-        if key not in 买入_key:
-            买入_key.add(key)
-            买入标注_去重.append(标注)
-    
-    for 标注 in 卖出标注:
-        key = f"{标注['日期']}_{标注['价格']}"
-        if key not in 卖出_key:
-            卖出_key.add(key)
-            卖出标注_去重.append(标注)
-    
-    # 只保留最近的15个信号
-    return 买入标注_去重[-15:], 卖出标注_去重[-15:]
+    return 买入标注[-15:], 卖出标注[-15:]
