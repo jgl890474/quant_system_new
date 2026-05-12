@@ -46,7 +46,7 @@ def 显示(引擎):
         盈亏 = (现价 - 成本价) * 数量
         
         总市值 += 市值
-        总浮动盈亏 += 盈亏
+        总浮动盈亏 = round(总浮动盈亏 + 盈亏, 2)
         
         持仓明细.append({
             "品种": 品种,
@@ -54,7 +54,7 @@ def 显示(引擎):
             "成本价": 成本价,
             "现价": 现价,
             "市值": 市值,
-            "盈亏": 盈亏
+            "盈亏": round(盈亏, 2)
         })
     
     总资产 = 可用资金 + 总市值
@@ -154,7 +154,10 @@ def 显示(引擎):
             else:
                 数量显示 = f"{int(item['数量'])}"
             
-            盈亏率 = (item['盈亏'] / (item['成本价'] * item['数量'])) * 100 if item['成本价'] > 0 else 0
+            if item["成本价"] > 0:
+                盈亏率 = (item['盈亏'] / (item['成本价'] * item['数量'])) * 100
+            else:
+                盈亏率 = 0
             
             表格数据.append({
                 "品种": item["品种"],
@@ -200,15 +203,17 @@ def 显示(引擎):
         st.markdown("### 📊 持仓分析")
         st.markdown("---")
         
-        # 准备图表数据 - 确保盈亏和市值分离
+        # 准备图表数据
         盈亏数据列表 = []
         市值数据列表 = []
         
         for item in 持仓明细:
-            盈亏数据列表.append({
-                "品种": item["品种"],
-                "盈亏": item["盈亏"]
-            })
+            # 只显示盈亏不为0的品种（避免图表过于拥挤）
+            if abs(item['盈亏']) > 0.01 or len(持仓明细) <= 10:
+                盈亏数据列表.append({
+                    "品种": item["品种"],
+                    "盈亏": item["盈亏"]
+                })
             市值数据列表.append({
                 "品种": item["品种"],
                 "市值": item["市值"]
@@ -216,62 +221,75 @@ def 显示(引擎):
         
         col_a, col_b = st.columns(2)
         
-        # ===== 盈亏柱状图（左侧）= 使用盈亏数据，颜色红绿区分 =====
+        # ===== 盈亏柱状图（左侧） =====
         with col_a:
             st.markdown("#### 盈亏柱状图")
-            df_盈亏 = pd.DataFrame(盈亏数据列表)
-            df_盈亏 = df_盈亏.sort_values('盈亏', ascending=False)
-            
-            盈亏颜色 = ['#ef4444' if x < 0 else '#10b981' for x in df_盈亏['盈亏']]
-            
-            fig_bar = go.Figure()
-            fig_bar.add_trace(go.Bar(
-                x=df_盈亏['品种'],
-                y=df_盈亏['盈亏'],
-                marker_color=盈亏颜色,
-                text=df_盈亏['盈亏'].apply(lambda x: f"¥{x:+,.0f}"),
-                textposition='outside'
-            ))
-            fig_bar.add_hline(y=0, line_dash="dash", line_color="#94a3b8")
-            
-            fig_bar.update_layout(
-                height=420,
-                margin=dict(l=30, r=30, t=50, b=30),
-                paper_bgcolor="#0a0c10",
-                plot_bgcolor="#15171a",
-                font_color="#e6e6e6",
-                xaxis_title="品种",
-                yaxis_title="盈亏 (¥)",
-                title="各品种盈亏"
-            )
-            st.plotly_chart(fig_bar, width='stretch')
+            if 盈亏数据列表:
+                df_盈亏 = pd.DataFrame(盈亏数据列表)
+                df_盈亏 = df_盈亏.sort_values('盈亏', ascending=False)
+                
+                盈亏颜色 = ['#ef4444' if x < 0 else '#10b981' for x in df_盈亏['盈亏']]
+                
+                fig_bar = go.Figure()
+                fig_bar.add_trace(go.Bar(
+                    x=df_盈亏['品种'],
+                    y=df_盈亏['盈亏'],
+                    marker_color=盈亏颜色,
+                    text=df_盈亏['盈亏'].apply(lambda x: f"¥{x:+,.0f}"),
+                    textposition='outside'
+                ))
+                fig_bar.add_hline(y=0, line_dash="dash", line_color="#94a3b8")
+                
+                # 动态调整y轴范围
+                y_min = df_盈亏['盈亏'].min()
+                y_max = df_盈亏['盈亏'].max()
+                y_range = [y_min - abs(y_min)*0.1 if y_min < 0 else -10, 
+                          y_max + abs(y_max)*0.1 if y_max > 0 else 10]
+                
+                fig_bar.update_layout(
+                    height=420,
+                    margin=dict(l=30, r=30, t=50, b=30),
+                    paper_bgcolor="#0a0c10",
+                    plot_bgcolor="#15171a",
+                    font_color="#e6e6e6",
+                    xaxis_title="品种",
+                    yaxis_title="盈亏 (¥)",
+                    yaxis=dict(range=y_range),
+                    title="各品种盈亏"
+                )
+                st.plotly_chart(fig_bar, width='stretch')
+            else:
+                st.info("暂无盈亏数据")
         
-        # ===== 持仓市值条形图（右侧）= 使用市值数据 =====
+        # ===== 持仓市值条形图（右侧） =====
         with col_b:
             st.markdown("#### 持仓市值条形图")
-            df_市值 = pd.DataFrame(市值数据列表)
-            df_市值 = df_市值.sort_values('市值', ascending=True)
-            
-            fig_bar_h = go.Figure()
-            fig_bar_h.add_trace(go.Bar(
-                y=df_市值['品种'],
-                x=df_市值['市值'],
-                orientation='h',
-                marker_color='#3b82f6',
-                text=df_市值['市值'].apply(lambda x: f"¥{x:,.0f}"),
-                textposition='outside'
-            ))
-            fig_bar_h.update_layout(
-                height=420,
-                margin=dict(l=30, r=80, t=30, b=30),
-                paper_bgcolor="#0a0c10",
-                plot_bgcolor="#15171a",
-                font_color="#e6e6e6",
-                xaxis_title="市值 (¥)",
-                yaxis_title="品种",
-                title="各品种持仓市值"
-            )
-            st.plotly_chart(fig_bar_h, width='stretch')
+            if 市值数据列表:
+                df_市值 = pd.DataFrame(市值数据列表)
+                df_市值 = df_市值.sort_values('市值', ascending=True)
+                
+                fig_bar_h = go.Figure()
+                fig_bar_h.add_trace(go.Bar(
+                    y=df_市值['品种'],
+                    x=df_市值['市值'],
+                    orientation='h',
+                    marker_color='#3b82f6',
+                    text=df_市值['市值'].apply(lambda x: f"¥{x:,.0f}"),
+                    textposition='outside'
+                ))
+                fig_bar_h.update_layout(
+                    height=420,
+                    margin=dict(l=30, r=80, t=30, b=30),
+                    paper_bgcolor="#0a0c10",
+                    plot_bgcolor="#15171a",
+                    font_color="#e6e6e6",
+                    xaxis_title="市值 (¥)",
+                    yaxis_title="品种",
+                    title="各品种持仓市值"
+                )
+                st.plotly_chart(fig_bar_h, width='stretch')
+            else:
+                st.info("暂无市值数据")
         
         # 总市值和总盈亏卡片
         st.markdown(f"""
