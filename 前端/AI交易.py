@@ -326,16 +326,38 @@ def 获取实时价格(代码, 市场类型):
 
 
 def 执行买入(引擎, 代码, 价格, 数量, 市场类型, 策略类型):
-    """执行买入操作"""
+    """执行买入操作 - 修复数量类型问题"""
     try:
+        # 确保数量是整数（A股、美股、期货）或浮点数（加密货币、外汇）
+        if 市场类型 in ["A股", "美股", "期货"]:
+            数量 = int(数量)
+        else:
+            数量 = float(数量)
+        
+        # 确保价格是浮点数
+        价格 = float(价格)
+        
+        if 价格 <= 0:
+            return {"success": False, "error": f"价格无效: {价格}"}
+        
+        if 数量 <= 0:
+            return {"success": False, "error": f"数量无效: {数量}"}
+        
         可用资金 = 引擎.获取可用资金()
         预计花费 = 价格 * 数量
         if 预计花费 > 可用资金:
             return {"success": False, "error": f"资金不足，需要 ¥{预计花费:.2f}，可用 ¥{可用资金:.2f}"}
         
+        print(f"执行买入: 代码={代码}, 价格={价格}, 数量={数量}, 市场={市场类型}")
+        
         结果 = 引擎.买入(代码, 价格, 数量)
+        print(f"买入结果: {结果}")
+        
         return 结果
     except Exception as e:
+        print(f"买入异常: {e}")
+        import traceback
+        traceback.print_exc()
         return {"success": False, "error": str(e)}
 
 
@@ -402,6 +424,10 @@ def 显示(引擎, 策略加载器, AI引擎):
                 建议数量 = max(建议数量, 100)
                 数量单位 = "股"
             
+            # 确保数量不为0
+            if 建议数量 <= 0:
+                建议数量 = 1 if 市场类型 == "加密货币" else 100
+            
             with st.container():
                 col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
                 with col1:
@@ -456,7 +482,6 @@ def 显示(引擎, 策略加载器, AI引擎):
                 "现价": round(当前价格, 4),
                 "浮动盈亏": round(浮动盈亏, 2)
             })
-        # 修复：use_container_width=True -> width='stretch'
         st.dataframe(持仓数据, width='stretch', hide_index=True)
     else:
         st.info("暂无持仓")
