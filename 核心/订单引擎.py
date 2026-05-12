@@ -14,14 +14,19 @@ class 订单引擎:
         self.累积手续费 = 0
         self.持仓 = {}
         self.交易记录 = []
-        # 记录已处理的价格，避免重复卖出
         self._last_price = {}
         self._恢复持仓()
     
     def 买入(self, 品种, 价格, 数量, 手续费率=None):
-        """买入"""
+        """买入 - 修复数量类型问题"""
         try:
             print(f"🔵 买入请求: 品种={品种}, 价格={价格}, 数量={数量}")
+            
+            # 确保数量和价格是数字
+            if isinstance(数量, str):
+                数量 = float(数量)
+            if isinstance(价格, str):
+                价格 = float(价格)
             
             if 价格 <= 0:
                 return {"success": False, "error": f"价格无效: {价格}"}
@@ -76,11 +81,15 @@ class 订单引擎:
             return {"success": False, "error": str(e)}
     
     def 卖出(self, 品种, 价格, 数量, 手续费率=None):
-        """卖出 - 确保正确删除持仓"""
+        """卖出 - 修复版"""
         try:
             print(f"🔴 卖出请求: 品种={品种}, 价格={价格}, 数量={数量}")
             
-            # 先刷新持仓（从数据库恢复）
+            if isinstance(数量, str):
+                数量 = float(数量)
+            if isinstance(价格, str):
+                价格 = float(价格)
+            
             self._恢复持仓()
             
             if 品种 not in self.持仓:
@@ -89,21 +98,15 @@ class 订单引擎:
             if 价格 <= 0:
                 return {"success": False, "error": f"价格无效: {价格}"}
             
-            # 防止同一价格重复卖出
             price_key = f"{品种}_{价格}"
             if price_key in self._last_price:
                 return {"success": False, "error": "请勿重复提交"}
             self._last_price[price_key] = time.time()
             
             使用手续费率 = 手续费率 if 手续费率 is not None else self.手续费率
-            
             持仓 = self.持仓[品种]
             
-            # 处理浮点数精度问题
-            if abs(数量 - 持仓.数量) < 0.0001:
-                数量 = 持仓.数量
-            
-            if 数量 > 持仓.数量:
+            if 数量 > 持仓.数量 + 0.0001:
                 return {"success": False, "error": f"卖出数量({数量})超过持仓({持仓.数量})"}
             
             收入 = 价格 * 数量
@@ -112,24 +115,18 @@ class 订单引擎:
             成本 = 持仓.平均成本 * 数量
             盈亏 = 净收入 - 成本
             
-            # 更新持仓数量
+            # 更新持仓
             持仓.数量 -= 数量
-            
-            # 如果数量为0，删除该持仓
             if 持仓.数量 <= 0.0001:
                 del self.持仓[品种]
                 print(f"🗑️ 已删除持仓: {品种}")
             
-            # 更新资金
             self.可用资金 += 净收入
             self.持仓市值 -= 成本
             self.总盈亏 += 盈亏
             self.累积手续费 += 手续费
             
-            # 记录交易
             self._记录交易("卖出", 品种, 价格, 数量, 盈亏, 手续费)
-            
-            # 关键：保存持仓到数据库
             self._保存持仓()
             
             print(f"✅ 卖出成功! 剩余持仓: {list(self.持仓.keys())}")
@@ -147,8 +144,7 @@ class 订单引擎:
             return {"success": False, "error": str(e)}
     
     def 获取总资产(self):
-        """获取总资产（需要实时计算持仓市值）"""
-        # 重新计算持仓市值
+        """实时计算总资产"""
         总持仓市值 = 0
         for 品种, 持仓 in self.持仓.items():
             当前价格 = getattr(持仓, '当前价格', 持仓.平均成本)
@@ -159,7 +155,6 @@ class 订单引擎:
         return self.可用资金
     
     def 获取持仓市值(self):
-        """获取持仓市值"""
         总市值 = 0
         for 品种, 持仓 in self.持仓.items():
             当前价格 = getattr(持仓, '当前价格', 持仓.平均成本)
@@ -191,7 +186,7 @@ class 订单引擎:
         return 详情
     
     def 获取交易记录(self):
-        return self.交易记录[-100:]  # 只返回最近100条
+        return self.交易记录[-100:]
     
     def 获取初始资金(self):
         return self.初始资金
@@ -211,12 +206,10 @@ class 订单引擎:
             self.持仓[品种].当前价格 = 当前价格
     
     def 刷新持仓(self):
-        """手动刷新持仓（从数据库恢复）"""
         self._恢复持仓()
         return {"success": True, "count": len(self.持仓)}
     
     def 同步到session(self):
-        """返回自身，用于 session_state 更新"""
         return self
     
     def _记录交易(self, 动作, 品种, 价格, 数量, 盈亏=0, 手续费=0):
@@ -234,7 +227,6 @@ class 订单引擎:
         数据库.保存交易记录(交易)
     
     def _保存持仓(self):
-        """保存持仓到数据库"""
         try:
             数据库.保存持仓快照(self.持仓)
             print(f"💾 保存持仓快照, 共{len(self.持仓)}个持仓")
@@ -242,7 +234,6 @@ class 订单引擎:
             print(f"保存持仓失败: {e}")
     
     def _恢复持仓(self):
-        """从数据库恢复持仓"""
         try:
             持仓数据字典 = 数据库.加载持仓快照()
             from 核心.数据模型 import 持仓数据
@@ -254,12 +245,12 @@ class 订单引擎:
                 数量 = data.get("数量", 0)
                 成本 = data.get("平均成本", 0)
                 if 数量 > 0:
-                    self.持仓[品种] = 持仓数据(品种, 数量, 成本)
+                    self.持仓[品种] = 持仓数据(品种, float(数量), float(成本))
                     self.持仓市值 += 成本 * 数量
                     self.可用资金 -= 成本 * 数量
                     print(f"✅ 恢复持仓: {品种}, 数量={数量}, 成本={成本:.2f}")
             
-            print(f"✅ 已恢复 {len(self.持仓)} 个持仓, 可用资金: {self.可用资金:.2f}")
+            print(f"✅ 已恢复 {len(self.持仓)} 个持仓")
         except Exception as e:
             print(f"恢复持仓失败: {e}")
 
