@@ -1,333 +1,316 @@
 # -*- coding: utf-8 -*-
-"""
-行情获取模块 - 实时价格数据源
-数据源：
-- A股：新浪财经实时行情（盘中实时）
-- 加密货币：币安 API（实时）
-- 美股：yfinance（实时）
-- 外汇：ExchangeRate-API（实时）
-- 期货：yfinance（实时）
-"""
-
-import pandas as pd
-import requests
 import time
-from datetime import datetime, timedelta
-
-# ==================== 新浪财经实时行情（A股） ====================
-def 获取新浪实时行情(代码):
-    """从新浪获取A股实时行情"""
-    try:
-        if str(代码).startswith('6'):
-            symbol = f"sh{代码}"
-        else:
-            symbol = f"sz{代码}"
-        
-        url = f"https://hq.sinajs.cn/list={symbol}"
-        headers = {
-            'Referer': 'https://finance.sina.com.cn',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-        
-        response = requests.get(url, headers=headers, timeout=5)
-        response.encoding = 'gbk'
-        content = response.text
-        
-        if 'str_' not in content or '=""' in content:
-            return None
-        
-        data = content.split(',')
-        if len(data) < 10:
-            return None
-        
-        return float(data[3])  # 当前价
-    except Exception as e:
-        print(f"新浪获取 {代码} 失败: {e}")
-        return None
+from datetime import datetime
+import pytz
+import 工具.数据库 as 数据库
+from 核心 import 行情获取
 
 
-# ==================== 币安 API（加密货币） ====================
-def 获取币安价格(symbol):
-    """从币安获取加密货币实时价格"""
-    try:
-        # 处理不同格式
-        if symbol == "BTC-USD":
-            api_symbol = "BTCUSDT"
-        elif symbol == "ETH-USD":
-            api_symbol = "ETHUSDT"
-        elif symbol == "SOL-USD":
-            api_symbol = "SOLUSDT"
-        elif symbol == "BNB-USD":
-            api_symbol = "BNBUSDT"
-        else:
-            api_symbol = symbol.replace('-', '').upper()
-        
-        url = f"https://api.binance.com/api/v3/ticker/price?symbol={api_symbol}"
-        r = requests.get(url, timeout=5)
-        data = r.json()
-        if "price" in data:
-            return float(data["price"])
-    except Exception as e:
-        print(f"币安获取 {symbol} 失败: {e}")
-    return None
-
-
-# ==================== yfinance（美股、期货） ====================
-def 获取YFinance价格(symbol):
-    """从 yfinance 获取实时价格"""
-    try:
-        import yfinance as yf
-        
-        # 特殊处理
-        if symbol == "GC=F":
-            ticker_symbol = "GC=F"
-        elif symbol == "CL=F":
-            ticker_symbol = "CL=F"
-        else:
-            ticker_symbol = symbol
-        
-        ticker = yf.Ticker(ticker_symbol)
-        
-        # 获取实时价格
-        data = ticker.history(period="1d")
-        if not data.empty:
-            return float(data['Close'].iloc[-1])
-    except Exception as e:
-        print(f"yfinance获取 {symbol} 失败: {e}")
-    return None
-
-
-# ==================== 外汇 API ====================
-def 获取外汇价格(currency_pair):
-    """获取外汇实时汇率"""
-    try:
-        if currency_pair == "EURUSD" or currency_pair == "EUR/USD":
-            url = "https://api.exchangerate-api.com/v4/latest/EUR"
-            r = requests.get(url, timeout=5)
-            data = r.json()
-            return float(data['rates']['USD'])
-        elif currency_pair == "GBPUSD":
-            url = "https://api.exchangerate-api.com/v4/latest/GBP"
-            r = requests.get(url, timeout=5)
-            data = r.json()
-            return float(data['rates']['USD'])
-    except Exception as e:
-        print(f"外汇获取 {currency_pair} 失败: {e}")
-    return None
-
-
-# ==================== 判断市场类型 ====================
-def 判断市场类型(代码):
-    """根据代码判断属于哪个市场"""
-    代码_upper = str(代码).upper()
+class 订单引擎:
+    def __init__(self, 初始资金=1000000, **kwargs):
+        self.初始资金 = 初始资金
+        self.手续费率 = 0.0003
+        self.可用资金 = self.初始资金
+        self.持仓市值 = 0
+        self.总盈亏 = 0
+        self.累积手续费 = 0
+        self.持仓 = {}
+        self.交易记录 = []
+        self._last_price = {}
+        self._恢复持仓()
     
-    # A股
-    if str(代码).endswith('.SZ') or str(代码).endswith('.SS'):
-        return "A股"
-    if str(代码).isnumeric() and len(str(代码)) == 6:
-        return "A股"
-    
-    # 加密货币
-    if 'BTC' in 代码_upper or 'ETH' in 代码_upper or 'SOL' in 代码_upper or 'BNB' in 代码_upper:
-        return "加密货币"
-    
-    # 外汇
-    if 代码_upper in ['EURUSD', 'EUR/USD', 'GBPUSD']:
-        return "外汇"
-    
-    # 期货
-    if 代码_upper in ['GC=F', 'CL=F']:
-        return "期货"
-    
-    # 美股
-    return "美股"
-
-
-# ==================== 实时价格获取（统一入口） ====================
-class 行情数据:
-    def __init__(self, 品种, 价格):
-        self.品种 = 品种
-        self.价格 = float(价格) if 价格 else 0.0
-
-
-def 获取价格(品种代码):
-    """获取单个品种的实时价格"""
-    # 处理显示名称
-    if 品种代码 == "EUR/USD":
-        市场 = "外汇"
-    else:
-        市场 = 判断市场类型(品种代码)
-    
-    print(f"🔍 获取: {品种代码} (市场: {市场})")
-    
-    try:
-        # A股：新浪财经
-        if 市场 == "A股":
-            code_num = str(品种代码).replace('.SZ', '').replace('.SS', '')
-            价格 = 获取新浪实时行情(code_num)
-            if 价格 and 价格 > 0:
-                print(f"✅ [新浪] {品种代码} = {价格}")
-                return 行情数据(品种代码, 价格)
-        
-        # 加密货币：币安
-        elif 市场 == "加密货币":
-            价格 = 获取币安价格(品种代码)
-            if 价格 and 价格 > 0:
-                print(f"✅ [币安] {品种代码} = {价格}")
-                return 行情数据(品种代码, 价格)
-        
-        # 外汇
-        elif 市场 == "外汇":
-            价格 = 获取外汇价格(品种代码)
-            if 价格 and 价格 > 0:
-                print(f"✅ [外汇] {品种代码} = {价格}")
-                return 行情数据(品种代码, 价格)
-        
-        # 期货/美股：yfinance
-        elif 市场 in ["期货", "美股"]:
-            价格 = 获取YFinance价格(品种代码)
-            if 价格 and 价格 > 0:
-                print(f"✅ [yfinance] {品种代码} = {价格}")
-                return 行情数据(品种代码, 价格)
-        
-        print(f"❌ 获取 {品种代码} 失败")
-        return 行情数据(品种代码, 0)
-        
-    except Exception as e:
-        print(f"❌ {品种代码} 异常: {e}")
-        return 行情数据(品种代码, 0)
-
-
-def 获取实时价格(代码):
-    """获取实时价格，直接返回数值"""
-    result = 获取价格(代码)
-    return result.价格 if result else 0
-
-
-# ==================== K线数据获取 ====================
-def 获取K线数据(代码, 周期="1d", 长度=60):
-    """获取K线数据用于图表显示"""
-    try:
-        import yfinance as yf
-        
-        # A股代码转换
-        if 判断市场类型(代码) == "A股":
-            if str(代码).startswith('6'):
-                ticker_symbol = f"{代码}.SS"
+    def _获取当前时间(self, 品种):
+        """根据品种类型获取对应的时区时间"""
+        try:
+            if 品种 and (str(品种).isdigit() or str(品种).endswith('.SS') or str(品种).endswith('.SZ')):
+                tz = pytz.timezone('Asia/Shanghai')
+                now_utc = datetime.now(pytz.UTC)
+                now_local = now_utc.astimezone(tz)
+                return now_local.strftime("%Y-%m-%d %H:%M:%S")
             else:
-                ticker_symbol = f"{代码}.SZ"
-        else:
-            ticker_symbol = 代码
-        
-        # 周期映射
-        周期映射 = {
-            "1d": "1d", "1wk": "1wk", "1h": "1h", "30m": "30m", "10m": "10m"
+                now_utc = datetime.now(pytz.UTC)
+                return now_utc.strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:
+            return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    def 买入(self, 品种, 价格=None, 数量=None, 手续费率=None):
+        """
+        买入 - 如果不传价格，自动获取实时价格作为成本
+        """
+        try:
+            # 如果没有传价格，从行情获取实时价格
+            if 价格 is None or 价格 <= 0:
+                实时价格结果 = 行情获取.获取价格(品种)
+                if 实时价格结果 and hasattr(实时价格结果, '价格') and 实时价格结果.价格 > 0:
+                    价格 = 实时价格结果.价格
+                    print(f"📊 获取实时价格作为成本: {品种} = {价格}")
+                else:
+                    return {"success": False, "error": f"无法获取 {品种} 的实时价格，请稍后再试"}
+            
+            print(f"🔵 买入请求: 品种={品种}, 价格={价格}, 数量={数量}")
+            
+            if isinstance(数量, str):
+                数量 = float(数量)
+            if isinstance(价格, str):
+                价格 = float(价格)
+            
+            if 价格 <= 0:
+                return {"success": False, "error": f"价格无效: {价格}"}
+            if 数量 <= 0:
+                return {"success": False, "error": f"数量无效: {数量}"}
+            
+            使用手续费率 = 手续费率 if 手续费率 is not None else self.手续费率
+            
+            花费 = 价格 * 数量
+            手续费 = 花费 * 使用手续费率
+            总扣除 = 花费 + 手续费
+            
+            if 总扣除 > self.可用资金:
+                return {
+                    "success": False, 
+                    "error": f"资金不足，需要 ¥{总扣除:.2f}，可用 ¥{self.可用资金:.2f}"
+                }
+            
+            # 更新持仓
+            if 品种 in self.持仓:
+                原持仓 = self.持仓[品种]
+                原数量 = 原持仓.数量
+                原成本 = 原持仓.平均成本
+                
+                新数量 = 原数量 + 数量
+                新平均成本 = (原成本 * 原数量 + 价格 * 数量) / 新数量
+                
+                self.持仓[品种].数量 = 新数量
+                self.持仓[品种].平均成本 = 新平均成本
+                print(f"📈 加仓: {品种}, 新数量={新数量}, 新成本={新平均成本:.2f}")
+            else:
+                from 核心.数据模型 import 持仓数据
+                self.持仓[品种] = 持仓数据(品种, 数量, 价格)
+                print(f"🆕 新持仓: {品种}, 数量={数量}, 成本={价格:.2f}")
+            
+            self.可用资金 -= 总扣除
+            self.持仓市值 += 花费
+            self.累积手续费 += 手续费
+            
+            self._记录交易("买入", 品种, 价格, 数量, 手续费=手续费)
+            self._保存持仓()
+            
+            return {
+                "success": True, 
+                "message": f"成功买入 {品种} {数量} @ {价格}",
+                "amount": 花费,
+                "fee": 手续费,
+                "price": 价格
+            }
+            
+        except Exception as e:
+            print(f"❌ 买入异常: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def 卖出(self, 品种, 价格=None, 数量=None, 手续费率=None):
+        """卖出 - 如果不传价格，从行情获取实时价格"""
+        try:
+            # 如果没有传价格，从行情获取实时价格
+            if 价格 is None or 价格 <= 0:
+                实时价格结果 = 行情获取.获取价格(品种)
+                if 实时价格结果 and hasattr(实时价格结果, '价格') and 实时价格结果.价格 > 0:
+                    价格 = 实时价格结果.价格
+                    print(f"📊 获取实时价格作为卖出价: {品种} = {价格}")
+                else:
+                    return {"success": False, "error": f"无法获取 {品种} 的实时价格，请稍后再试"}
+            
+            print(f"🔴 卖出请求: 品种={品种}, 价格={价格}, 数量={数量}")
+            
+            if isinstance(数量, str):
+                数量 = float(数量)
+            if isinstance(价格, str):
+                价格 = float(价格)
+            
+            self._恢复持仓()
+            
+            if 品种 not in self.持仓:
+                return {"success": False, "error": f"无此持仓: {品种}"}
+            
+            if 价格 <= 0:
+                return {"success": False, "error": f"价格无效: {价格}"}
+            
+            price_key = f"{品种}_{价格}"
+            if price_key in self._last_price:
+                return {"success": False, "error": "请勿重复提交"}
+            self._last_price[price_key] = time.time()
+            
+            使用手续费率 = 手续费率 if 手续费率 is not None else self.手续费率
+            持仓 = self.持仓[品种]
+            
+            if 数量 > 持仓.数量 + 0.0001:
+                return {"success": False, "error": f"卖出数量({数量})超过持仓({持仓.数量})"}
+            
+            收入 = 价格 * 数量
+            手续费 = 收入 * 使用手续费率
+            净收入 = 收入 - 手续费
+            成本 = 持仓.平均成本 * 数量
+            盈亏 = 净收入 - 成本
+            
+            # 更新持仓
+            持仓.数量 -= 数量
+            if 持仓.数量 <= 0.0001:
+                del self.持仓[品种]
+                print(f"🗑️ 已删除持仓: {品种}")
+            
+            self.可用资金 += 净收入
+            self.持仓市值 -= 成本
+            self.总盈亏 += 盈亏
+            self.累积手续费 += 手续费
+            
+            self._记录交易("卖出", 品种, 价格, 数量, 盈亏, 手续费)
+            self._保存持仓()
+            
+            print(f"✅ 卖出成功! 剩余持仓: {list(self.持仓.keys())}")
+            
+            return {
+                "success": True, 
+                "message": f"成功卖出 {品种} {数量} @ {价格}",
+                "profit": 盈亏,
+                "fee": 手续费,
+                "remaining": len(self.持仓)
+            }
+            
+        except Exception as e:
+            print(f"❌ 卖出异常: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def 获取实时持仓市值(self):
+        """获取持仓的实时市值（使用实时价格）"""
+        总市值 = 0
+        for 品种, 持仓 in self.持仓.items():
+            实时价格 = 行情获取.获取价格(品种)
+            if 实时价格 and hasattr(实时价格, '价格') and 实时价格.价格 > 0:
+                现价 = 实时价格.价格
+            else:
+                现价 = getattr(持仓, '当前价格', 持仓.平均成本)
+            总市值 += 持仓.数量 * 现价
+        return 总市值
+    
+    def 获取实时总资产(self):
+        """获取实时总资产"""
+        return self.可用资金 + self.获取实时持仓市值()
+    
+    def 获取实时盈亏(self):
+        """获取实时盈亏"""
+        初始资金 = self.初始资金
+        实时总资产 = self.获取实时总资产()
+        return 实时总资产 - 初始资金
+    
+    def 获取总资产(self):
+        return self.获取实时总资产()
+    
+    def 获取可用资金(self):
+        return self.可用资金
+    
+    def 获取持仓市值(self):
+        return self.获取实时持仓市值()
+    
+    def 获取总盈亏(self):
+        return self.获取实时盈亏()
+    
+    def 获取持仓(self):
+        return self.持仓
+    
+    def 获取持仓详情(self):
+        详情 = []
+        for 代码, 持仓 in self.持仓.items():
+            # 获取实时价格
+            实时价格结果 = 行情获取.获取价格(代码)
+            if 实时价格结果 and hasattr(实时价格结果, '价格') and 实时价格结果.价格 > 0:
+                现价 = 实时价格结果.价格
+            else:
+                现价 = getattr(持仓, '当前价格', 持仓.平均成本)
+            
+            市值 = 持仓.数量 * 现价
+            成本 = 持仓.数量 * 持仓.平均成本
+            浮动盈亏 = 市值 - 成本
+            详情.append({
+                "品种": 代码,
+                "数量": 持仓.数量,
+                "成本价": round(持仓.平均成本, 4),
+                "现价": round(现价, 4),
+                "市值": round(市值, 2),
+                "成本总额": round(成本, 2),
+                "浮动盈亏": round(浮动盈亏, 2),
+            })
+        return 详情
+    
+    def 获取交易记录(self):
+        return self.交易记录[-100:]
+    
+    def 获取初始资金(self):
+        return self.初始资金
+    
+    def 清空所有持仓(self):
+        self.持仓 = {}
+        self.可用资金 = self.初始资金
+        self.持仓市值 = 0
+        self.总盈亏 = 0
+        self.累积手续费 = 0
+        self.交易记录 = []
+        数据库.清空所有持仓()
+        return {"success": True}
+    
+    def 更新持仓价格(self, 品种, 当前价格):
+        if 品种 in self.持仓:
+            self.持仓[品种].当前价格 = 当前价格
+    
+    def 刷新持仓(self):
+        self._恢复持仓()
+        return {"success": True, "count": len(self.持仓)}
+    
+    def 同步到session(self):
+        return self
+    
+    def _记录交易(self, 动作, 品种, 价格, 数量, 盈亏=0, 手续费=0):
+        交易时间 = self._获取当前时间(品种)
+        交易 = {
+            "时间": 交易时间,
+            "品种": 品种,
+            "动作": 动作,
+            "价格": 价格,
+            "数量": 数量,
+            "盈亏": 盈亏,
+            "手续费": 手续费,
+            "策略名称": ""
         }
-        interval = 周期映射.get(周期, "1d")
-        
-        get_days = 长度 + 30 if 周期 == "1d" else 7
-        
-        ticker = yf.Ticker(ticker_symbol)
-        df = ticker.history(period=f"{get_days}d", interval=interval)
-        
-        if not df.empty:
-            df = df.reset_index()
-            date_col = 'Datetime' if 'Datetime' in df.columns else 'Date'
-            df = df.rename(columns={
-                date_col: '日期',
-                'Open': '开盘',
-                'High': '最高',
-                'Low': '最低',
-                'Close': '收盘',
-                'Volume': '成交量'
-            })
-            df = df.tail(长度)
-            return df[['日期', '开盘', '最高', '最低', '收盘', '成交量']]
-        
-    except Exception as e:
-        print(f"获取K线失败: {e}")
+        self.交易记录.append(交易)
+        数据库.保存交易记录(交易)
+        print(f"📝 交易记录: {动作} {品种} {数量} @ {价格}")
     
-    return pd.DataFrame()
+    def _保存持仓(self):
+        try:
+            数据库.保存持仓快照(self.持仓)
+            print(f"💾 保存持仓, 共{len(self.持仓)}个")
+        except Exception as e:
+            print(f"保存持仓失败: {e}")
+    
+    def _恢复持仓(self):
+        try:
+            持仓数据字典 = 数据库.加载持仓快照()
+            from 核心.数据模型 import 持仓数据
+            self.持仓 = {}
+            self.持仓市值 = 0
+            self.可用资金 = self.初始资金
+            
+            for 品种, data in 持仓数据字典.items():
+                数量 = data.get("数量", 0)
+                成本 = data.get("平均成本", 0)
+                if 数量 > 0:
+                    self.持仓[品种] = 持仓数据(品种, float(数量), float(成本))
+                    self.持仓市值 += 成本 * 数量
+                    self.可用资金 -= 成本 * 数量
+                    print(f"✅ 恢复: {品种}, 数量={数量}, 成本={成本:.2f}")
+            
+            print(f"✅ 恢复 {len(self.持仓)} 个持仓")
+        except Exception as e:
+            print(f"恢复失败: {e}")
 
 
-def 计算技术指标(df):
-    """计算技术指标"""
-    if df.empty:
-        return df
-    
-    df_copy = df.copy()
-    if '收盘' not in df_copy.columns:
-        return df_copy
-    
-    df_copy['MA5'] = df_copy['收盘'].rolling(window=5).mean()
-    df_copy['MA10'] = df_copy['收盘'].rolling(window=10).mean()
-    df_copy['MA20'] = df_copy['收盘'].rolling(window=20).mean()
-    
-    df_copy['EMA12'] = df_copy['收盘'].ewm(span=12, adjust=False).mean()
-    df_copy['EMA26'] = df_copy['收盘'].ewm(span=26, adjust=False).mean()
-    df_copy['MACD'] = df_copy['EMA12'] - df_copy['EMA26']
-    df_copy['MACD_Signal'] = df_copy['MACD'].ewm(span=9, adjust=False).mean()
-    df_copy['MACD_Histogram'] = df_copy['MACD'] - df_copy['MACD_Signal']
-    
-    delta = df_copy['收盘'].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-    rs = gain / loss
-    df_copy['RSI'] = 100 - (100 / (1 + rs))
-    
-    df_copy['BB_Middle'] = df_copy['收盘'].rolling(window=20).mean()
-    bb_std = df_copy['收盘'].rolling(window=20).std()
-    df_copy['BB_Upper'] = df_copy['BB_Middle'] + 2 * bb_std
-    df_copy['BB_Lower'] = df_copy['BB_Middle'] - 2 * bb_std
-    
-    return df_copy
-
-
-# ==================== Tushare 数据（可选，用于历史数据） ====================
-TUSHARE_TOKEN = 'a58ac285333f6f8ecc93063924c3dfd8906a1e01c1865cb624f097ac'
-
-def 获取Tushare日线(代码, 开始日期, 结束日期):
-    """获取A股历史日线（用于回测）"""
-    try:
-        import tushare as ts
-        ts.set_token(TUSHARE_TOKEN)
-        pro = ts.pro_api()
-        
-        if str(代码).startswith('6'):
-            ts_code = f"{代码}.SH"
-        else:
-            ts_code = f"{代码}.SZ"
-        
-        df = pro.daily(ts_code=ts_code, 
-                       start_date=开始日期.replace('-', ''), 
-                       end_date=结束日期.replace('-', ''))
-        
-        if df is not None and not df.empty:
-            df = df.rename(columns={
-                'trade_date': '日期',
-                'open': '开盘',
-                'high': '最高',
-                'low': '最低',
-                'close': '收盘',
-                'vol': '成交量'
-            })
-            df['日期'] = pd.to_datetime(df['日期'])
-            return df[['日期', '开盘', '最高', '最低', '收盘', '成交量']]
-    except Exception as e:
-        print(f"Tushare获取失败: {e}")
-    
-    return None
-
-
-# ==================== 测试 ====================
-if __name__ == "__main__":
-    print("="*50)
-    print("测试行情获取模块")
-    print("="*50)
-    
-    test_symbols = ["000001", "AAPL", "BTC-USD", "EURUSD", "GC=F", "TSLA", "NVDA"]
-    
-    for symbol in test_symbols:
-        price = 获取价格(symbol)
-        print(f"{symbol}: {price.价格}")
-        time.sleep(0.5)
+def 创建订单引擎(初始资金=1000000):
+    return 订单引擎(初始资金=初始资金)
