@@ -69,13 +69,15 @@ class 订单引擎:
             self._保存持仓()
             
             print(f"✅ 买入成功! 可用资金剩余: {self.可用资金:.2f}")
+            print(f"📊 当前持仓: {list(self.持仓.keys())}")
             
             return {
                 "success": True, 
                 "message": f"成功买入 {品种} {数量} 股",
                 "amount": 花费,
                 "fee": 手续费,
-                "total_cost": 总扣除
+                "total_cost": 总扣除,
+                "need_refresh": True  # 添加刷新标记
             }
             
         except Exception as e:
@@ -124,13 +126,15 @@ class 订单引擎:
             self._保存持仓()
             
             print(f"✅ 卖出成功! 可用资金: {self.可用资金:.2f}")
+            print(f"📊 当前持仓: {list(self.持仓.keys())}")
             
             return {
                 "success": True, 
                 "message": f"成功卖出 {品种} {数量} 股",
                 "profit": 盈亏,
                 "fee": 手续费,
-                "net_income": 净收入
+                "net_income": 净收入,
+                "need_refresh": True  # 添加刷新标记
             }
             
         except Exception as e:
@@ -192,6 +196,11 @@ class 订单引擎:
     def 更新持仓价格(self, 品种, 当前价格):
         if 品种 in self.持仓:
             self.持仓[品种].当前价格 = 当前价格
+    
+    def 刷新持仓价格(self):
+        """从数据库重新加载持仓（用于页面刷新后恢复）"""
+        self._恢复持仓()
+        print("🔄 持仓已从数据库恢复")
     
     def _记录交易(self, 动作, 品种, 价格, 数量, 盈亏=0, 手续费=0):
         交易 = {
