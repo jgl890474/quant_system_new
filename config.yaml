@@ -2,13 +2,17 @@ trading:
   max_position_pct: 0.3
   commission_rate: 0.0005
   default_slippage: 0.0001
+  initial_capital: 1000000     # 可添加初始资金配置
 
 risk:
   stop_loss_pct: 0.02
   take_profit_pct: 0.04
   max_daily_loss: 0.05
+  trailing_stop: true          # 可添加移动止损开关
+  trailing_stop_retreat: 0.02  # 可添加移动止损回撤
 
 ui:
   theme: dark
   refresh_interval: 60
   chart_height: 350
+  show_realtime: true          # 可添加实时行情开关
