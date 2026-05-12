@@ -171,12 +171,15 @@ with st.sidebar:
         except Exception as e:
             st.error(f"刷新失败: {e}")
     
-    # 添加手动刷新持仓按钮
-    if st.button("🔄 刷新持仓数据", width="stretch"):
+    # ========== 关键修复：添加强制刷新按钮 ==========
+    if st.button("🔄 强制刷新持仓", width="stretch"):
         try:
+            # 从数据库重新加载持仓到引擎
             if hasattr(引擎, '_恢复持仓'):
                 引擎._恢复持仓()
-            st.success("✅ 持仓已刷新")
+            # 更新 session_state
+            st.session_state.订单引擎 = 引擎
+            st.success(f"✅ 持仓已刷新，当前持仓: {len(引擎.持仓)} 个品种")
             st.rerun()
         except Exception as e:
             st.error(f"刷新失败: {e}")
@@ -194,7 +197,7 @@ with st.sidebar:
             盈亏 = (现价 - 平均成本) * 数量
             st.metric(
                 label=f"{品种}",
-                value=f"{int(数量)}股",
+                value=f"{int(数量) if isinstance(数量, (int, float)) else 0}股",
                 delta=f"成本: ¥{平均成本:.2f} | 盈亏: ¥{盈亏:+.2f}"
             )
         st.markdown("---")
@@ -254,6 +257,7 @@ query_params = st.query_params
 if query_params.get("refresh") == "true":
     if hasattr(引擎, '_恢复持仓'):
         引擎._恢复持仓()
+        st.session_state.订单引擎 = 引擎
     st.query_params.clear()
 
 # ========== Tab ==========
