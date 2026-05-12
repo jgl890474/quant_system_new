@@ -5,7 +5,7 @@ import time
 import datetime
 
 
-# ==================== Tushare 配置（替代 akshare） ====================
+# ==================== Tushare 配置 ====================
 try:
     import tushare as ts
     ts.set_token('a58ac285333f6f8ecc93063924c3dfd8906a1e01c1865cb624f097ac')
@@ -26,13 +26,10 @@ def 获取A股实时行情():
         return pd.DataFrame()
     
     try:
-        # 获取今天日期
         today = datetime.datetime.now().strftime('%Y%m%d')
         
-        # 获取交易日历
         trade_cal = pro.trade_cal(exchange='SSE', start_date=today, end_date=today)
         if trade_cal.empty or trade_cal['is_open'].iloc[0] == 0:
-            # 非交易日，使用最近交易日数据
             trade_cal = pro.trade_cal(exchange='SSE', start_date='20240101', end_date=today)
             trade_cal = trade_cal[trade_cal['is_open'] == 1]
             if not trade_cal.empty:
@@ -42,7 +39,6 @@ def 获取A股实时行情():
         else:
             latest_trade_date = today
         
-        # 获取指定股票列表的日线数据
         股票列表 = [
             {"ts_code": "000001.SZ", "symbol": "000001", "name": "平安银行"},
             {"ts_code": "000858.SZ", "symbol": "000858", "name": "五粮液"},
@@ -80,7 +76,6 @@ def 获取A股实时行情():
 
 
 def 获取A股价格(代码):
-    """获取单个A股价格"""
     try:
         df = 获取A股实时行情()
         if df.empty:
@@ -93,22 +88,7 @@ def 获取A股价格(代码):
     return None
 
 
-def 获取A股涨跌幅(代码):
-    """获取单个A股涨跌幅"""
-    try:
-        df = 获取A股实时行情()
-        if df.empty:
-            return None
-        row = df[df['代码'] == 代码]
-        if not row.empty:
-            return float(row['涨跌幅'].iloc[0])
-    except:
-        pass
-    return None
-
-
 def 获取加密货币价格(代码):
-    """获取加密货币价格"""
     try:
         import requests
         symbol = 代码.replace("-", "").upper()
@@ -119,13 +99,11 @@ def 获取加密货币价格(代码):
             return float(data["price"])
     except:
         pass
-    # 返回模拟价格作为备用
     模拟价格 = {"BTCUSD": 65000, "ETHUSD": 3500, "SOLUSD": 150, "BNBUSD": 600}
     return 模拟价格.get(代码.replace("-", "").upper(), 100)
 
 
 def 获取美股价格(代码):
-    """获取美股价格"""
     try:
         import yfinance as yf
         ticker = yf.Ticker(代码)
@@ -134,53 +112,26 @@ def 获取美股价格(代码):
             return float(data['Close'].iloc[-1])
     except:
         pass
-    # 返回模拟价格
     模拟价格 = {"AAPL": 175, "GOOGL": 140, "MSFT": 420, "NVDA": 120, "TSLA": 170}
     return 模拟价格.get(代码, 100)
 
 
 def 获取外汇价格(货币对):
-    """获取外汇价格（演示数据）"""
-    模拟价格 = {
-        "EUR/USD": 1.0890,
-        "GBP/USD": 1.2670,
-        "USD/JPY": 148.50,
-    }
+    模拟价格 = {"EUR/USD": 1.0890, "GBP/USD": 1.2670, "USD/JPY": 148.50}
     return 模拟价格.get(货币对, 1.0)
 
 
 def 获取期货价格(品种):
-    """获取期货价格（演示数据）"""
-    模拟价格 = {
-        "GC=F": 2350.0,
-        "CL=F": 78.50,
-    }
+    模拟价格 = {"GC=F": 2350.0, "CL=F": 78.50}
     return 模拟价格.get(品种, 100.0)
-
-
-def 获取股票名称(代码):
-    """获取股票名称"""
-    名称映射 = {
-        "000001": "平安银行",
-        "000858": "五粮液",
-        "002415": "海康威视",
-        "600036": "招商银行",
-        "600519": "贵州茅台",
-        "601318": "中国平安",
-        "300750": "宁德时代",
-        "002594": "比亚迪",
-    }
-    return 名称映射.get(代码, 代码)
 
 
 def 获取真实AI推荐(市场, 策略类型, 引擎):
     """获取真实的AI推荐"""
     推荐列表 = []
     
-    # ==================== A股（使用 Tushare） ====================
     if 市场 == "A股":
         df = 获取A股实时行情()
-        
         if not df.empty:
             for _, row in df.iterrows():
                 代码 = row['代码']
@@ -212,7 +163,6 @@ def 获取真实AI推荐(市场, 策略类型, 引擎):
                         "市场": "A股"
                     })
         else:
-            # 如果获取失败，使用模拟数据
             for 代码, 名称 in [("000001", "平安银行"), ("600036", "招商银行"), ("600519", "贵州茅台")]:
                 推荐列表.append({
                     "代码": 代码,
@@ -224,10 +174,8 @@ def 获取真实AI推荐(市场, 策略类型, 引擎):
                     "市场": "A股"
                 })
         
-        # 按得分排序
         推荐列表.sort(key=lambda x: x["得分"], reverse=True)
     
-    # ==================== 加密货币 ====================
     elif 市场 == "加密货币":
         候选品种 = [
             {"代码": "BTC-USD", "名称": "比特币"},
@@ -235,7 +183,6 @@ def 获取真实AI推荐(市场, 策略类型, 引擎):
             {"代码": "SOL-USD", "名称": "Solana"},
             {"代码": "BNB-USD", "名称": "币安币"},
         ]
-        
         for 币种 in 候选品种:
             try:
                 价格 = 获取加密货币价格(币种["代码"])
@@ -251,10 +198,8 @@ def 获取真实AI推荐(市场, 策略类型, 引擎):
                     })
             except:
                 continue
-        
         推荐列表.sort(key=lambda x: x["得分"], reverse=True)
     
-    # ==================== 美股 ====================
     elif 市场 == "美股":
         候选品种 = ["AAPL", "NVDA", "MSFT", "GOOGL", "TSLA"]
         for 代码 in 候选品种:
@@ -274,7 +219,6 @@ def 获取真实AI推荐(市场, 策略类型, 引擎):
                 continue
         推荐列表.sort(key=lambda x: x["得分"], reverse=True)
     
-    # ==================== 外汇 ====================
     elif 市场 == "外汇":
         候选品种 = ["EUR/USD", "GBP/USD"]
         for 代码 in 候选品种:
@@ -289,7 +233,6 @@ def 获取真实AI推荐(市场, 策略类型, 引擎):
                 "市场": "外汇"
             })
     
-    # ==================== 期货 ====================
     elif 市场 == "期货":
         候选品种 = [{"代码": "GC=F", "名称": "黄金期货"}, {"代码": "CL=F", "名称": "原油期货"}]
         for 品种 in 候选品种:
@@ -308,7 +251,6 @@ def 获取真实AI推荐(市场, 策略类型, 引擎):
 
 
 def 获取实时价格(代码, 市场类型):
-    """获取实时价格"""
     try:
         if 市场类型 == "A股":
             return 获取A股价格(代码)
@@ -326,15 +268,12 @@ def 获取实时价格(代码, 市场类型):
 
 
 def 执行买入(引擎, 代码, 价格, 数量, 市场类型, 策略类型):
-    """执行买入操作 - 修复数量类型问题"""
     try:
-        # 确保数量是整数（A股、美股、期货）或浮点数（加密货币、外汇）
         if 市场类型 in ["A股", "美股", "期货"]:
             数量 = int(数量)
         else:
             数量 = float(数量)
         
-        # 确保价格是浮点数
         价格 = float(价格)
         
         if 价格 <= 0:
@@ -348,16 +287,9 @@ def 执行买入(引擎, 代码, 价格, 数量, 市场类型, 策略类型):
         if 预计花费 > 可用资金:
             return {"success": False, "error": f"资金不足，需要 ¥{预计花费:.2f}，可用 ¥{可用资金:.2f}"}
         
-        print(f"执行买入: 代码={代码}, 价格={价格}, 数量={数量}, 市场={市场类型}")
-        
         结果 = 引擎.买入(代码, 价格, 数量)
-        print(f"买入结果: {结果}")
-        
         return 结果
     except Exception as e:
-        print(f"买入异常: {e}")
-        import traceback
-        traceback.print_exc()
         return {"success": False, "error": str(e)}
 
 
@@ -379,15 +311,20 @@ def 显示(引擎, 策略加载器, AI引擎):
     可用资金 = 引擎.获取可用资金() if hasattr(引擎, '获取可用资金') else 0
     st.caption(f"💰 可用资金: ¥{可用资金:,.2f}")
     
+    # ==================== 导入行情获取 ====================
+    try:
+        from 核心 import 行情获取
+        HAS_QUOTE = True
+    except:
+        HAS_QUOTE = False
+    
     if "ai_list" not in st.session_state:
         st.session_state.ai_list = []
     
-    # 修复：use_container_width=True -> width='stretch'
     if st.button("🚀 AI 分析", type="primary", width='stretch'):
         with st.spinner(f"AI 正在使用【{策略类型}】分析【{市场}】..."):
             try:
                 st.session_state.ai_list = 获取真实AI推荐(市场, 策略类型, 引擎)
-                
                 if st.session_state.ai_list:
                     st.success(f"✅ AI 分析完成！共推荐 {len(st.session_state.ai_list)} 只标的")
                 else:
@@ -408,7 +345,6 @@ def 显示(引擎, 策略加载器, AI引擎):
             得分 = item.get("得分", 0)
             市场类型 = item.get("市场", "未知")
             
-            # 根据市场类型计算建议数量
             if 市场类型 == "A股":
                 建议数量 = int(可用资金 * 0.1 / price / 100) * 100
                 建议数量 = max(建议数量, 100)
@@ -424,7 +360,6 @@ def 显示(引擎, 策略加载器, AI引擎):
                 建议数量 = max(建议数量, 100)
                 数量单位 = "股"
             
-            # 确保数量不为0
             if 建议数量 <= 0:
                 建议数量 = 1 if 市场类型 == "加密货币" else 100
             
@@ -449,7 +384,6 @@ def 显示(引擎, 策略加载器, AI引擎):
                         if price > 0:
                             实时价格 = 获取实时价格(code, 市场类型)
                             实际价格 = 实时价格 if 实时价格 else price
-                            
                             with st.spinner(f"正在买入 {name}..."):
                                 结果 = 执行买入(引擎, code, 实际价格, 建议数量, 市场类型, 策略类型)
                                 if 结果.get("success"):
@@ -467,21 +401,52 @@ def 显示(引擎, 策略加载器, AI引擎):
     st.markdown("---")
     st.markdown("### 📦 当前持仓")
     
+    # ========== 持仓显示（修复版：获取实时价格） ==========
     if hasattr(引擎, '持仓') and 引擎.持仓:
         持仓数据 = []
         for sym, pos in 引擎.持仓.items():
             数量 = getattr(pos, '数量', 0)
             平均成本 = getattr(pos, '平均成本', 0)
-            当前价格 = getattr(pos, '当前价格', 平均成本)
+            
+            # 获取实时价格
+            try:
+                if HAS_QUOTE and 行情获取:
+                    价格结果 = 行情获取.获取价格(sym)
+                    if 价格结果 and hasattr(价格结果, '价格'):
+                        当前价格 = 价格结果.价格
+                    else:
+                        当前价格 = 平均成本
+                else:
+                    当前价格 = 平均成本
+            except Exception:
+                当前价格 = 平均成本
+            
+            # 更新持仓当前价格
+            if hasattr(pos, '当前价格'):
+                pos.当前价格 = 当前价格
+            
             浮动盈亏 = (当前价格 - 平均成本) * 数量
+            
+            # 格式化数量显示
+            if sym in ["ETH-USD", "BTC-USD", "SOL-USD", "BNB-USD"]:
+                数量显示 = f"{数量:.4f}"
+                数量值 = 数量
+            else:
+                数量显示 = f"{int(数量)}"
+                数量值 = int(数量)
             
             持仓数据.append({
                 "品种": sym,
-                "数量": int(数量) if isinstance(数量, (int, float)) else 0,
+                "数量": 数量显示,
                 "成本": round(平均成本, 4),
                 "现价": round(当前价格, 4),
                 "浮动盈亏": round(浮动盈亏, 2)
             })
+        
         st.dataframe(持仓数据, width='stretch', hide_index=True)
+        
+        # 显示总盈亏
+        总盈亏 = sum([d["浮动盈亏"] for d in 持仓数据])
+        st.caption(f"📊 持仓总盈亏: ¥{总盈亏:+,.2f}")
     else:
         st.info("暂无持仓")
