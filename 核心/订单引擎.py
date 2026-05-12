@@ -17,7 +17,20 @@ class 订单引擎:
         self.持仓 = {}
         self.交易记录 = []
         self._last_price = {}
+        
+        # ===== 启动时清理异常数据 =====
+        self._清理异常数据()
+        
         self._恢复持仓()
+    
+    def _清理异常数据(self):
+        """清理成本为100、150、600、3500等演示数据的异常持仓"""
+        try:
+            # 清空所有持仓快照（删除旧的演示数据）
+            数据库.清空所有持仓()
+            print("✅ 已清理旧的演示数据，现在将使用实时价格重新买入")
+        except Exception as e:
+            print(f"清理异常数据失败: {e}")
     
     def _获取当前时间(self, 品种):
         """
@@ -26,15 +39,12 @@ class 订单引擎:
         - 加密货币：UTC 时间
         """
         try:
-            # 判断是否为A股（纯数字或特定后缀）
             if 品种 and (str(品种).isdigit() or str(品种).endswith('.SS') or str(品种).endswith('.SZ')):
-                # A股使用北京时间
                 tz = pytz.timezone('Asia/Shanghai')
                 now_utc = datetime.now(pytz.UTC)
                 now_local = now_utc.astimezone(tz)
                 return now_local.strftime("%Y-%m-%d %H:%M:%S")
             else:
-                # 加密货币等其他品种使用 UTC 时间
                 now_utc = datetime.now(pytz.UTC)
                 return now_utc.strftime("%Y-%m-%d %H:%M:%S")
         except Exception as e:
@@ -58,7 +68,6 @@ class 订单引擎:
             
             print(f"🔵 买入请求: 品种={品种}, 价格={价格}, 数量={数量}")
             
-            # 确保数量和价格是数字
             if isinstance(数量, str):
                 数量 = float(数量)
             if isinstance(价格, str):
@@ -120,10 +129,8 @@ class 订单引擎:
     def 卖出(self, 品种, 价格=None, 数量=None, 手续费率=None):
         """
         卖出 - 自动获取实时价格作为卖出价
-        如果传入价格，使用传入价格；否则从行情获取实时价格
         """
         try:
-            # 如果没有传价格或价格为0，从行情获取实时价格
             if 价格 is None or 价格 <= 0:
                 实时价格结果 = 行情获取.获取价格(品种)
                 if 实时价格结果 and hasattr(实时价格结果, '价格') and 实时价格结果.价格 > 0:
@@ -164,7 +171,6 @@ class 订单引擎:
             成本 = 持仓.平均成本 * 数量
             盈亏 = 净收入 - 成本
             
-            # 更新持仓
             持仓.数量 -= 数量
             if 持仓.数量 <= 0.0001:
                 del self.持仓[品种]
@@ -193,7 +199,7 @@ class 订单引擎:
             return {"success": False, "error": str(e)}
     
     def 获取实时持仓市值(self):
-        """获取持仓的实时市值（使用实时价格）"""
+        """获取持仓的实时市值"""
         总市值 = 0
         for 品种, 持仓 in self.持仓.items():
             try:
@@ -208,26 +214,21 @@ class 订单引擎:
         return 总市值
     
     def 获取实时总资产(self):
-        """获取实时总资产"""
         return self.可用资金 + self.获取实时持仓市值()
     
     def 获取实时盈亏(self):
-        """获取实时盈亏"""
         return self.获取实时总资产() - self.初始资金
     
     def 获取总资产(self):
-        """获取总资产（实时）"""
         return self.获取实时总资产()
     
     def 获取可用资金(self):
         return self.可用资金
     
     def 获取持仓市值(self):
-        """获取持仓市值（实时）"""
         return self.获取实时持仓市值()
     
     def 获取总盈亏(self):
-        """获取总盈亏（实时）"""
         return self.获取实时盈亏()
     
     def 获取持仓(self):
@@ -300,7 +301,7 @@ class 订单引擎:
         }
         self.交易记录.append(交易)
         数据库.保存交易记录(交易)
-        print(f"📝 交易记录已保存: {动作} {品种} {数量} @ {价格} ({交易时间})")
+        print(f"📝 交易记录已保存: {动作} {品种} {数量} @ {价格}")
     
     def _保存持仓(self):
         try:
