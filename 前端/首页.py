@@ -95,12 +95,15 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         买入品种 = st.selectbox("选择品种", 可买品种列表, key="buy_symbol_select")
         买入代码 = 转换品种代码(买入品种)
         
+        # 仅用于显示预览价格
         try:
-            当前买入价 = 获取行情的价格(买入代码)
-            st.caption(f"当前价格: ${当前买入价:.4f}" if 当前买入价 and 当前买入价 > 0 else "获取价格失败")
+            预览价格 = 获取行情的价格(买入代码)
+            if 预览价格 and 预览价格 > 0:
+                st.caption(f"📌 参考价格: ${预览价格:.4f}")
+            else:
+                st.caption("📌 参考价格: 获取中...")
         except:
-            当前买入价 = 0
-            st.caption("获取价格失败")
+            st.caption("📌 参考价格: 获取失败")
         
         if 买入品种 == "000001.SS":
             单位提示, 默认数量, 步长 = "手 (1手=100股)", 1, 1
@@ -115,30 +118,25 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         
         if 买入品种 == "000001.SS":
             实际股数 = 买入数量 * 100
-            预计花费 = 当前买入价 * 实际股数 if 当前买入价 else 0
-            st.caption(f"预计花费: ¥{预计花费:,.0f} (实际股数: {实际股数}股)" if 当前买入价 else "无法计算价格")
+            st.caption(f"预计花费: 按实时价格计算")
         elif 买入品种 == "EURUSD":
             实际单位 = 买入数量 * 10000
-            预计花费 = 当前买入价 * 实际单位 if 当前买入价 else 0
-            st.caption(f"预计花费: ¥{预计花费:,.0f} (实际单位: {实际单位})" if 当前买入价 else "无法计算价格")
+            st.caption(f"预计花费: 按实时价格计算")
         else:
-            预计花费 = 当前买入价 * 买入数量 if 当前买入价 else 0
-            st.caption(f"预计花费: ¥{预计花费:,.0f}" if 当前买入价 else "无法计算价格")
+            st.caption(f"预计花费: 按实时价格计算")
         
+        # ========== 关键修改：买入时不传价格，让引擎自动获取实时价格 ==========
         if st.button("买入", type="primary", width='stretch', key="buy_button"):
-            if not 当前买入价 or 当前买入价 <= 0:
-                st.error("无法获取价格")
-            else:
-                try:
-                    结果 = 引擎.买入(买入品种, 当前买入价, 买入数量)
-                    if 结果.get("success"):
-                        st.success(f"✅ 已买入 {买入品种} {买入数量} 单位")
-                        st.session_state.订单引擎 = 引擎
-                        st.rerun()
-                    else:
-                        st.error(f"买入失败: {结果.get('error')}")
-                except Exception as e:
-                    st.error(f"买入失败: {e}")
+            try:
+                结果 = 引擎.买入(买入品种, None, 买入数量)  # 价格传 None
+                if 结果.get("success"):
+                    st.success(f"✅ 已买入 {买入品种} {买入数量} 单位")
+                    st.session_state.订单引擎 = 引擎
+                    st.rerun()
+                else:
+                    st.error(f"买入失败: {结果.get('error')}")
+            except Exception as e:
+                st.error(f"买入失败: {e}")
     
     # ========== 卖出 ==========
     with col2:
@@ -173,10 +171,13 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                 st.caption(f"当前持仓数量: {int(最大可卖数量)}")
             
             try:
-                当前卖出价 = 获取行情的价格(卖品种)
-                st.caption(f"当前价格: ${当前卖出价:.4f}" if 当前卖出价 and 当前卖出价 > 0 else "价格获取失败")
+                预览价格 = 获取行情的价格(卖品种)
+                if 预览价格 and 预览价格 > 0:
+                    st.caption(f"📌 参考价格: ${预览价格:.4f}")
+                else:
+                    st.caption("📌 参考价格: 获取中...")
             except:
-                当前卖出价 = 0
+                st.caption("📌 参考价格: 获取失败")
             
             if 卖品种 in ["ETH-USD", "BTC-USD", "SOL-USD", "BNB-USD"]:
                 卖出数量 = st.number_input("数量", min_value=0.0, max_value=float(最大可卖数量), value=min(0.1, float(最大可卖数量)), step=0.01, format="%.4f", key="sell_qty")
@@ -184,20 +185,15 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                 max_qty = int(最大可卖数量)
                 卖出数量 = st.number_input("数量", min_value=1, max_value=max_qty, value=min(1, max_qty), step=1, key="sell_qty")
             
-            预计收入 = 当前卖出价 * 卖出数量 if 当前卖出价 else 0
-            st.caption(f"预计收入: ¥{预计收入:,.2f}" if 当前卖出价 else "无法计算收入")
-            
+            # ========== 关键修改：卖出时不传价格，让引擎自动获取实时价格 ==========
             if st.button("卖出", width='stretch', key="sell_button"):
-                if not 当前卖出价 or 当前卖出价 <= 0:
-                    st.error("无法获取价格")
-                elif 卖出数量 <= 0:
+                if 卖出数量 <= 0:
                     st.error("请输入数量")
                 else:
                     try:
-                        结果 = 引擎.卖出(卖品种, 当前卖出价, 卖出数量)
+                        结果 = 引擎.卖出(卖品种, None, 卖出数量)  # 价格传 None
                         if 结果.get("success"):
                             st.success(f"✅ 已卖出 {卖品种} {卖出数量} 单位")
-                            # 关键：重新加载并刷新
                             if hasattr(引擎, '_恢复持仓'):
                                 引擎._恢复持仓()
                             st.session_state.订单引擎 = 引擎
