@@ -151,7 +151,11 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             if 选中品种:
                 col1, col2, col3 = st.columns([2, 1, 1])
                 with col1:
-                    周期选项 = st.selectbox("K线周期", ["日线", "周线", "60分钟", "30分钟", "10分钟"], key=f"period_{session_id}")
+                    周期选项 = st.selectbox(
+                        "K线周期", 
+                        ["日线", "周线", "60分钟", "30分钟", "10分钟"], 
+                        key=f"period_{session_id}"
+                    )
                 with col2:
                     数据长度 = st.selectbox("K线根数", [30, 60, 90, 120], index=1, key=f"length_{session_id}")
                 with col3:
@@ -159,14 +163,46 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                 
                 with st.spinner(f"正在加载 {选中品种} 的{周期选项}数据..."):
                     try:
-                        df_kline = 生成模拟K线数据(选中品种, 周期选项, 数据长度)
+                        # 获取K线数据
+                        df_kline = 获取真实K线数据(选中品种, 周期选项, 数据长度)
                         
                         if df_kline is not None and not df_kline.empty:
+                            # 计算技术指标
+                            df_indicators = 计算技术指标(df_kline)
+                            
                             # 获取买卖点标注
                             买入标注, 卖出标注 = 获取交易标注(选中品种, df_kline, 引擎)
                             
-                            fig = 绘制K线图表(df_kline, 选中品种, 周期选项, 买入标注 if 显示买卖点 else [], 卖出标注 if 显示买卖点 else [])
+                            # 绘制专业K线图
+                            fig = 绘制专业K线图(
+                                df_kline, df_indicators, 选中品种, 周期选项,
+                                买入标注 if 显示买卖点 else [],
+                                卖出标注 if 显示买卖点 else []
+                            )
                             st.plotly_chart(fig, width='stretch', use_container_width=True)
+                            
+                            # 显示技术指标统计
+                            st.markdown("---")
+                            st.markdown("#### 📊 技术指标")
+                            
+                            col1, col2, col3, col4, col5 = st.columns(5)
+                            if not df_kline.empty:
+                                最新收盘 = df_kline['收盘'].iloc[-1]
+                                最高价 = df_kline['最高'].max()
+                                最低价 = df_kline['最低'].min()
+                                if len(df_kline) > 1:
+                                    涨跌幅 = ((df_kline['收盘'].iloc[-1] - df_kline['收盘'].iloc[-2]) / df_kline['收盘'].iloc[-2] * 100)
+                                else:
+                                    涨跌幅 = 0
+                                
+                                col1.metric("最新价", f"¥{最新收盘:.2f}", delta=f"{涨跌幅:.2f}%")
+                                col2.metric("最高价", f"¥{最高价:.2f}")
+                                col3.metric("最低价", f"¥{最低价:.2f}")
+                                
+                                if 'MA5' in df_indicators.columns:
+                                    col4.metric("MA5", f"¥{df_indicators['MA5'].iloc[-1]:.2f}")
+                                if 'MA20' in df_indicators.columns:
+                                    col5.metric("MA20", f"¥{df_indicators['MA20'].iloc[-1]:.2f}")
                         else:
                             st.info(f"暂无 {选中品种} 的{周期选项}数据")
                     except Exception as e:
@@ -243,18 +279,77 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
     st.caption(f"最后更新: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 
+def 获取真实K线数据(代码, 周期, 长度):
+    """获取真实K线数据（优先使用真实数据，失败时生成模拟数据）"""
+    try:
+        import yfinance as yf
+        
+        # 处理A股代码
+        if str(代码).isdigit() and len(str(代码)) == 6:
+            if str(代码).startswith('6'):
+                ticker = f"{代码}.SS"
+            else:
+                ticker = f"{代码}.SZ"
+        else:
+            ticker = 代码
+        
+        # 周期映射
+        周期映射 = {
+            "日线": "1d",
+            "周线": "1wk",
+            "60分钟": "1h",
+            "30分钟": "30m",
+            "10分钟": "10m"
+        }
+        interval = 周期映射.get(周期, "1d")
+        
+        # 计算时间范围
+        if 周期 in ["60分钟", "30分钟", "10分钟"]:
+            period = "7d"
+        else:
+            period = f"{长度 * 2}d"
+        
+        ticker_obj = yf.Ticker(ticker)
+        df = ticker_obj.history(period=period, interval=interval)
+        
+        if not df.empty:
+            df = df.reset_index()
+            date_col = 'Datetime' if 'Datetime' in df.columns else 'Date'
+            df = df.rename(columns={
+                date_col: '日期',
+                'Open': '开盘',
+                'High': '最高',
+                'Low': '最低',
+                'Close': '收盘',
+                'Volume': '成交量'
+            })
+            df = df.tail(长度)
+            return df[['日期', '开盘', '最高', '最低', '收盘', '成交量']]
+    except Exception as e:
+        print(f"获取真实K线失败: {e}")
+    
+    # 生成模拟K线数据
+    return 生成模拟K线数据(代码, 周期, 长度)
+
+
 def 生成模拟K线数据(代码, 周期, 长度):
     """生成模拟K线数据"""
-    import numpy as np
-    
     if 周期 == "日线":
         freq = 'D'
     elif 周期 == "周线":
         freq = 'W'
+    elif 周期 == "60分钟":
+        dates = pd.date_range(end=datetime.now(), periods=长度, freq='H')
+    elif 周期 == "30分钟":
+        dates = pd.date_range(end=datetime.now(), periods=长度, freq='30min')
+    elif 周期 == "10分钟":
+        dates = pd.date_range(end=datetime.now(), periods=长度, freq='10min')
     else:
         freq = 'D'
+        dates = pd.date_range(end=datetime.now(), periods=长度, freq=freq)
     
-    dates = pd.date_range(end=datetime.now(), periods=长度, freq=freq)
+    if 'freq' in locals():
+        dates = pd.date_range(end=datetime.now(), periods=长度, freq=freq)
     
     np.random.seed(abs(hash(代码)) % 10000)
     returns = np.random.randn(长度) * 0.02
@@ -274,6 +369,36 @@ def 生成模拟K线数据(代码, 周期, 长度):
     df['最低'] = df[['最低', '开盘', '收盘']].min(axis=1)
     
     return df
+
+
+def 计算技术指标(df):
+    """计算技术指标（MA、布林带、MACD）"""
+    if df.empty:
+        return df
+    
+    df_copy = df.copy()
+    
+    # 移动平均线
+    df_copy['MA5'] = df_copy['收盘'].rolling(window=5).mean()
+    df_copy['MA10'] = df_copy['收盘'].rolling(window=10).mean()
+    df_copy['MA20'] = df_copy['收盘'].rolling(window=20).mean()
+    
+    # 指数移动平均（用于MACD）
+    df_copy['EMA12'] = df_copy['收盘'].ewm(span=12, adjust=False).mean()
+    df_copy['EMA26'] = df_copy['收盘'].ewm(span=26, adjust=False).mean()
+    
+    # MACD
+    df_copy['MACD'] = df_copy['EMA12'] - df_copy['EMA26']
+    df_copy['MACD_Signal'] = df_copy['MACD'].ewm(span=9, adjust=False).mean()
+    df_copy['MACD_Histogram'] = df_copy['MACD'] - df_copy['MACD_Signal']
+    
+    # 布林带
+    df_copy['BB_Middle'] = df_copy['收盘'].rolling(window=20).mean()
+    bb_std = df_copy['收盘'].rolling(window=20).std()
+    df_copy['BB_Upper'] = df_copy['BB_Middle'] + (bb_std * 2)
+    df_copy['BB_Lower'] = df_copy['BB_Middle'] - (bb_std * 2)
+    
+    return df_copy
 
 
 def 获取交易标注(品种, df_kline, 引擎):
@@ -308,39 +433,137 @@ def 获取交易标注(品种, df_kline, 引擎):
     return 买入标注[-10:], 卖出标注[-10:]
 
 
-def 绘制K线图表(df, 品种, 周期, 买入标注, 卖出标注):
-    """绘制K线图"""
+def 绘制专业K线图(df, df_indicators, 品种, 周期, 买入标注, 卖出标注):
+    """绘制专业K线图（带布林带、MACD、成交量）"""
     
     dates = df['日期'].tolist()
     
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.08, row_heights=[0.7, 0.3])
+    # 创建3行子图
+    fig = make_subplots(
+        rows=3, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.05,
+        row_heights=[0.55, 0.2, 0.25],
+        subplot_titles=(f'{品种} - {周期} K线图', '成交量', 'MACD')
+    )
     
-    # K线
-    fig.add_trace(go.Candlestick(x=dates, open=df['开盘'], high=df['最高'], low=df['最低'], close=df['收盘'], name='K线'), row=1, col=1)
+    # ===== 第一行：K线图 =====
+    fig.add_trace(go.Candlestick(
+        x=dates,
+        open=df['开盘'],
+        high=df['最高'],
+        low=df['最低'],
+        close=df['收盘'],
+        name='K线',
+        showlegend=False
+    ), row=1, col=1)
     
     # 均线
-    ma5 = df['收盘'].rolling(5).mean()
-    ma10 = df['收盘'].rolling(10).mean()
-    ma20 = df['收盘'].rolling(20).mean()
+    fig.add_trace(go.Scatter(
+        x=dates, y=df_indicators['MA5'],
+        mode='lines', name='MA5',
+        line=dict(color='#FF6B6B', width=1.5)
+    ), row=1, col=1)
     
-    fig.add_trace(go.Scatter(x=dates, y=ma5, mode='lines', name='MA5', line=dict(color='#FF6B6B', width=1)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=dates, y=ma10, mode='lines', name='MA10', line=dict(color='#4ECDC4', width=1)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=dates, y=ma20, mode='lines', name='MA20', line=dict(color='#FFE66D', width=1)), row=1, col=1)
+    fig.add_trace(go.Scatter(
+        x=dates, y=df_indicators['MA10'],
+        mode='lines', name='MA10',
+        line=dict(color='#4ECDC4', width=1.5)
+    ), row=1, col=1)
     
-    # 买卖点
+    fig.add_trace(go.Scatter(
+        x=dates, y=df_indicators['MA20'],
+        mode='lines', name='MA20',
+        line=dict(color='#FFE66D', width=1.5)
+    ), row=1, col=1)
+    
+    # 布林带
+    fig.add_trace(go.Scatter(
+        x=dates, y=df_indicators['BB_Upper'],
+        mode='lines', name='布林上轨',
+        line=dict(color='#95A5A6', width=1, dash='dash')
+    ), row=1, col=1)
+    
+    fig.add_trace(go.Scatter(
+        x=dates, y=df_indicators['BB_Lower'],
+        mode='lines', name='布林下轨',
+        line=dict(color='#95A5A6', width=1, dash='dash'),
+        fill='tonexty',
+        fillcolor='rgba(149,165,166,0.1)'
+    ), row=1, col=1)
+    
+    # 买入标注
     for b in 买入标注:
-        fig.add_annotation(x=b['日期'], y=b['价格'], text="买入", showarrow=True, arrowhead=2, arrowcolor="#2ECC71", ax=0, ay=-30, font=dict(color="#2ECC71", size=10), bgcolor="rgba(0,0,0,0.6)")
+        fig.add_annotation(
+            x=b['日期'], y=b['价格'],
+            text="🟢 买入",
+            showarrow=True, arrowhead=2, arrowcolor="#2ECC71",
+            ax=0, ay=-35,
+            font=dict(color="#2ECC71", size=10),
+            bgcolor="rgba(0,0,0,0.6)", borderpad=3
+        )
     
+    # 卖出标注
     for s in 卖出标注:
-        fig.add_annotation(x=s['日期'], y=s['价格'], text="卖出", showarrow=True, arrowhead=2, arrowcolor="#E74C3C", ax=0, ay=30, font=dict(color="#E74C3C", size=10), bgcolor="rgba(0,0,0,0.6)")
+        fig.add_annotation(
+            x=s['日期'], y=s['价格'],
+            text="🔴 卖出",
+            showarrow=True, arrowhead=2, arrowcolor="#E74C3C",
+            ax=0, ay=35,
+            font=dict(color="#E74C3C", size=10),
+            bgcolor="rgba(0,0,0,0.6)", borderpad=3
+        )
     
-    # 成交量
-    colors = ['#2ECC71' if c >= o else '#E74C3C' for c, o in zip(df['收盘'], df['开盘'])]
-    fig.add_trace(go.Bar(x=dates, y=df['成交量'], marker_color=colors, opacity=0.5, name='成交量'), row=2, col=1)
+    # ===== 第二行：成交量 =====
+    成交量颜色 = ['#2ECC71' if c >= o else '#E74C3C' 
+                  for c, o in zip(df['收盘'], df['开盘'])]
     
-    fig.update_layout(title=f"{品种} - {周期} K线图", height=550, xaxis_rangeslider_visible=False, showlegend=True, legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5), plot_bgcolor='#0a0c10', paper_bgcolor='#0a0c10', font_color='#e6e6e6')
-    fig.update_xaxes(title_text="日期", row=2, col=1, gridcolor='#2a2e3a')
+    fig.add_trace(go.Bar(
+        x=dates, y=df['成交量'],
+        name='成交量', marker_color=成交量颜色,
+        opacity=0.5, showlegend=False
+    ), row=2, col=1)
+    
+    # ===== 第三行：MACD =====
+    macd_colors = ['#2ECC71' if x >= 0 else '#E74C3C' 
+                   for x in df_indicators['MACD_Histogram']]
+    
+    fig.add_trace(go.Bar(
+        x=dates, y=df_indicators['MACD_Histogram'],
+        name='MACD柱', marker_color=macd_colors,
+        opacity=0.5, showlegend=False
+    ), row=3, col=1)
+    
+    fig.add_trace(go.Scatter(
+        x=dates, y=df_indicators['MACD'],
+        mode='lines', name='MACD',
+        line=dict(color='#3498DB', width=1.5)
+    ), row=3, col=1)
+    
+    fig.add_trace(go.Scatter(
+        x=dates, y=df_indicators['MACD_Signal'],
+        mode='lines', name='信号线',
+        line=dict(color='#E74C3C', width=1.5)
+    ), row=3, col=1)
+    
+    # 添加零线
+    fig.add_hline(y=0, line_dash="dash", line_color="#95A5A6", row=3, col=1)
+    
+    # 布局
+    fig.update_layout(
+        title=f"{品种} - 技术分析图表",
+        height=700,
+        xaxis_rangeslider_visible=False,
+        showlegend=True,
+        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
+        plot_bgcolor='#0a0c10',
+        paper_bgcolor='#0a0c10',
+        font_color='#e6e6e6'
+    )
+    
+    fig.update_xaxes(title_text="日期", row=3, col=1, gridcolor='#2a2e3a')
     fig.update_yaxes(title_text="价格", row=1, col=1, gridcolor='#2a2e3a')
     fig.update_yaxes(title_text="成交量", row=2, col=1, gridcolor='#2a2e3a')
+    fig.update_yaxes(title_text="MACD", row=3, col=1, gridcolor='#2a2e3a')
     
     return fig
