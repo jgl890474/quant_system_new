@@ -33,6 +33,19 @@ except ImportError:
     行情获取 = None
     st.warning("⚠️ 行情获取模块导入失败")
 
+# ========== 导入策略运行器（用于策略状态管理） ==========
+try:
+    from 核心.策略运行器 import 策略运行器
+except ImportError:
+    # 如果策略运行器不存在，创建一个简单的兼容类
+    class 策略运行器:
+        _策略状态 = {}
+        @classmethod
+        def 设置策略状态(cls, 名称, 状态): pass
+        @classmethod
+        def 获取策略状态(cls, 名称): return True
+    st.warning("⚠️ 策略运行器模块导入失败，使用兼容模式")
+
 # ========== 初始化数据库 ==========
 try:
     数据库.初始化数据库()
@@ -57,6 +70,17 @@ if '策略加载器' not in st.session_state:
             def 加载策略(self, 策略名):
                 return None
         st.session_state.策略加载器 = 简单策略加载器()
+
+# ========== 初始化策略状态（所有策略默认启用） ==========
+try:
+    策略列表 = st.session_state.策略加载器.获取策略()
+    for 策略 in 策略列表:
+        策略名称 = 策略.get("名称", "")
+        if 策略名称:
+            策略运行器.设置策略状态(策略名称, True)
+    print(f"✅ 已初始化 {len(策略列表)} 个策略状态")
+except Exception as e:
+    print(f"策略状态初始化失败: {e}")
 
 # 初始化AI引擎（兼容处理）
 if 'AI引擎' not in st.session_state:
@@ -189,7 +213,7 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # ========== 持仓监控（修复版：获取实时价格） ==========
+    # ========== 持仓监控 ==========
     st.markdown("### 💼 持仓监控")
     
     if hasattr(引擎, '持仓') and 引擎.持仓:
