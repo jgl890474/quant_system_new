@@ -1,6 +1,27 @@
 # -*- coding: utf-8 -*-
 
 class 策略运行器:
+    """策略运行器 - 支持策略启停控制"""
+    
+    # 全局策略状态存储
+    _策略状态 = {}
+    
+    @classmethod
+    def 设置策略状态(cls, 策略名称, 是否启用):
+        """设置策略的启用/停止状态"""
+        cls._策略状态[策略名称] = 是否启用
+        print(f"📊 策略 [{策略名称}] 已{'启用' if 是否启用 else '停止'}")
+    
+    @classmethod
+    def 获取策略状态(cls, 策略名称):
+        """获取策略的启用状态"""
+        return cls._策略状态.get(策略名称, True)  # 默认启用
+    
+    @classmethod
+    def 获取所有策略状态(cls):
+        """获取所有策略状态"""
+        return cls._策略状态.copy()
+    
     @staticmethod
     def 运行(策略信息, 行情数据):
         """
@@ -12,19 +33,24 @@ class 策略运行器:
             'buy' - 买入信号
             'sell' - 卖出信号
             'hold' - 持有/无操作
+            'stop' - 策略已停止
         """
         try:
             # 检查策略信息是否有效
             if not 策略信息:
                 return 'hold'
             
-            # 检查是否有策略类（从文件加载的才有类，默认策略没有）
+            策略名称 = 策略信息.get("名称", "")
+            
+            # ========== 关键：检查策略是否已停止 ==========
+            if not 策略运行器.获取策略状态(策略名称):
+                return 'hold'  # 策略已停止，不产生信号
+            
+            # 检查是否有策略类
             策略类 = 策略信息.get("类")
             if 策略类 is not None:
-                # 有策略类，使用策略类处理
                 实例 = 策略类(策略信息["名称"], 策略信息.get("品种", "未知"), 10000)
                 
-                # 构建行情数据
                 if 行情数据 and hasattr(行情数据, '价格'):
                     行情字典 = {'close': 行情数据.价格}
                 else:
@@ -32,7 +58,6 @@ class 策略运行器:
                 
                 return 实例.处理行情(行情字典)
             else:
-                # 没有策略类（默认策略），返回模拟信号
                 return 策略运行器._模拟信号(策略信息, 行情数据)
                 
         except Exception as e:
@@ -49,37 +74,20 @@ class 策略运行器:
             if 价格 <= 0:
                 return 'hold'
             
-            # 根据不同策略返回不同信号（演示用）
             策略名称 = 策略信息.get("名称", "")
             
             if "双均线" in 策略名称:
-                # 模拟：价格波动产生随机信号
                 import random
                 random.seed(hash(品种) % 10000)
-                result = random.choice(['buy', 'hold', 'hold'])
-                return result
-            
-            if "量价" in 策略名称:
-                return 'hold'
-            
-            if "隔夜" in 策略名称:
-                # 尾盘买入信号
-                from datetime import datetime
-                now = datetime.now()
-                if 14 <= now.hour <= 15:
-                    return 'buy'
-                return 'hold'
+                return random.choice(['buy', 'hold', 'hold'])
             
             if "加密" in 策略名称:
-                if 价格 > 0:
-                    return 'buy'
-                return 'hold'
+                return 'buy' if 价格 > 0 else 'hold'
             
-            if "动量" in 策略名称:
-                return 'hold'
-            
-            if "利差" in 策略名称:
-                return 'hold'
+            if "隔夜" in 策略名称:
+                from datetime import datetime
+                now = datetime.now()
+                return 'buy' if 14 <= now.hour <= 15 else 'hold'
             
             return 'hold'
         except:
