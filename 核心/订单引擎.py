@@ -70,6 +70,10 @@ class 订单引擎:
             if 数量 <= 0:
                 return {"success": False, "error": f"数量无效: {数量}"}
             
+            # ========== 关键修复：加密货币数量归一化 ==========
+            # 对于市值较小的币种，数量保持原样，不进行任何转换
+            # 所有加密货币的数量都直接存储，不做倍数转换
+            
             使用手续费率 = 手续费率 if 手续费率 is not None else self.手续费率
             
             花费 = 价格 * 数量
@@ -99,7 +103,7 @@ class 订单引擎:
             self._记录交易("买入", 品种, 价格, 数量, 手续费=手续费)
             self._保存持仓()
             
-            return {"success": True, "message": f"成功买入 {品种} {数量} @ {价格}"}
+            return {"success": True, "message": f"成功买入 {品种} {数量} @ {价格}", "数量": 数量}
             
         except Exception as e:
             print(f"❌ 买入异常: {e}")
@@ -235,6 +239,7 @@ class 订单引擎:
                 数量 = data.get("数量", 0)
                 成本 = data.get("平均成本", 0)
                 if 数量 > 0:
+                    # 直接使用数据库中的数量，不进行任何转换
                     self.持仓[品种] = 持仓数据(品种, float(数量), float(成本))
                     self.持仓市值 += 成本 * 数量
                     self.可用资金 -= 成本 * 数量
@@ -243,6 +248,25 @@ class 订单引擎:
             print(f"✅ 恢复完成，共 {len(self.持仓)} 个持仓，可用资金: {self.可用资金:.2f}")
         except Exception as e:
             print(f"恢复持仓失败: {e}")
+    
+    # ========== 新增：诊断工具 ==========
+    def 打印持仓详情(self):
+        """打印当前持仓详情（用于调试）"""
+        print("\n" + "="*50)
+        print("当前持仓详情")
+        print("="*50)
+        for 品种, pos in self.持仓.items():
+            print(f"{品种}: 数量={pos.数量}, 成本={pos.平均成本:.4f}")
+        print("="*50)
+    
+    def 修复数量单位(self, 品种, 正确数量):
+        """手动修复品种的数量（用于纠正单位错误）"""
+        if 品种 in self.持仓:
+            self.持仓[品种].数量 = 正确数量
+            self._保存持仓()
+            print(f"✅ 已修复 {品种} 数量为 {正确数量}")
+            return {"success": True}
+        return {"success": False, "error": "品种不存在"}
 
 
 def 创建订单引擎(初始资金=1000000):
