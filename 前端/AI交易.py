@@ -157,7 +157,7 @@ def 执行买入(引擎, 代码, 价格, 数量, 市场类型, 策略类型):
         return {"success": False, "error": str(e)}
 
 
-# ========== 关键：必须有的显示函数 ==========
+# ========== 显示函数 ==========
 def 显示(引擎, 策略加载器, AI引擎):
     """AI 智能交易页面"""
     st.markdown("### 🤖 AI 智能交易")
@@ -174,28 +174,28 @@ def 显示(引擎, 策略加载器, AI引擎):
     市场列表 = []
     for 策略 in 所有运行中策略:
         市场 = 策略.get("市场", "")
-        if market and market not in 市场列表:
-            市场列表.append(market)
+        if 市场 and 市场 not in 市场列表:
+            市场列表.append(市场)
     
     if not 市场列表:
         st.warning("⚠️ 无法获取市场列表")
         return
     
-    market = st.selectbox("选择市场", 市场列表)
+    选中的市场 = st.selectbox("选择市场", 市场列表)
     
     # 获取该市场下的策略
-    该市场策略 = [s for s in 所有运行中策略 if s.get("市场") == market]
+    该市场策略 = [s for s in 所有运行中策略 if s.get("市场") == 选中的市场]
     
     if not 该市场策略:
-        st.warning(f"⚠️ 当前没有运行中的 {market} 策略")
+        st.warning(f"⚠️ 当前没有运行中的 {选中的市场} 策略")
         return
     
     策略选项 = [s.get("名称", "") for s in 该市场策略]
-    策略类型 = st.selectbox("选择策略", 策略选项)
+    选中的策略 = st.selectbox("选择策略", 策略选项)
     
     # 显示策略品种
     for 策略 in 该市场策略:
-        if 策略.get("名称") == 策略类型:
+        if 策略.get("名称") == 选中的策略:
             品种 = 策略.get("品种", "")
             st.caption(f"📌 策略品种: {品种}")
             break
@@ -209,7 +209,7 @@ def 显示(引擎, 策略加载器, AI引擎):
     if st.button("🚀 AI 分析", type="primary", width='stretch'):
         with st.spinner(f"AI 正在分析..."):
             try:
-                st.session_state.ai_list = 获取真实AI推荐(market, 策略类型, 引擎, 策略加载器)
+                st.session_state.ai_list = 获取真实AI推荐(选中的市场, 选中的策略, 引擎, 策略加载器)
                 if st.session_state.ai_list:
                     st.success(f"✅ AI 分析完成！共推荐 {len(st.session_state.ai_list)} 只标的")
                 else:
@@ -238,7 +238,7 @@ def 显示(引擎, 策略加载器, AI引擎):
                 with col3:
                     if st.button(f"买入", key=f"buy_{code}_{idx}"):
                         if price > 0:
-                            结果 = 执行买入(引擎, code, price, 100, "加密货币", 策略类型)
+                            结果 = 执行买入(引擎, code, price, 100, "加密货币", 选中的策略)
                             if 结果.get("success"):
                                 st.success(f"✅ 买入成功")
                                 st.rerun()
