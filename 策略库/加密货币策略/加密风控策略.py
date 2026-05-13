@@ -90,19 +90,15 @@ class 加密风控策略(策略基类):
         if len(prices) < 20 or len(rsi_values) < 20:
             return False
         
-        # 最近20根K线
         recent_prices = prices[-20:]
         recent_rsi = rsi_values[-20:]
         
-        # 价格新低
         price_min = min(recent_prices)
         price_min_index = recent_prices.index(price_min)
         
-        # RSI低点
         rsi_min = min(recent_rsi)
         rsi_min_index = recent_rsi.index(rsi_min)
         
-        # 底背离：价格新低，但RSI低点高于前低
         if price_min_index > rsi_min_index:
             return True
         return False
@@ -112,13 +108,6 @@ class 加密风控策略(策略基类):
         if len(prices) < 20 or len(rsi_values) < 20:
             return False
         
-        recent_prices = prices[-20:]
-        recent_rsi = rsi_values[-20:]
-        
-        price_max = max(recent_prices)
-        rsi_max = max(recent_rsi)
-        
-        # 简化判断：价格涨但RSI跌
         if prices[-1] > prices[-5] and rsi_values[-1] < rsi_values[-5]:
             return True
         return False
@@ -128,25 +117,18 @@ class 加密风控策略(策略基类):
         if len(self.价格历史) < 10:
             return False
         
-        # 条件1：连续两根大阴线
         最近两日跌幅 = (self.价格历史[-2] - self.价格历史[-1]) / self.价格历史[-2]
-        if 最近两日跌幅 < -0.05:  # 单日跌幅超过5%
-            pass
-        else:
+        if 最近两日跌幅 >= -0.05:
             return False
         
-        # 条件2：成交量放大（恐慌盘）
         if len(self.成交量历史) > self.成交量周期:
             平均成交量 = sum(self.成交量历史[-self.成交量周期:]) / self.成交量周期
             当前成交量 = k线.get('volume', 0)
-            if 当前成交量 > 平均成交量 * 1.5:  # 放量1.5倍
-                pass
-            else:
+            if 当前成交量 <= 平均成交量 * 1.5:
                 return False
         
-        # 条件3：价格远离长期均线
         长期均线 = self.计算均线(self.价格历史, self.长期均线)
-        if self.价格历史[-1] < 长期均线 * 0.85:  # 偏离15%以上
+        if self.价格历史[-1] < 长期均线 * 0.85:
             return True
         
         return False
@@ -157,22 +139,14 @@ class 加密风控策略(策略基类):
             return None
         
         当前价 = self.价格历史[-1]
-        收盘确认 = len(self.价格历史) >= 2 and self.价格历史[-1] and self.价格历史[-2]
         
-        if not收盘确认:
-            return None
-        
-        # 计算均线
         MA7 = self.计算均线(self.价格历史, 7)
         MA25 = self.计算均线(self.价格历史, 25)
-        MA50 = self.计算均线(self.价格历史, 50)
         
-        # 跌破关键均线 → 卖出信号
         if 当前价 < MA7 and 当前价 < MA25:
             return "sell"
         
-        # 突破关键均线 → 买入信号
-        if 当前价 > MA7 and 当前价 > MA25 and self.价格历史[-2] <= MA25:
+        if 当前价 > MA7 and 当前价 > MA25 and len(self.价格历史) >= 2 and self.价格历史[-2] <= MA25:
             return "buy"
         
         return None
@@ -182,10 +156,6 @@ class 加密风控策略(策略基类):
         if len(self.价格历史) < 50:
             return False, None
         
-        当前价 = self.价格历史[-1]
-        当前成交量 = k线.get('volume', 0)
-        
-        # 计算RSI
         rsi = self.计算RSI(self.价格历史, self.RSI周期)
         self.RSI历史.append(rsi)
         
@@ -194,7 +164,7 @@ class 加密风控策略(策略基类):
             print(f"   📈 检测到底背离信号")
             return True, "底背离"
         
-        # 条件2：大跌反弹信号（左侧抄底）
+        # 条件2：大跌反弹信号
         if self.检查大跌反弹信号(k线):
             print(f"   📈 检测到大跌反弹信号")
             return True, "大跌反弹"
@@ -216,7 +186,7 @@ class 加密风控策略(策略基类):
         """检查平仓/止损条件"""
         盈亏率 = (当前价 - 入场价) / 入场价
         
-        # 条件1：止损（单笔1%本金）
+        # 条件1：止损
         if 盈亏率 <= -self.止损比例:
             return True, f"止损触发 (盈亏: {盈亏率*100:.2f}%)"
         
@@ -240,7 +210,7 @@ class 加密风控策略(策略基类):
     def 计算仓位(self, 总资金, 当前价):
         """计算开仓数量（1%资金 + 20倍杠杆）"""
         # 1%资金作为保证金
-        ｜保证金 = 总资金 * self.单笔仓位比例
+        保证金 = 总资金 * self.单笔仓位比例
         
         # 20倍杠杆下的合约价值
         合约价值 = 保证金 * self.杠杆倍数
@@ -297,18 +267,14 @@ class 加密风控策略(策略基类):
         应开仓, 信号类型 = self.检查开仓条件(k线)
         
         if 应开仓:
-            # 计算仓位
-            数量 = self.计算仓位(self.资金, 当前价)
-            
             # 存储开仓信息
             self.入场价 = 当前价
             self.入场时间 = datetime.now()
-            持仓数量 = 数量
             
             self.今日交易次数 += 1
             
             print(f"   🟢 开仓信号: {信号类型}")
-            print(f"   📊 入场价: {当前价:.2f}, 数量: {数量}")
+            print(f"   📊 入场价: {当前价:.2f}")
             
             return 'buy'
         
