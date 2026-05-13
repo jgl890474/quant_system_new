@@ -174,20 +174,20 @@ def 显示(引擎, 策略加载器, AI引擎):
     市场列表 = []
     for 策略 in 所有运行中策略:
         市场 = 策略.get("市场", "")
-        if 市场和 市场 not in 市场列表:
-            市场列表.append(市场)
+        if market and market not in 市场列表:
+            市场列表.append(market)
     
     if not 市场列表:
         st.warning("⚠️ 无法获取市场列表")
         return
     
-    市场 = st.selectbox("选择市场", 市场列表)
+    market = st.selectbox("选择市场", 市场列表)
     
     # 获取该市场下的策略
-    该市场策略 = [s for s in 所有运行中策略 if s.get("市场") == 市场]
+    该市场策略 = [s for s in 所有运行中策略 if s.get("市场") == market]
     
     if not 该市场策略:
-        st.warning(f"⚠️ 当前没有运行中的 {市场} 策略")
+        st.warning(f"⚠️ 当前没有运行中的 {market} 策略")
         return
     
     策略选项 = [s.get("名称", "") for s in 该市场策略]
@@ -209,7 +209,7 @@ def 显示(引擎, 策略加载器, AI引擎):
     if st.button("🚀 AI 分析", type="primary", width='stretch'):
         with st.spinner(f"AI 正在分析..."):
             try:
-                st.session_state.ai_list = 获取真实AI推荐(市场, 策略类型, 引擎, 策略加载器)
+                st.session_state.ai_list = 获取真实AI推荐(market, 策略类型, 引擎, 策略加载器)
                 if st.session_state.ai_list:
                     st.success(f"✅ AI 分析完成！共推荐 {len(st.session_state.ai_list)} 只标的")
                 else:
