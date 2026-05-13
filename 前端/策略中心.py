@@ -36,67 +36,68 @@ def 显示(引擎, 策略加载器, 策略信号):
             策略名称 = 策略.get("名称", "未知")
             品种 = 策略.get("品种", "未知")
             
-            col1, col2, col3, col4 = st.columns([2, 1.5, 1, 1])
+            # 获取当前策略状态
+            当前状态 = 策略运行器.获取策略状态(策略名称)
+            状态文本 = "🟢 运行中" if 当前状态 else "🔴 已停止"
+            
+            col1, col2, col3 = st.columns([2, 1, 1])
             
             with col1:
                 st.markdown(f"**{策略名称}**")
                 st.caption(f"品种: {品种}")
+                st.caption(f"状态: {状态文本}")
             
             with col2:
-                # 获取当前策略状态
-                当前状态 = 策略运行器.获取策略状态(策略名称)
-                状态文本 = "🟢 运行中" if 当前状态 else "🔴 已停止"
-                状态颜色 = "green" if 当前状态 else "red"
-                st.markdown(f"<span style='color:{状态颜色}'>{状态文本}</span>", unsafe_allow_html=True)
-            
-            with col3:
                 # 启停按钮
                 if 当前状态:
                     if st.button("⏹️ 停止", key=f"stop_{策略名称}"):
                         策略运行器.设置策略状态(策略名称, False)
+                        st.success(f"✅ 策略 [{策略名称}] 已停止")
                         st.rerun()
                 else:
                     if st.button("▶️ 启动", key=f"start_{策略名称}"):
                         策略运行器.设置策略状态(策略名称, True)
+                        st.success(f"✅ 策略 [{策略名称}] 已启动")
                         st.rerun()
             
-            with col4:
-                # 测试运行按钮
+            with col3:
+                # 测试按钮（仅显示信号，不执行交易）
                 if st.button("🧪 测试", key=f"test_{策略名称}"):
-                    with st.spinner(f"正在运行 {策略名称}..."):
+                    with st.spinner(f"正在测试 {策略名称}..."):
                         try:
                             测试行情 = 行情获取.获取价格(品种)
                             if 测试行情 and hasattr(测试行情, '价格'):
-                                信号 = 策略运行器.运行(策略, 测试行情)
-                                st.success(f"信号: {信号}")
+                                from 核心.策略运行器 import 策略运行器 as 运行器
+                                信号 = 运行器.运行(策略, 测试行情)
+                                st.info(f"📡 当前信号: {信号}")
                             else:
                                 st.error("获取行情失败")
                         except Exception as e:
-                            st.error(f"运行失败: {e}")
+                            st.error(f"测试失败: {e}")
         
         st.markdown("---")
     
-    # ========== 全局控制 ==========
+    # ========== 全局控制（全部启动/全部停止） ==========
     st.markdown("### 🌐 全局控制")
     
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     
     with col1:
         if st.button("▶️ 全部启动", width='stretch'):
             for 策略 in 策略列表:
-                策略运行器.设置策略状态(策略.get("名称", ""), True)
+                策略名称 = 策略.get("名称", "")
+                if 策略名称:
+                    策略运行器.设置策略状态(策略名称, True)
             st.success("✅ 所有策略已启动")
             st.rerun()
     
     with col2:
         if st.button("⏹️ 全部停止", width='stretch'):
             for 策略 in 策略列表:
-                策略运行器.设置策略状态(策略.get("名称", ""), False)
+                策略名称 = 策略.get("名称", "")
+                if 策略名称:
+                    策略运行器.设置策略状态(策略名称, False)
             st.warning("⚠️ 所有策略已停止")
-            st.rerun()
-    
-    with col3:
-        if st.button("🔄 刷新状态", width='stretch'):
             st.rerun()
     
     st.markdown("---")
@@ -132,7 +133,8 @@ def 显示(引擎, 策略加载器, 策略信号):
             
             with col3:
                 try:
-                    信号 = 策略运行器.运行(策略, 行情获取.获取价格(品种))
+                    from 核心.策略运行器 import 策略运行器 as 运行器
+                    信号 = 运行器.运行(策略, 行情获取.获取价格(品种))
                     
                     if 信号 == 'buy':
                         st.markdown("🟢 **买入**")
@@ -151,64 +153,6 @@ def 显示(引擎, 策略加载器, 策略信号):
                 if 品种 in 持仓品种列表:
                     pos = 引擎.持仓[品种]
                     数量 = getattr(pos, '数量', 0)
-                    成本 = getattr(pos, '平均成本', 0)
                     st.caption(f"📦 持仓: {数量}股")
-                    st.caption(f"💰 成本: ¥{成本:.2f}")
-                    
-                    if st.button("🏃 执行信号", key=f"exec_{策略名称}"):
-                        信号 = 策略运行器.运行(策略, 行情获取.获取价格(品种))
-                        if 信号 == 'buy':
-                            try:
-                                价格 = 行情获取.获取价格(品种).价格
-                                结果 = 引擎.买入(品种, None, 100)
-                                if 结果.get("success"):
-                                    st.success(f"✅ 已买入 {品种}")
-                                    st.rerun()
-                                else:
-                                    st.error(f"买入失败: {结果.get('error')}")
-                            except Exception as e:
-                                st.error(f"执行失败: {e}")
-                        elif 信号 == 'sell':
-                            try:
-                                价格 = 行情获取.获取价格(品种).价格
-                                结果 = 引擎.卖出(品种, None, 数量)
-                                if 结果.get("success"):
-                                    st.success(f"✅ 已卖出 {品种}")
-                                    st.rerun()
-                                else:
-                                    st.error(f"卖出失败: {结果.get('error')}")
-                            except Exception as e:
-                                st.error(f"执行失败: {e}")
-                else:
-                    if st.button("🏃 执行买入", key=f"buy_{策略名称}"):
-                        信号 = 策略运行器.运行(策略, 行情获取.获取价格(品种))
-                        if 信号 == 'buy':
-                            try:
-                                价格 = 行情获取.获取价格(品种).价格
-                                结果 = 引擎.买入(品种, None, 100)
-                                if 结果.get("success"):
-                                    st.success(f"✅ 已买入 {品种}")
-                                    st.rerun()
-                                else:
-                                    st.error(f"买入失败: {结果.get('error')}")
-                            except Exception as e:
-                                st.error(f"执行失败: {e}")
-                        else:
-                            st.warning("当前无买入信号")
-            
-            st.markdown("---")
-    
-    # 显示策略运行状态汇总
-    with st.expander("📊 策略运行状态汇总"):
-        状态数据 = []
-        for 策略 in 策略列表:
-            策略名称 = 策略.get("名称", "未知")
-            是否启用 = 策略运行器.获取策略状态(策略名称)
-            状态数据.append({
-                "策略名称": 策略名称,
-                "状态": "🟢 运行中" if 是否启用 else "🔴 已停止",
-                "品种": 策略.get("品种", "未知"),
-                "类别": 策略.get("类别", "其他")
-            })
         
-        st.dataframe(pd.DataFrame(状态数据), width='stretch', hide_index=True)
+        st.markdown("---")
