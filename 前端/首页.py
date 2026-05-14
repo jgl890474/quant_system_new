@@ -74,10 +74,11 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             try:
                 价格 = 获取行情的价格(品种["代码"])
                 if 价格 and 价格 > 0:
+                    # 统一使用人民币符号 ¥
                     if "BTC" in 品种["代码"]:
-                        st.metric(品种["显示名"], f"${价格:,.0f}")
+                        st.metric(品种["显示名"], f"¥{价格:,.0f}")
                     else:
-                        st.metric(品种["显示名"], f"${价格:.2f}")
+                        st.metric(品种["显示名"], f"¥{价格:.2f}")
                 else:
                     st.metric(品种["显示名"], "—")
             except Exception:
@@ -99,7 +100,7 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         try:
             预览价格 = 获取行情的价格(买入代码)
             if 预览价格 and 预览价格 > 0:
-                st.caption(f"📌 参考价格: ${预览价格:.4f}")
+                st.caption(f"📌 参考价格: ¥{预览价格:.4f}")
             else:
                 st.caption("📌 参考价格: 获取中...")
         except:
@@ -164,7 +165,7 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             pos = 引擎.持仓[卖品种]
             最大可卖数量 = pos.数量
             
-            st.caption(f"持仓成本: ${pos.平均成本:.4f}")
+            st.caption(f"持仓成本: ¥{pos.平均成本:.4f}")
             if 卖品种 in ["ETH-USD", "BTC-USD", "SOL-USD", "BNB-USD"]:
                 st.caption(f"当前持仓数量: {最大可卖数量:.4f}")
             else:
@@ -173,7 +174,7 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             try:
                 预览价格 = 获取行情的价格(卖品种)
                 if 预览价格 and 预览价格 > 0:
-                    st.caption(f"📌 参考价格: ${预览价格:.4f}")
+                    st.caption(f"📌 参考价格: ¥{预览价格:.4f}")
                 else:
                     st.caption("📌 参考价格: 获取中...")
             except:
