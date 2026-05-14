@@ -14,10 +14,7 @@ class 技术指标计算器:
     
     @staticmethod
     def 计算MACD(df: pd.DataFrame, fast=12, slow=26, signal=9) -> Dict:
-        """
-        计算MACD指标
-        返回: MACD线, 信号线, 柱状图, 金叉/死叉状态
-        """
+        """计算MACD指标"""
         if df.empty or len(df) < slow + signal:
             return {'MACD': 0, '信号线': 0, '柱状图': 0, '金叉': False, '死叉': False, '状态': '中性'}
         
@@ -206,7 +203,7 @@ class 技术指标计算器:
     def 计算趋势指标(df: pd.DataFrame) -> Dict:
         """计算趋势相关指标"""
         if df.empty or len(df) < 20:
-            return {'MA5': 0, 'MA10': 0, 'MA20': 0, 'MA60': 0, '趋势': '未知', '趋势得分': 20, '趋势强度': '未知', 'ADX': 0}
+            return {'MA5': 0, 'MA10': 0, 'MA20': 0, 'MA60': 0, '趋势': '未知', '趋势得分': 20, '趋势强度': '未知'}
         
         close = df['收盘'] if '收盘' in df.columns else df['Close']
         high = df['最高'] if '最高' in df.columns else df['High']
