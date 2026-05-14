@@ -17,8 +17,60 @@ class 订单引擎:
         self.交易记录 = []
         self._last_price = {}
         
+        # 初始化数据库表
+        self._初始化数据库()
+        
         self._恢复持仓()
         print(f"✅ 订单引擎初始化完成，初始资金: {self.初始资金:,.0f}")
+    
+    def _初始化数据库(self):
+        """初始化数据库表结构"""
+        try:
+            import sqlite3
+            import os
+            os.makedirs('data', exist_ok=True)
+            
+            conn = sqlite3.connect('data/trades.db', check_same_thread=False)
+            cursor = conn.cursor()
+            
+            # 交易记录表
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS 交易记录 (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    时间 TEXT,
+                    品种 TEXT,
+                    动作 TEXT,
+                    价格 REAL,
+                    数量 REAL,
+                    金额 REAL,
+                    盈亏 REAL,
+                    策略名称 TEXT,
+                    手续费 REAL DEFAULT 0,
+                    备注 TEXT
+                )
+            ''')
+            
+            # 持仓快照表
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS 持仓快照 (
+                    品种 TEXT PRIMARY KEY,
+                    数量 REAL,
+                    平均成本 REAL,
+                    更新时间 TEXT
+                )
+            ''')
+            
+            # 检查是否需要添加手续费列（兼容旧表）
+            try:
+                cursor.execute("ALTER TABLE 交易记录 ADD COLUMN 手续费 REAL DEFAULT 0")
+            except:
+                pass
+            
+            conn.commit()
+            conn.close()
+            print("✅ 数据库表结构已检查/创建")
+        except Exception as e:
+            print(f"数据库初始化警告: {e}")
     
     def _获取当前时间(self, 品种):
         """根据品种类型获取对应的时区时间"""
@@ -274,6 +326,7 @@ class 订单引擎:
         }
     
     def _保存持仓(self):
+        """保存持仓到数据库"""
         try:
             数据库.保存持仓快照(self.持仓)
             print(f"💾 保存持仓: {len(self.持仓)} 个品种")
@@ -281,6 +334,7 @@ class 订单引擎:
             print(f"保存持仓失败: {e}")
     
     def _恢复持仓(self):
+        """从数据库恢复持仓"""
         try:
             持仓数据字典 = 数据库.加载持仓快照()
             from 核心.数据模型 import 持仓数据
@@ -301,7 +355,7 @@ class 订单引擎:
         except Exception as e:
             print(f"恢复持仓失败: {e}")
     
-    # ========== 新增：诊断工具 ==========
+    # ========== 诊断工具 ==========
     def 打印持仓详情(self):
         """打印当前持仓详情（用于调试）"""
         print("\n" + "="*50)
