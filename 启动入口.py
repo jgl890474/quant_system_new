@@ -221,15 +221,19 @@ def 初始化策略调度器():
                 print(f"   - 策略实例列表: {list(st.session_state.策略调度器.策略实例.keys())}")
                 
                 st.session_state.策略调度器.启动()
+                return True
             else:
                 print("❌ [DEBUG] 策略调度器创建失败（返回None）")
+                return False
                 
         except Exception as e:
             print(f"❌ [DEBUG] 策略调度器初始化失败: {type(e).__name__}: {e}")
             import traceback
             traceback.print_exc()
+            return False
     else:
         print(f"ℹ️ [DEBUG] 策略调度器已存在")
+        return True
 
 # ========== 初始化自动交易器（后台服务） ==========
 def 初始化自动交易器():
@@ -427,14 +431,26 @@ with st.sidebar:
                     st.write(f"  - {s}")
     else:
         st.caption("⚙️ 策略调度器未启动")
-        # 显示调试信息
-        with st.expander("🔧 调试信息", expanded=False):
+        
+        # 显示调试信息（展开显示）
+        with st.expander("🔧 调试信息", expanded=True):
             st.write(f"策略调度器可用: {策略调度器可用}")
             st.write(f"策略调度器实例: {st.session_state.策略调度器}")
-        
-        # 尝试启动策略调度器
-        if 策略调度器可用 and st.session_state.策略调度器 is None:
-            初始化策略调度器()
+            
+            # 手动启动按钮
+            if st.button("🚀 手动启动策略调度器", key="manual_start_scheduler"):
+                with st.spinner("正在启动策略调度器..."):
+                    if 初始化策略调度器():
+                        st.success("✅ 策略调度器已成功启动！")
+                        st.rerun()
+                    else:
+                        st.error("❌ 策略调度器启动失败，请检查配置")
+            
+            st.markdown("---")
+            st.markdown("**📝 提示：**")
+            st.markdown("- 策略调度器需要配置文件 `配置/策略调度配置.json`")
+            st.markdown("- 需要至少一个启用(`启用: true`)的策略")
+            st.markdown("- 策略类名必须与配置文件中的名称匹配")
     
     st.markdown("---")
     
