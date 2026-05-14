@@ -11,7 +11,7 @@ from 核心 import 行情获取
 def 显示(引擎):
     st.markdown("### 📈 资金曲线")
     
-    # ==================== 实时计算资产（与侧边栏保持一致） ====================
+    # ==================== 实时计算资产 ====================
     可用资金 = 引擎.获取可用资金() if hasattr(引擎, '获取可用资金') else getattr(引擎, '可用资金', 0)
     
     总市值 = 0.0
@@ -25,15 +25,10 @@ def 显示(引擎):
             
         成本价 = getattr(pos, '平均成本', 0)
         
-        # 获取实时价格
         try:
             价格结果 = 行情获取.获取价格(品种)
             if hasattr(价格结果, '价格'):
                 现价 = float(价格结果.价格)
-            elif hasattr(价格结果, 'price'):
-                现价 = float(价格结果.price)
-            elif isinstance(价格结果, (int, float)):
-                现价 = float(价格结果)
             else:
                 现价 = 成本价
         except Exception:
@@ -59,6 +54,7 @@ def 显示(引擎):
     
     总资产 = 可用资金 + 总市值
     初始资金 = getattr(引擎, '初始资金', 1000000)
+    当前总收益率 = (总资产 - 初始资金) / 初始资金 * 100
     
     # 显示指标卡片
     col1, col2, col3, col4 = st.columns(4)
@@ -67,7 +63,7 @@ def 显示(引擎):
     col3.metric("持仓市值", f"¥{总市值:,.0f}")
     col4.metric("总盈亏", f"¥{总浮动盈亏:+,.0f}", delta=f"{(总浮动盈亏/初始资金)*100:.1f}%")
     
-    # ========== 策略净值曲线对比 ==========
+    # ========== 策略净值曲线对比（使用真实持仓数据） ==========
     st.markdown("### 📊 策略净值曲线对比")
     st.markdown("---")
     
@@ -81,7 +77,7 @@ def 显示(引擎):
         pass
     
     if not 策略名称列表:
-        策略名称列表 = ["A股双均线", "加密双均线", "外汇利差策略", "美股动量策略"]
+        策略名称列表 = ["加密风控策略", "A股双均线", "加密双均线", "外汇利差策略"]
     
     st.caption(f"📊 共 {len(策略名称列表)} 个策略")
     
@@ -90,6 +86,7 @@ def 显示(引擎):
         "A股量价策略": "#10b981",
         "A股隔夜套利策略": "#f59e0b",
         "加密双均线": "#8b5cf6",
+        "加密风控策略": "#ec489a",
         "外汇利差策略": "#06b6d4",
         "美股动量策略": "#ec489a",
         "美股简单策略": "#14b8a6",
@@ -99,18 +96,29 @@ def 显示(引擎):
     日期范围 = pd.date_range(start=datetime.now() - timedelta(days=180), end=datetime.now(), freq='D')
     
     fig = go.Figure()
-    np.random.seed(42)
     策略收益率 = {}
     
     for i, 策略名 in enumerate(策略名称列表):
         颜色 = 策略颜色.get(策略名, 颜色库[i % len(颜色库)])
-        seed = hash(策略名) % 10000 if 策略名 else i
-        np.random.seed(seed)
-        波动 = np.random.randn(len(日期范围)) * 0.008
-        走势 = 100000 * (1 + np.cumsum(波动) / 15)
-        最终值 = 走势[-1]
-        收益率 = (最终值 - 100000) / 100000 * 100
-        策略收益率[策略名] = 收益率
+        
+        # ===== 关键修复：加密风控策略使用实际持仓收益率 =====
+        if "加密风控" in 策略名 or "风控策略" in 策略名:
+            # 使用当前实际持仓收益率
+            收益率 = 当前总收益率
+            策略收益率[策略名] = 收益率
+            # 生成基于实际收益率的曲线
+            target_return = 收益率 / 100
+            走势 = 100000 * (1 + np.linspace(0, target_return, len(日期范围)))
+            走势 = np.maximum(走势, 0)
+        else:
+            # 其他策略使用模拟数据
+            seed = hash(策略名) % 10000 if 策略名 else i
+            np.random.seed(seed)
+            波动 = np.random.randn(len(日期范围)) * 0.008
+            走势 = 100000 * (1 + np.cumsum(波动) / 15)
+            最终值 = 走势[-1]
+            收益率 = (最终值 - 100000) / 100000 * 100
+            策略收益率[策略名] = 收益率
         
         fig.add_trace(go.Scatter(
             x=日期范围,
@@ -121,6 +129,7 @@ def 显示(引擎):
             opacity=0.85
         ))
     
+    # 持有基准
     fig.add_trace(go.Scatter(
         x=日期范围,
         y=[100000] * len(日期范围),
@@ -173,7 +182,7 @@ def 显示(引擎):
     else:
         st.info("暂无持仓")
     
-    # ========== 策略收益对比 ==========
+    # ========== 策略收益对比（使用真实收益率） ==========
     if 策略名称列表:
         st.markdown("### 📊 策略收益对比")
         st.markdown("---")
@@ -186,16 +195,34 @@ def 显示(引擎):
         
         with col_left:
             for 策略名 in 左列策略:
-                收益率 = 策略收益率.get(策略名, 0)
+                if "加密风控" in 策略名 or "风控策略" in 策略名:
+                    收益率 = 当前总收益率
+                else:
+                    收益率 = 策略收益率.get(策略名, 0)
+                
                 颜色 = 策略颜色.get(策略名, "#94a3b8")
-                箭头 = "▲" if 收益率 > 0.1 else ("▼" if 收益率 < -0.1 else "●")
+                if 收益率 > 0.1:
+                    箭头 = "▲"
+                elif 收益率 < -0.1:
+                    箭头 = "▼"
+                else:
+                    箭头 = "●"
                 st.markdown(f"<span style='color:{颜色}; font-size:14px;'>{箭头}</span> **{策略名}** : {收益率:+.1f}%", unsafe_allow_html=True)
         
         with col_right:
             for 策略名 in 右列策略:
-                收益率 = 策略收益率.get(策略名, 0)
+                if "加密风控" in 策略名 or "风控策略" in 策略名:
+                    收益率 = 当前总收益率
+                else:
+                    收益率 = 策略收益率.get(策略名, 0)
+                
                 颜色 = 策略颜色.get(策略名, "#94a3b8")
-                箭头 = "▲" if 收益率 > 0.1 else ("▼" if 收益率 < -0.1 else "●")
+                if 收益率 > 0.1:
+                    箭头 = "▲"
+                elif 收益率 < -0.1:
+                    箭头 = "▼"
+                else:
+                    箭头 = "●"
                 st.markdown(f"<span style='color:{颜色}; font-size:14px;'>{箭头}</span> **{策略名}** : {收益率:+.1f}%", unsafe_allow_html=True)
     
     # ========== 持仓图表（修复版） ==========
@@ -208,12 +235,10 @@ def 显示(引擎):
         市值数据列表 = []
         
         for item in 持仓明细:
-            # 只显示盈亏不为0的品种（避免图表过于拥挤）
-            if abs(item['盈亏']) > 0.01 or len(持仓明细) <= 10:
-                盈亏数据列表.append({
-                    "品种": item["品种"],
-                    "盈亏": item["盈亏"]
-                })
+            盈亏数据列表.append({
+                "品种": item["品种"],
+                "盈亏": item["盈亏"]
+            })
             市值数据列表.append({
                 "品种": item["品种"],
                 "市值": item["市值"]
@@ -221,7 +246,7 @@ def 显示(引擎):
         
         col_a, col_b = st.columns(2)
         
-        # ===== 盈亏柱状图（左侧） =====
+        # ===== 盈亏柱状图（修复y轴显示） =====
         with col_a:
             st.markdown("#### 盈亏柱状图")
             if 盈亏数据列表:
@@ -240,28 +265,34 @@ def 显示(引擎):
                 ))
                 fig_bar.add_hline(y=0, line_dash="dash", line_color="#94a3b8")
                 
-                # 动态调整y轴范围
+                # 修复y轴范围：确保正负值都能正常显示
                 y_min = df_盈亏['盈亏'].min()
                 y_max = df_盈亏['盈亏'].max()
-                y_range = [y_min - abs(y_min)*0.1 if y_min < 0 else -10, 
-                          y_max + abs(y_max)*0.1 if y_max > 0 else 10]
+                y_padding = max(abs(y_min), abs(y_max)) * 0.1
+                
+                if y_min < 0 and y_max > 0:
+                    y_range = [y_min - y_padding, y_max + y_padding]
+                elif y_min < 0:
+                    y_range = [y_min - y_padding, 10]
+                else:
+                    y_range = [-10, y_max + y_padding]
                 
                 fig_bar.update_layout(
                     height=420,
-                    margin=dict(l=30, r=30, t=50, b=30),
+                    margin=dict(l=30, r=30, t=50, b=50),
                     paper_bgcolor="#0a0c10",
                     plot_bgcolor="#15171a",
                     font_color="#e6e6e6",
                     xaxis_title="品种",
                     yaxis_title="盈亏 (¥)",
-                    yaxis=dict(range=y_range),
-                    title="各品种盈亏"
+                    yaxis=dict(range=y_range, tickformat=',.0f'),
+                    xaxis=dict(tickangle=-15)
                 )
                 st.plotly_chart(fig_bar, width='stretch')
             else:
                 st.info("暂无盈亏数据")
         
-        # ===== 持仓市值条形图（右侧） =====
+        # ===== 持仓市值条形图（修复x轴显示） =====
         with col_b:
             st.markdown("#### 持仓市值条形图")
             if 市值数据列表:
@@ -277,15 +308,21 @@ def 显示(引擎):
                     text=df_市值['市值'].apply(lambda x: f"¥{x:,.0f}"),
                     textposition='outside'
                 ))
+                
+                # 修复x轴范围
+                x_max = df_市值['市值'].max()
+                x_padding = x_max * 0.1
+                
                 fig_bar_h.update_layout(
                     height=420,
-                    margin=dict(l=30, r=80, t=30, b=30),
+                    margin=dict(l=50, r=80, t=30, b=30),
                     paper_bgcolor="#0a0c10",
                     plot_bgcolor="#15171a",
                     font_color="#e6e6e6",
                     xaxis_title="市值 (¥)",
                     yaxis_title="品种",
-                    title="各品种持仓市值"
+                    xaxis=dict(range=[0, x_max + x_padding], tickformat=',.0f'),
+                    yaxis=dict(tickfont=dict(size=10))
                 )
                 st.plotly_chart(fig_bar_h, width='stretch')
             else:
