@@ -26,7 +26,7 @@ class 新闻情绪分析器:
                 'q': keyword,
                 'lang': 'zh',
                 'max': 5,
-                'token': 'demo'  # 免费demo token
+                'token': 'demo'
             }
             response = requests.get(url, params=params, timeout=10)
             if response.status_code == 200:
