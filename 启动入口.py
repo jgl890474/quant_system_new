@@ -79,9 +79,10 @@ except ImportError:
 try:
     from 自动化.策略调度器 import 获取策略调度器
     策略调度器可用 = True
+    print("✅ 策略调度器导入成功")
 except ImportError as e:
     策略调度器可用 = False
-    print(f"策略调度器导入失败: {e}")
+    print(f"❌ 策略调度器导入失败: {e}")
 
 # ========== 初始化数据库 ==========
 try:
@@ -193,35 +194,42 @@ if '风控引擎' not in st.session_state:
 
 风控 = st.session_state.风控引擎
 
-# ========== 初始化策略调度器 ==========
+# ========== 初始化策略调度器（带调试） ==========
 def 初始化策略调度器():
     """初始化策略调度器（只执行一次）"""
+    print("=" * 50)
+    print("🔧 [DEBUG] 开始初始化策略调度器...")
+    print("=" * 50)
+    
     if not 策略调度器可用:
+        print("❌ [DEBUG] 策略调度器不可用（导入失败）")
         return
+    
+    print(f"✅ [DEBUG] 策略调度器可用")
     
     if st.session_state.策略调度器 is None:
         try:
+            print("📂 [DEBUG] 正在创建策略调度器...")
+            print(f"   引擎类型: {type(引擎)}")
+            
             st.session_state.策略调度器 = 获取策略调度器(引擎)
+            
             if st.session_state.策略调度器:
-                st.session_state.策略调度器.启动()
-                print("✅ 策略调度器已初始化并启动")
+                print(f"✅ [DEBUG] 策略调度器创建成功")
+                print(f"   - 策略实例数量: {len(st.session_state.策略调度器.策略实例)}")
+                print(f"   - 策略配置数量: {len(st.session_state.策略调度器.策略配置)}")
+                print(f"   - 策略实例列表: {list(st.session_state.策略调度器.策略实例.keys())}")
                 
-                # 初始化风控引擎的策略资金池
-                if hasattr(风控, '初始化策略资金'):
-                    try:
-                        import json
-                        from pathlib import Path
-                        配置文件 = Path("配置/策略调度配置.json")
-                        if 配置文件.exists():
-                            with open(配置文件, 'r', encoding='utf-8') as f:
-                                data = json.load(f)
-                                策略配置列表 = data.get("策略调度", [])
-                                总资金 = 引擎.获取总资产() if hasattr(引擎, '获取总资产') else INITIAL_CAPITAL
-                                风控.初始化策略资金(总资金, 策略配置列表)
-                    except Exception as e:
-                        print(f"初始化策略资金池失败: {e}")
+                st.session_state.策略调度器.启动()
+            else:
+                print("❌ [DEBUG] 策略调度器创建失败（返回None）")
+                
         except Exception as e:
-            print(f"策略调度器初始化失败: {e}")
+            print(f"❌ [DEBUG] 策略调度器初始化失败: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
+    else:
+        print(f"ℹ️ [DEBUG] 策略调度器已存在")
 
 # ========== 初始化自动交易器（后台服务） ==========
 def 初始化自动交易器():
@@ -409,7 +417,7 @@ with st.sidebar:
     
     if 策略调度器可用 and st.session_state.策略调度器:
         调度器状态 = st.session_state.策略调度器.获取状态() if hasattr(st.session_state.策略调度器, '获取状态') else {}
-        st.caption(f"📋 运行中: {'🟢是' if调度器状态.get('运行中') else '🔴否'}")
+        st.caption(f"📋 运行中: {'🟢是' if 调度器状态.get('运行中') else '🔴否'}")
         st.caption(f"🎯 策略数量: {调度器状态.get('策略数量', 0)}")
         
         # 显示策略列表
@@ -419,6 +427,11 @@ with st.sidebar:
                     st.write(f"  - {s}")
     else:
         st.caption("⚙️ 策略调度器未启动")
+        # 显示调试信息
+        with st.expander("🔧 调试信息", expanded=False):
+            st.write(f"策略调度器可用: {策略调度器可用}")
+            st.write(f"策略调度器实例: {st.session_state.策略调度器}")
+        
         # 尝试启动策略调度器
         if 策略调度器可用 and st.session_state.策略调度器 is None:
             初始化策略调度器()
@@ -617,6 +630,12 @@ def 清理资源():
 atexit.register(清理资源)
 
 # ========== 启动策略调度器 ==========
+print("=" * 50)
+print("🚀 系统启动，准备初始化策略调度器...")
+print("=" * 50)
+
 # 在最后启动策略调度器
 if 策略调度器可用 and st.session_state.策略调度器 is None:
     初始化策略调度器()
+else:
+    print(f"策略调度器状态: 可用={策略调度器可用}, 实例={st.session_state.策略调度器}")
