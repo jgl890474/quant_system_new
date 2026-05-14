@@ -2,6 +2,9 @@
 import streamlit as st
 import sys
 import os
+import threading
+import time
+from datetime import datetime
 
 # 添加项目根目录到系统路径
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -45,6 +48,29 @@ except ImportError:
         @classmethod
         def 获取策略状态(cls, 名称): return True
     st.warning("⚠️ 策略运行器模块导入失败，使用兼容模式")
+
+# ========== 导入自动交易模块 ==========
+try:
+    from 脚本.自动交易 import 自动交易机器人, 获取机器人
+    自动交易可用 = True
+except ImportError as e:
+    自动交易可用 = False
+    st.warning(f"⚠️ 自动交易模块导入失败: {e}")
+
+# ========== 导入定时任务模块 ==========
+try:
+    from 工具 import 定时任务 as 定时任务模块
+    定时任务可用 = True
+except ImportError as e:
+    定时任务可用 = False
+    print(f"定时任务模块导入失败: {e}")
+
+# ========== 导入消息推送模块 ==========
+try:
+    from 工具 import 消息推送 as 推送
+    推送可用 = True
+except ImportError:
+    推送可用 = False
 
 # ========== 初始化数据库 ==========
 try:
@@ -106,6 +132,16 @@ if '成功消息' not in st.session_state:
 if '错误消息' not in st.session_state:
     st.session_state.错误消息 = None
 
+# ========== 自动交易器状态 ==========
+if '自动交易器' not in st.session_state:
+    st.session_state.自动交易器 = None
+
+if '自动交易开关' not in st.session_state:
+    st.session_state.自动交易开关 = False
+
+if '后台服务已启动' not in st.session_state:
+    st.session_state.后台服务已启动 = False
+
 # ========== 初始化引擎变量 ==========
 引擎 = st.session_state.订单引擎
 策略加载器 = st.session_state.策略加载器
@@ -131,6 +167,69 @@ if '风控引擎' not in st.session_state:
         st.session_state.风控引擎 = 简单风控引擎()
 
 风控 = st.session_state.风控引擎
+
+# ========== 初始化自动交易器（后台服务） ==========
+def 初始化自动交易器():
+    """初始化自动交易器（只执行一次）"""
+    if not 自动交易可用:
+        return
+    
+    if st.session_state.自动交易器 is None:
+        try:
+            st.session_state.自动交易器 = 获取机器人()
+            st.session_state.自动交易器.设置引擎(引擎)
+            print("✅ 自动交易器已初始化")
+        except Exception as e:
+            print(f"自动交易器初始化失败: {e}")
+
+
+def 启动后台调度器():
+    """启动后台定时任务调度器"""
+    if st.session_state.后台服务已启动:
+        return
+    
+    if not 定时任务可用:
+        return
+    
+    try:
+        # 注册定时任务
+        调度器 = 定时任务模块.获取调度器()
+        
+        # 注册函数
+        def 自动交易检查():
+            if st.session_state.自动交易开关 and st.session_state.自动交易器:
+                try:
+                    st.session_state.自动交易器.止损止盈检查()
+                except Exception as e:
+                    print(f"自动交易检查失败: {e}")
+        
+        def 发送心跳():
+            if st.session_state.自动交易开关:
+                print(f"💓 系统心跳: {datetime.now().strftime('%H:%M:%S')}")
+        
+        # 添加任务
+        调度器.注册函数("自动交易检查", 自动交易检查)
+        调度器.注册函数("心跳", 发送心跳)
+        
+        # 间隔任务
+        调度器.添加间隔任务(自动交易检查, 60, 任务名称="自动交易检查")
+        调度器.添加间隔任务(发送心跳, 300, 任务名称="心跳")
+        
+        # 启动调度器
+        调度器.启动后台()
+        st.session_state.后台服务已启动 = True
+        print("🚀 后台调度器已启动")
+        
+        # 发送启动通知
+        if 推送可用:
+            try:
+                推送.发送系统启动通知("v5.0", "腾讯云")
+            except:
+                pass
+                
+    except Exception as e:
+        print(f"后台调度器启动失败: {e}")
+
 
 # ========== 页面配置 ==========
 st.set_page_config(
@@ -187,10 +286,13 @@ with st.sidebar:
             数据库.清空所有持仓()
             st.session_state.订单引擎 = 订单引擎(初始资金=INITIAL_CAPITAL)
             引擎 = st.session_state.订单引擎
+            # 更新自动交易器的引擎
+            if st.session_state.自动交易器:
+                st.session_state.自动交易器.设置引擎(引擎)
             st.success("✅ 已清空")
             st.rerun()
-        except:
-            st.error("清空失败")
+        except Exception as e:
+            st.error(f"清空失败: {e}")
     
     if st.button("🔄 刷新策略列表", width="stretch"):
         try:
@@ -206,10 +308,52 @@ with st.sidebar:
             if hasattr(引擎, '_恢复持仓'):
                 引擎._恢复持仓()
             st.session_state.订单引擎 = 引擎
+            if st.session_state.自动交易器:
+                st.session_state.自动交易器.设置引擎(引擎)
             st.success(f"✅ 持仓已刷新，当前持仓: {len(引擎.持仓)} 个品种")
             st.rerun()
         except Exception as e:
             st.error(f"刷新失败: {e}")
+    
+    st.markdown("---")
+    
+    # ========== 自动交易控制 ==========
+    st.markdown("### 🤖 自动交易控制")
+    
+    # 初始化自动交易器
+    if 自动交易可用:
+        初始化自动交易器()
+        
+        # 自动交易开关
+        新开关状态 = st.checkbox(
+            "🔴 开启自动交易", 
+            value=st.session_state.自动交易开关,
+            help="开启后系统将自动执行交易信号"
+        )
+        
+        if 新开关状态 != st.session_state.自动交易开关:
+            st.session_state.自动交易开关 = 新开关状态
+            if st.session_state.自动交易器:
+                st.session_state.自动交易器.设置自动交易(新开关状态)
+            if 推送可用:
+                try:
+                    推送.发送飞书消息(
+                        f"自动交易已{'开启' if 新开关状态 else '关闭'}",
+                        "info"
+                    )
+                except:
+                    pass
+            st.rerun()
+        
+        # 显示自动交易状态
+        if st.session_state.自动交易器:
+            状态 = st.session_state.自动交易器.获取状态() if hasattr(st.session_state.自动交易器, '获取状态') else {}
+            st.caption(f"📊 今日交易: {状态.get('今日交易次数', 0)} 次")
+            st.caption(f"💰 今日盈亏: ¥{状态.get('今日盈亏', 0):+,.2f}")
+        
+        # 启动后台调度器
+        if not st.session_state.后台服务已启动:
+            启动后台调度器()
     
     st.markdown("---")
     
@@ -274,16 +418,29 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 🛡️ 风控设置")
     
-    自动风控 = st.checkbox("🔴 开启自动止损止盈监控", value=False, help="开启后会自动检查持仓并执行止损止盈")
-    
     if hasattr(风控, '止损比例'):
-        st.caption(f"止损: {风控.止损比例*100:.0f}% | 止盈: {风控.止盈比例*100:.0f}%")
+        col1, col2 = st.columns(2)
+        with col1:
+            新止损 = st.number_input("止损%", value=风控.止损比例*100, step=1.0, format="%.0f")
+            if 新止损 != 风控.止损比例*100:
+                风控.止损比例 = 新止损 / 100
+        with col2:
+            新止盈 = st.number_input("止盈%", value=风控.止盈比例*100, step=1.0, format="%.0f")
+            if 新止盈 != 风控.止盈比例*100:
+                风控.止盈比例 = 新止盈 / 100
+        
+        st.caption(f"当前设置: 止损 {风控.止损比例*100:.0f}% | 止盈 {风控.止盈比例*100:.0f}%")
     
     st.markdown("---")
     try:
         st.caption(f"当前时间: {数据库.获取当前时间()}")
     except:
-        st.caption(f"当前时间: 获取失败")
+        st.caption(f"当前时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    # 系统状态
+    st.markdown("---")
+    st.caption(f"🤖 后台服务: {'🟢运行中' if st.session_state.后台服务已启动 else '🔴未启动'}")
+    st.caption(f"📊 自动交易: {'🟢开启' if st.session_state.自动交易开关 else '🔴关闭'}")
 
 # ========== 安全调用函数包装器（修复回测模块参数问题） ==========
 def 安全调用(模块, 默认信息="模块开发中"):
@@ -343,6 +500,8 @@ if query_params.get("refresh") == "true":
     if hasattr(引擎, '_恢复持仓'):
         引擎._恢复持仓()
         st.session_state.订单引擎 = 引擎
+        if st.session_state.自动交易器:
+            st.session_state.自动交易器.设置引擎(引擎)
     st.query_params.clear()
 
 # ========== Tab导航 ==========
@@ -372,3 +531,12 @@ with tabs[6]:
 # ========== 底部风险提示 ==========
 st.markdown("---")
 st.caption("⚠️ 风险提示：量化交易存在风险，历史回测结果不代表未来收益。请理性投资，注意风险控制。")
+
+# ========== 页面卸载时清理 ==========
+import atexit
+def 清理资源():
+    if st.session_state.自动交易器 and hasattr(st.session_state.自动交易器, '运行中'):
+        st.session_state.自动交易器.运行中 = False
+        print("🛑 资源已清理")
+
+atexit.register(清理资源)
