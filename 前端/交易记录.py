@@ -218,23 +218,23 @@ def 显示(引擎=None, 策略加载器=None, AI引擎=None):
         st.markdown("### 📊 按策略统计")
         
         if "策略名称" in df_filtered.columns and not 卖出记录.empty:
-            策略统计 = 卖出记录.groupby("策略名称").agg({
-                "盈亏": ["sum", "count", "mean"],
-                "品种": "count"
-            }).round(2)
-            
-            策略统计.columns = ["总盈亏", "交易次数", "平均盈亏"]
-            策略统计 = 策略统计.sort_values("总盈亏", ascending=False)
-            
-            st.dataframe(
-                策略统计,
-                width="stretch",
-                column_config={
-                    "总盈亏": st.column_config.NumberColumn("总盈亏", format="¥%.2f"),
-                    "交易次数": st.column_config.NumberColumn("交易次数"),
-                    "平均盈亏": st.column_config.NumberColumn("平均盈亏", format="¥%.2f"),
-                }
-            )
+            try:
+                # 修复：只选择盈亏列进行统计
+                策略统计 = 卖出记录.groupby("策略名称")["盈亏"].agg(["sum", "count", "mean"]).round(2)
+                策略统计.columns = ["总盈亏", "交易次数", "平均盈亏"]
+                策略统计 = 策略统计.sort_values("总盈亏", ascending=False)
+                
+                st.dataframe(
+                    策略统计,
+                    width="stretch",
+                    column_config={
+                        "总盈亏": st.column_config.NumberColumn("总盈亏", format="¥%.2f"),
+                        "交易次数": st.column_config.NumberColumn("交易次数"),
+                        "平均盈亏": st.column_config.NumberColumn("平均盈亏", format="¥%.2f"),
+                    }
+                )
+            except Exception as e:
+                st.warning(f"策略统计失败: {e}")
         
         st.markdown("---")
         
