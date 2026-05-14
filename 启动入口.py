@@ -9,6 +9,9 @@ from datetime import datetime
 # 添加项目根目录到系统路径
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+# ========== 导入会话持久化 ==========
+from 工具.会话持久化 import auto_restore_session, auto_save_session
+
 # ========== 导入模块 ==========
 try:
     from 前端 import 首页, 策略中心, AI交易, 持仓管理, 资金曲线, 回测, 交易记录
@@ -77,6 +80,17 @@ try:
     数据库.初始化数据库()
 except Exception as e:
     st.warning(f"数据库初始化警告: {e}")
+
+# ========== 页面配置 ==========
+st.set_page_config(
+    page_title="量化交易系统 v5.0", 
+    page_icon="📈", 
+    layout="wide", 
+    initial_sidebar_state="expanded"
+)
+
+# ========== 恢复会话状态 ==========
+auto_restore_session()
 
 # ========== 初始化 session_state ==========
 INITIAL_CAPITAL = 1000000
@@ -230,14 +244,6 @@ def 启动后台调度器():
     except Exception as e:
         print(f"后台调度器启动失败: {e}")
 
-
-# ========== 页面配置 ==========
-st.set_page_config(
-    page_title="量化交易系统 v5.0", 
-    page_icon="📈", 
-    layout="wide", 
-    initial_sidebar_state="expanded"
-)
 
 # ========== 紧凑样式 ==========
 st.markdown("""
@@ -531,6 +537,9 @@ with tabs[6]:
 # ========== 底部风险提示 ==========
 st.markdown("---")
 st.caption("⚠️ 风险提示：量化交易存在风险，历史回测结果不代表未来收益。请理性投资，注意风险控制。")
+
+# ========== 保存会话状态 ==========
+auto_save_session()
 
 # ========== 页面卸载时清理 ==========
 import atexit
