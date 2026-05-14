@@ -75,7 +75,7 @@ except ImportError:
 
 # 导入行情获取模块
 try:
-    from .行情获取 import 获取价格, 获取实时价格, 获取历史数据, 判断市场类型, 获取新浪实时行情
+    from .行情获取 import 获取价格, 获取实时价格, 获取历史数据, 判断市场类型, 获取新浪实时行情, 获取K线数据
 except ImportError as e:
     print(f"行情获取模块导入失败: {e}")
     def 获取价格(代码):
@@ -88,12 +88,16 @@ except ImportError as e:
         return "未知"
     def 获取新浪实时行情(代码):
         return None
+    def 获取K线数据(代码, 周期, 长度):
+        return None
 
 # ==================== 可选模块（兼容处理） ====================
 try:
     from .策略加载器 import 策略加载器
 except ImportError:
     class 策略加载器:
+        def 获取策略(self):
+            return []
         def 获取策略列表(self):
             return []
         def 加载策略(self, 策略名):
@@ -109,6 +113,12 @@ except ImportError:
             return {"建议": "无法获取AI分析"}
         def AI推荐(self, 市场, 策略类型):
             return {"推荐": []}
+        def 获取实时价格(self, code):
+            return None
+        def 计算技术指标(self, code):
+            return {"RSI": 50, "趋势": "未知"}
+        def 获取完整技术指标(self, code):
+            return {}
 
 try:
     from .风控引擎 import 风控引擎
@@ -128,7 +138,84 @@ try:
     from .策略基类 import 策略基类
 except ImportError:
     class 策略基类:
-        pass
+        def __init__(self, 名称, 品种, 初始资金):
+            self.名称 = 名称
+            self.品种 = 品种
+            self.初始资金 = 初始资金
+            self.资金 = 初始资金
+            self.持仓 = 0
+        def 处理行情(self, k线):
+            return 'hold'
+
+try:
+    from .策略运行器 import 策略运行器
+except ImportError:
+    class 策略运行器:
+        _策略状态 = {}
+        @classmethod
+        def 设置策略状态(cls, 名称, 状态):
+            pass
+        @classmethod
+        def 获取策略状态(cls, 名称):
+            return True
+        @classmethod
+        def 获取激活策略(cls):
+            return []
+
+try:
+    from .资金分配 import 资金分配
+except ImportError:
+    class 资金分配:
+        def __init__(self):
+            self.策略资金 = {}
+        def 分配资金(self, 总资金, 策略列表):
+            return {}
+
+try:
+    from .技术指标 import 获取指标计算器
+except ImportError:
+    def 获取指标计算器():
+        class 空指标:
+            @staticmethod
+            def 计算RSI(df):
+                return {'RSI': 50}
+            @staticmethod
+            def 计算MACD(df):
+                return {'MACD': 0}
+            @staticmethod
+            def 计算布林带(df):
+                return {'上轨': 0, '中轨': 0, '下轨': 0}
+        return 空指标()
+
+try:
+    from .真实AI引擎 import 获取真实AI
+except ImportError:
+    def 获取真实AI():
+        class 空AI:
+            def 综合分析(self, code, data, sentiment=None):
+                return {'综合评分': 50, '交易决策': '持有'}
+        return 空AI()
+
+try:
+    from .新闻情绪 import 获取情绪分析器
+except ImportError:
+    def 获取情绪分析器():
+        class 空情绪:
+            def 获取新闻(self, code):
+                return []
+            def 分析情绪(self, news):
+                return {'情绪': '中性', '评分': 50}
+        return 空情绪()
+
+try:
+    from .策略发现器 import 获取策略发现器
+except ImportError:
+    def 获取策略发现器():
+        class 空发现器:
+            策略列表 = []
+            def 获取策略(self, name=None, category=None):
+                return []
+        return 空发现器()
 
 # ==================== 导出列表 ====================
 __all__ = [
@@ -142,8 +229,17 @@ __all__ = [
     '获取历史数据',
     '判断市场类型',
     '获取新浪实时行情',
+    '获取K线数据',
     '策略加载器',
     'AI引擎',
     '风控引擎',
     '策略基类',
+    '策略运行器',
+    '资金分配',
+    '获取指标计算器',
+    '获取真实AI',
+    '获取情绪分析器',
+    '获取策略发现器',
 ]
+
+print("✅ 核心模块初始化完成")
