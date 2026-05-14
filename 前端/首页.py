@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
 import time
+import uuid
 from 核心 import 行情获取
 
 
@@ -8,6 +9,10 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
     """
     首页 - 资金概览和实时行情
     """
+    
+    # 生成唯一的会话ID用于key
+    if 'page_key' not in st.session_state:
+        st.session_state.page_key = str(uuid.uuid4())[:8]
     
     # ==================== 强制从 session_state 获取最新引擎 ====================
     if '订单引擎' in st.session_state:
@@ -94,8 +99,9 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         可买品种列表 = ["EURUSD", "BTC-USD", "GC=F", "000001.SS", "AAPL"]
         st.caption(f"📊 可交易品种: {可买品种列表}")
         
-        # 修复：使用唯一的 key
-        买入品种 = st.selectbox("选择品种", 可买品种列表, key="buy_symbol_select_home")
+        # 使用动态唯一key
+        buy_key_suffix = st.session_state.page_key
+        买入品种 = st.selectbox("选择品种", 可买品种列表, key=f"buy_symbol_{buy_key_suffix}")
         买入代码 = 转换品种代码(买入品种)
         
         # 仅用于显示预览价格
@@ -117,8 +123,7 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         else:
             单位提示, 默认数量, 步长 = "股", 100, 10
         
-        # 修复：使用唯一的 key
-        买入数量 = st.number_input(f"数量 ({单位提示})", min_value=1, value=默认数量, step=步长, key="buy_qty_input_home")
+        买入数量 = st.number_input(f"数量 ({单位提示})", min_value=1, value=默认数量, step=步长, key=f"buy_qty_{buy_key_suffix}")
         
         if 买入品种 == "000001.SS":
             实际股数 = 买入数量 * 100
@@ -129,13 +134,14 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         else:
             st.caption(f"预计花费: 按实时价格计算")
         
-        # 修复：使用唯一的 key
-        if st.button("买入", type="primary", width="stretch", key="buy_button_home"):
+        if st.button("买入", type="primary", width="stretch", key=f"buy_btn_{buy_key_suffix}"):
             try:
-                结果 = 引擎.买入(买入品种, None, 买入数量)  # 价格传 None
+                结果 = 引擎.买入(买入品种, None, 买入数量)
                 if 结果.get("success"):
                     st.success(f"✅ 已买入 {买入品种} {买入数量} 单位")
                     st.session_state.订单引擎 = 引擎
+                    # 刷新页面key避免重复
+                    st.session_state.page_key = str(uuid.uuid4())[:8]
                     time.sleep(0.5)
                     st.rerun()
                 else:
@@ -164,8 +170,9 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                 else:
                     卖出选项.append(f"{品种} (持仓: {int(数量)})")
             
-            # 修复：使用唯一的 key
-            卖出选项索引 = st.selectbox("选择持仓品种", range(len(卖出选项)), format_func=lambda i: 卖出选项[i], key="sell_select_home")
+            # 使用动态唯一key
+            sell_key_suffix = st.session_state.page_key
+            卖出选项索引 = st.selectbox("选择持仓品种", range(len(卖出选项)), format_func=lambda i: 卖出选项[i], key=f"sell_select_{sell_key_suffix}")
             卖品种 = 持仓品种列表[卖出选项索引]
             pos = 引擎.持仓[卖品种]
             最大可卖数量 = pos.数量
@@ -185,25 +192,25 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             except:
                 st.caption("📌 参考价格: 获取失败")
             
-            # 修复：使用唯一的 key
             if 卖品种 in ["ETH-USD", "BTC-USD", "SOL-USD", "BNB-USD"]:
-                卖出数量 = st.number_input("数量", min_value=0.0, max_value=float(最大可卖数量), value=min(0.1, float(最大可卖数量)), step=0.01, format="%.4f", key="sell_qty_home")
+                卖出数量 = st.number_input("数量", min_value=0.0, max_value=float(最大可卖数量), value=min(0.1, float(最大可卖数量)), step=0.01, format="%.4f", key=f"sell_qty_{sell_key_suffix}")
             else:
                 max_qty = int(最大可卖数量)
-                卖出数量 = st.number_input("数量", min_value=1, max_value=max_qty, value=min(1, max_qty), step=1, key="sell_qty_home")
+                卖出数量 = st.number_input("数量", min_value=1, max_value=max_qty, value=min(1, max_qty), step=1, key=f"sell_qty_{sell_key_suffix}")
             
-            # 修复：使用唯一的 key
-            if st.button("卖出", width="stretch", key="sell_button_home"):
+            if st.button("卖出", width="stretch", key=f"sell_btn_{sell_key_suffix}"):
                 if 卖出数量 <= 0:
                     st.error("请输入数量")
                 else:
                     try:
-                        结果 = 引擎.卖出(卖品种, None, 卖出数量)  # 价格传 None
+                        结果 = 引擎.卖出(卖品种, None, 卖出数量)
                         if 结果.get("success"):
                             st.success(f"✅ 已卖出 {卖品种} {卖出数量} 单位")
                             if hasattr(引擎, '_恢复持仓'):
                                 引擎._恢复持仓()
                             st.session_state.订单引擎 = 引擎
+                            # 刷新页面key避免重复
+                            st.session_state.page_key = str(uuid.uuid4())[:8]
                             time.sleep(0.5)
                             st.rerun()
                         else:
