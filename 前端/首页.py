@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
+import time
 from 核心 import 行情获取
 
 
@@ -74,7 +75,6 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             try:
                 价格 = 获取行情的价格(品种["代码"])
                 if 价格 and 价格 > 0:
-                    # 统一使用人民币符号 ¥
                     if "BTC" in 品种["代码"]:
                         st.metric(品种["显示名"], f"¥{价格:,.0f}")
                     else:
@@ -93,7 +93,9 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         st.markdown("#### 买入")
         可买品种列表 = ["EURUSD", "BTC-USD", "GC=F", "000001.SS", "AAPL"]
         st.caption(f"📊 可交易品种: {可买品种列表}")
-        买入品种 = st.selectbox("选择品种", 可买品种列表, key="buy_symbol_select")
+        
+        # 修复：使用唯一的 key
+        买入品种 = st.selectbox("选择品种", 可买品种列表, key="buy_symbol_select_home")
         买入代码 = 转换品种代码(买入品种)
         
         # 仅用于显示预览价格
@@ -115,7 +117,8 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         else:
             单位提示, 默认数量, 步长 = "股", 100, 10
         
-        买入数量 = st.number_input(f"数量 ({单位提示})", min_value=1, value=默认数量, step=步长, key="buy_qty_input")
+        # 修复：使用唯一的 key
+        买入数量 = st.number_input(f"数量 ({单位提示})", min_value=1, value=默认数量, step=步长, key="buy_qty_input_home")
         
         if 买入品种 == "000001.SS":
             实际股数 = 买入数量 * 100
@@ -126,13 +129,14 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         else:
             st.caption(f"预计花费: 按实时价格计算")
         
-        # ========== 关键修改：买入时不传价格，让引擎自动获取实时价格 ==========
-        if st.button("买入", type="primary", width='stretch', key="buy_button"):
+        # 修复：使用唯一的 key
+        if st.button("买入", type="primary", width="stretch", key="buy_button_home"):
             try:
                 结果 = 引擎.买入(买入品种, None, 买入数量)  # 价格传 None
                 if 结果.get("success"):
                     st.success(f"✅ 已买入 {买入品种} {买入数量} 单位")
                     st.session_state.订单引擎 = 引擎
+                    time.sleep(0.5)
                     st.rerun()
                 else:
                     st.error(f"买入失败: {结果.get('error')}")
@@ -160,7 +164,8 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                 else:
                     卖出选项.append(f"{品种} (持仓: {int(数量)})")
             
-            卖出选项索引 = st.selectbox("选择持仓品种", range(len(卖出选项)), format_func=lambda i: 卖出选项[i], key="sell_select")
+            # 修复：使用唯一的 key
+            卖出选项索引 = st.selectbox("选择持仓品种", range(len(卖出选项)), format_func=lambda i: 卖出选项[i], key="sell_select_home")
             卖品种 = 持仓品种列表[卖出选项索引]
             pos = 引擎.持仓[卖品种]
             最大可卖数量 = pos.数量
@@ -180,14 +185,15 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             except:
                 st.caption("📌 参考价格: 获取失败")
             
+            # 修复：使用唯一的 key
             if 卖品种 in ["ETH-USD", "BTC-USD", "SOL-USD", "BNB-USD"]:
-                卖出数量 = st.number_input("数量", min_value=0.0, max_value=float(最大可卖数量), value=min(0.1, float(最大可卖数量)), step=0.01, format="%.4f", key="sell_qty")
+                卖出数量 = st.number_input("数量", min_value=0.0, max_value=float(最大可卖数量), value=min(0.1, float(最大可卖数量)), step=0.01, format="%.4f", key="sell_qty_home")
             else:
                 max_qty = int(最大可卖数量)
-                卖出数量 = st.number_input("数量", min_value=1, max_value=max_qty, value=min(1, max_qty), step=1, key="sell_qty")
+                卖出数量 = st.number_input("数量", min_value=1, max_value=max_qty, value=min(1, max_qty), step=1, key="sell_qty_home")
             
-            # ========== 关键修改：卖出时不传价格，让引擎自动获取实时价格 ==========
-            if st.button("卖出", width='stretch', key="sell_button"):
+            # 修复：使用唯一的 key
+            if st.button("卖出", width="stretch", key="sell_button_home"):
                 if 卖出数量 <= 0:
                     st.error("请输入数量")
                 else:
@@ -198,6 +204,7 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                             if hasattr(引擎, '_恢复持仓'):
                                 引擎._恢复持仓()
                             st.session_state.订单引擎 = 引擎
+                            time.sleep(0.5)
                             st.rerun()
                         else:
                             st.error(f"卖出失败: {结果.get('error')}")
@@ -205,9 +212,9 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                         st.error(f"卖出异常: {e}")
         else:
             st.info("暂无持仓")
-            st.selectbox("选择持仓品种", ["无持仓"], disabled=True, key="sell_disabled1")
-            st.number_input("数量", min_value=1, value=100, disabled=True, key="sell_disabled2")
-            st.button("卖出", disabled=True, width='stretch', key="sell_disabled3")
+            st.selectbox("选择持仓品种", ["无持仓"], disabled=True, key="sell_disabled_home1")
+            st.number_input("数量", min_value=1, value=100, disabled=True, key="sell_disabled_home2")
+            st.button("卖出", disabled=True, width="stretch", key="sell_disabled_home3")
 
 
 def 获取行情的价格(代码):
