@@ -249,7 +249,7 @@ with st.sidebar:
             
             # 格式化数量显示
             if 品种 in ["ETH-USD", "BTC-USD", "SOL-USD", "BNB-USD"]:
-                数量显示 = f"{数量:.4f}股"
+                数量显示 = f"{数量:.4f}个"
             else:
                 数量显示 = f"{int(数量)}股"
             
@@ -285,26 +285,57 @@ with st.sidebar:
     except:
         st.caption(f"当前时间: 获取失败")
 
-# ========== 安全调用函数包装器 ==========
+# ========== 安全调用函数包装器（修复回测模块参数问题） ==========
 def 安全调用(模块, 默认信息="模块开发中"):
+    """
+    安全调用模块的显示函数
+    自动适配不同模块的参数签名
+    """
     if 模块 is None:
         st.info(默认信息)
         return
+    
+    if not hasattr(模块, '显示'):
+        st.info(默认信息)
+        return
+    
+    # 获取显示函数的参数签名
+    import inspect
     try:
-        if hasattr(模块, '显示'):
-            模块.显示(引擎, 策略加载器, AI引擎)
-        else:
-            st.info(默认信息)
-    except TypeError:
-        try:
+        sig = inspect.signature(模块.显示)
+        params = list(sig.parameters.keys())
+        
+        # 根据参数数量决定传入什么
+        if len(params) == 0:
+            # 无参数
+            模块.显示()
+        elif len(params) == 1:
+            # 只接受引擎参数
+            模块.显示(引擎)
+        elif len(params) == 2:
+            # 接受引擎和策略加载器
             模块.显示(引擎, 策略加载器)
+        elif len(params) >= 3:
+            # 接受三个或更多参数
+            try:
+                模块.显示(引擎, 策略加载器, AI引擎)
+            except:
+                模块.显示(引擎, 策略加载器)
+        else:
+            模块.显示()
+            
+    except Exception as e:
+        # 如果获取签名失败，尝试最常见的调用方式
+        try:
+            模块.显示(引擎)
         except TypeError:
             try:
-                模块.显示(引擎)
-            except:
-                st.info(默认信息)
-    except Exception as e:
-        st.info(f"{默认信息} ({str(e)[:50]})")
+                模块.显示(引擎, 策略加载器)
+            except TypeError:
+                try:
+                    模块.显示(引擎, 策略加载器, AI引擎)
+                except:
+                    st.info(默认信息)
 
 # ========== 页面刷新监听 ==========
 query_params = st.query_params
@@ -314,7 +345,7 @@ if query_params.get("refresh") == "true":
         st.session_state.订单引擎 = 引擎
     st.query_params.clear()
 
-# ========== Tab ==========
+# ========== Tab导航 ==========
 tabs = st.tabs(["🏠 首页", "📊 策略中心", "🤖 AI交易", "💼 持仓管理", "💰 资金曲线", "📈 回测", "📋 交易记录"])
 
 with tabs[0]:
@@ -338,5 +369,6 @@ with tabs[5]:
 with tabs[6]:
     安全调用(交易记录, "交易记录模块开发中")
 
+# ========== 底部风险提示 ==========
 st.markdown("---")
 st.caption("⚠️ 风险提示：量化交易存在风险，历史回测结果不代表未来收益。请理性投资，注意风险控制。")
