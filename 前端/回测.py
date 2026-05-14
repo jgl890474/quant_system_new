@@ -6,6 +6,7 @@ import datetime
 import requests
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import time
 
 # 尝试导入 akshare
 try:
@@ -388,19 +389,13 @@ def 显示(引擎=None):
 
 
 def 获取加密货币历史数据(品种代码, 开始日期, 结束日期):
-    """
-    获取加密货币历史数据（使用Binance API）
-    支持: BTC-USD, ETH-USD, DOGE-USD, BNB-USD 等
-    """
+    """获取加密货币历史数据（使用Binance API）"""
     try:
         symbol = 品种代码.upper()
-        
-        # 转换symbol格式: BTC-USD -> BTCUSDT
         binance_symbol = symbol.replace('-', '').replace('USD', 'USDT')
         if 'USDT' not in binance_symbol:
             binance_symbol = binance_symbol + 'USDT'
         
-        # 计算时间戳（毫秒）
         start_ts = int(开始日期.timestamp() * 1000)
         end_ts = int(结束日期.timestamp() * 1000)
         
@@ -413,15 +408,10 @@ def 获取加密货币历史数据(品种代码, 开始日期, 结束日期):
             'limit': 1000
         }
         
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-        
-        response = requests.get(url, params=params, headers=headers, timeout=15)
+        response = requests.get(url, params=params, timeout=15)
         
         if response.status_code == 200:
             data = response.json()
-            
             if isinstance(data, list) and len(data) > 0:
                 rows = []
                 for k in data:
@@ -433,109 +423,35 @@ def 获取加密货币历史数据(品种代码, 开始日期, 结束日期):
                         '收盘': float(k[4]),
                         '成交量': float(k[5])
                     })
-                
                 df = pd.DataFrame(rows)
                 df = df.sort_values('日期')
                 df = df.drop_duplicates(subset=['日期'])
-                
                 if len(df) > 0:
-                    st.success(f"✅ Binance API 获取 {symbol} 数据成功，共 {len(df)} 条")
+                    st.success(f"✅ 获取 {symbol} 数据成功，共 {len(df)} 条")
                     return df
-                    
     except Exception as e:
-        print(f"Binance API 获取失败: {e}")
+        print(f"加密货币数据获取失败: {e}")
     
-    # 尝试备用API
-    return 获取加密货币数据_备用(品种代码, 开始日期, 结束日期)
-
-
-def 获取加密货币数据_备用(品种代码, 开始日期, 结束日期):
-    """使用 CoinGecko API 获取加密货币数据"""
-    try:
-        # CoinGecko ID 映射
-        coin_map = {
-            'BTC': 'bitcoin',
-            'ETH': 'ethereum',
-            'BNB': 'binancecoin',
-            'DOGE': 'dogecoin',
-            'SOL': 'solana',
-            'XRP': 'ripple',
-            'ADA': 'cardano',
-            'AVAX': 'avalanche-2'
-        }
-        
-        symbol = 品种代码.upper().split('-')[0]
-        coin_id = coin_map.get(symbol, symbol.lower())
-        
-        # 计算天数
-        days = (结束日期 - 开始日期).days
-        if days <= 0:
-            days = 90
-        if days > 365:
-            days = 365
-        
-        url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart/range"
-        params = {
-            'vs_currency': 'usd',
-            'from': int(开始日期.timestamp()),
-            'to': int(结束日期.timestamp())
-        }
-        
-        response = requests.get(url, params=params, timeout=15)
-        
-        if response.status_code == 200:
-            data = response.json()
-            
-            if 'prices' in data and len(data['prices']) > 0:
-                rows = []
-                for item in data['prices']:
-                    timestamp = item[0]
-                    price = item[1]
-                    rows.append({
-                        '日期': pd.to_datetime(timestamp, unit='ms'),
-                        '收盘': price,
-                        '开盘': price,
-                        '最高': price,
-                        '最低': price,
-                        '成交量': 0
-                    })
-                
-                df = pd.DataFrame(rows)
-                df = df.drop_duplicates(subset=['日期'])
-                st.info(f"📊 使用 CoinGecko API 数据，共 {len(df)} 条")
-                return df
-                
-    except Exception as e:
-        print(f"CoinGecko API 获取失败: {e}")
-    
-    return None
+    return 获取通用演示数据(品种代码, 开始日期, 结束日期)
 
 
 def 获取美股历史数据(股票代码, 开始日期, 结束日期):
-    """获取美股历史数据（使用yfinance）"""
+    """获取美股历史数据"""
     try:
         import yfinance as yf
-        
         start_str = 开始日期.strftime("%Y-%m-%d")
         end_str = 结束日期.strftime("%Y-%m-%d")
-        
         ticker = yf.Ticker(股票代码.upper())
         df = ticker.history(start=start_str, end=end_str, interval="1d")
-        
         if not df.empty:
             df = df.reset_index()
             df.columns = ['日期', '开盘', '最高', '最低', '收盘', '成交量', '拆股', '分红']
             df = df[['日期', '开盘', '最高', '最低', '收盘', '成交量']]
             df['日期'] = pd.to_datetime(df['日期'])
-            df = df.dropna()
-            
-            st.success(f"✅ 美股数据获取成功: {len(df)}条数据")
             return df
-            
     except Exception as e:
         print(f"美股数据获取失败: {e}")
-    
-    return None
+    return 获取通用演示数据(股票代码, 开始日期, 结束日期)
 
 
 def 获取A股历史数据(股票代码, 开始日期, 结束日期):
@@ -596,7 +512,7 @@ def 获取A股历史数据(股票代码, 开始日期, 结束日期):
     except Exception as e:
         print(f"东方财富接口获取失败: {e}")
 
-    return None
+    return 获取通用演示数据(股票代码, 开始日期, 结束日期)
 
 
 def 获取通用演示数据(品种代码, 开始日期, 结束日期):
@@ -654,7 +570,7 @@ def 计算布林带(df, 周期, 标准差倍数):
 def 执行持仓回测(df, 初始资金, 手续费率, 止盈率, 止损率):
     """执行持仓回测（支持加密货币小数持仓）"""
     资金 = 初始资金
-    持仓数量 = 0.0  # 改为浮点数，支持加密货币小数
+    持仓数量 = 0.0
     交易记录 = []
     每日净值 = []
     买入价 = 0.0
@@ -691,9 +607,7 @@ def 执行持仓回测(df, 初始资金, 手续费率, 止盈率, 止损率):
             买入价 = 0.0
 
         elif df['信号'].iloc[i] == 1 and 持仓数量 == 0:
-            # 使用95%资金买入，预留手续费
             买入数量 = (资金 * 0.95) / 当前收盘
-            
             if 买入数量 > 0:
                 买入金额 = 买入数量 * 当前收盘
                 手续费 = 买入金额 * 手续费率
@@ -811,4 +725,67 @@ def 绘制动态净值曲线(df, 回测结果, 品种代码):
     买入记录 = [t for t in 回测结果['交易记录'] if t['行动'] == '买入']
     卖出记录 = [t for t in 回测结果['交易记录'] if t['行动'] in ['卖出(信号)', '止盈卖出', '止损卖出', '强制平仓']]
 
-    if 买入记录
+    if 买入记录:
+        买入日期 = [t['日期'] for t in 买入记录]
+        买入净值 = []
+        for d in 买入日期:
+            try:
+                idx = dates.index(d)
+                买入净值.append(净值[idx])
+            except ValueError:
+                pass
+        if 买入净值:
+            fig.add_trace(
+                go.Scatter(x=买入日期, y=买入净值, mode='markers', name='买入信号',
+                          marker=dict(symbol='triangle-up', size=10, color='#2ECC71')),
+                row=1, col=1
+            )
+
+    if 卖出记录:
+        卖出日期 = [t['日期'] for t in 卖出记录]
+        卖出净值 = []
+        for d in 卖出日期:
+            try:
+                idx = dates.index(d)
+                卖出净值.append(净值[idx])
+            except ValueError:
+                pass
+        if 卖出净值:
+            fig.add_trace(
+                go.Scatter(x=卖出日期, y=卖出净值, mode='markers', name='卖出信号',
+                          marker=dict(symbol='triangle-down', size=10, color='#E74C3C')),
+                row=1, col=1
+            )
+
+    fig.add_trace(
+        go.Scatter(x=dates, y=回撤, mode='lines', name='回撤',
+                  line=dict(color='#E74C3C', width=2),
+                  fill='tozeroy', fillcolor='rgba(231,76,60,0.2)'),
+        row=2, col=1
+    )
+
+    fig.add_hline(y=0, line_dash="dash", line_color="gray", row=2, col=1)
+
+    最大回撤值 = 回测结果['最大回撤']
+    回撤列表 = 回测结果['回撤']
+    if 回撤列表:
+        最大回撤索引 = 回撤列表.index(min(回撤列表))
+        if 最大回撤索引 < len(dates):
+            fig.add_annotation(
+                x=dates[最大回撤索引], y=最大回撤值,
+                text=f"最大回撤: {最大回撤值:.2f}%",
+                showarrow=True, arrowhead=2, arrowsize=1, arrowwidth=2,
+                arrowcolor="#E74C3C", ax=0, ay=-30,
+                row=2, col=1
+            )
+
+    fig.update_layout(
+        title=dict(text=f"{品种代码} - 动态回测曲线", x=0.5, font=dict(size=18)),
+        hovermode='x unified',
+        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
+        height=600, plot_bgcolor='white'
+    )
+
+    fig.update_xaxes(title_text="日期", row=2, col=1, gridcolor='#E8E8E8')
+    fig.update_yaxes(title_text="净值 (元)", row=1, col=1, gridcolor='#E8E8E8', tickformat=',.0f')
+    fig.update_yaxes
