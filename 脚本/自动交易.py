@@ -6,7 +6,7 @@
 运行方式:
     python 脚本/自动交易.py                    # 手动运行一次
     python 脚本/自动交易.py --loop             # 循环运行
-    python 脚本/自动交易.py --strategy 加密风控策略 --symbol BTC-USD --loop
+    python 脚本/自动交易.py --strategy 加密风控策略2 --symbol BTC-USD --loop
 """
 
 import sys
@@ -29,11 +29,12 @@ except ImportError as e:
     print(f"⚠️ 模块导入失败: {e}")
     # 创建兼容模块
     class 简单订单引擎:
-        def __init__(self): self.持仓 = {}; self.可用资金 = 1000000; self.初始资金 = 1000000
+        def __init__(self, 初始资金=1000000): 
+            self.持仓 = {}; self.可用资金 = 初始资金; self.初始资金 = 初始资金
         def 买入(self, *args, **kwargs): return {"success": False, "error": "引擎未初始化"}
         def 卖出(self, *args, **kwargs): return {"success": False, "error": "引擎未初始化"}
-        def 获取总资产(self): return 1000000
-        def 获取可用资金(self): return 1000000
+        def 获取总资产(self): return self.可用资金
+        def 获取可用资金(self): return self.可用资金
     
     订单引擎 = 简单订单引擎
     消息推送 = type('obj', (), {'发送飞书消息': lambda x,y=None: None, '发送交易信号': lambda **k: None, '发送交易执行': lambda **k: None})()
@@ -58,8 +59,8 @@ except ImportError as e:
     "加密货币": [
         {"名称": "加密双均线1", "品种": "BTC-USD", "执行间隔": 60, "资金分配": 0.30},
         {"名称": "加密双均线1", "品种": "ETH-USD", "执行间隔": 60, "资金分配": 0.30},
-        {"名称": "加密风控策略", "品种": "BTC-USD", "执行间隔": 60, "资金分配": 0.30},
-        {"名称": "加密风控策略", "品种": "ETH-USD", "执行间隔": 60, "资金分配": 0.30},
+        {"名称": "加密风控策略2", "品种": "BTC-USD", "执行间隔": 60, "资金分配": 0.30},
+        {"名称": "加密风控策略2", "品种": "ETH-USD", "执行间隔": 60, "资金分配": 0.30},
     ],
     "A股": [
         {"名称": "A股双均线1", "品种": "000001.SS", "执行间隔": 3600, "资金分配": 0.25},
@@ -178,15 +179,20 @@ class 自动交易机器人:
                 return 策略实例
             else:
                 # 尝试直接导入策略类
-                try:
-                    if 策略名称 == "加密风控策略":
-                        from 策略库.加密货币策略.加密风控策略 import 加密风控策略
-                        策略实例 = 加密风控策略(策略名称, 品种, self.引擎.初始资金)
+                策略文件映射 = {
+                    "加密风控策略2": "策略库.加密货币策略.加密风控策略2",
+                    "加密双均线1": "策略库.加密货币策略.加密双均线1",
+                }
+                if 策略名称 in 策略文件映射:
+                    try:
+                        模块 = __import__(策略文件映射[策略名称], fromlist=[策略名称])
+                        策略类 = getattr(模块, 策略名称)
+                        策略实例 = 策略类(策略名称, 品种, self.引擎.初始资金)
                         self.策略实例[缓存key] = 策略实例
                         print(f"   ✅ 直接导入策略成功: {策略名称} - {品种}")
                         return 策略实例
-                except Exception as e2:
-                    print(f"   ❌ 直接导入失败: {e2}")
+                    except Exception as e2:
+                        print(f"   ❌ 直接导入失败: {e2}")
         except Exception as e:
             print(f"   ❌ 策略实例化失败 {策略名称}: {e}")
         
@@ -277,11 +283,6 @@ class 自动交易机器人:
         if 数量 <= 0:
             print(f"   ❌ 买入数量无效: {数量}")
             return
-        
-        # 限制最大数量，防止单笔过大
-        if 数量 > 10:
-            数量 = 10
-            print(f"   ⚠️ 数量超过上限，调整为10")
         
         # 执行买入，传入策略名称
         结果 = self.引擎.买入(品种, 价格, 数量, 策略名称=策略实例.名称)
