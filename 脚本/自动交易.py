@@ -1,18 +1,19 @@
 # -*- coding: utf-8 -*-
 """
 自动交易模块 - 完整版
-支持：多策略、多市场、止损止盈、飞书推送、定时调度
+支持：AI策略信号自动买入卖出、多策略、多市场、止损止盈、飞书推送、定时调度
 
 运行方式:
     python 脚本/自动交易.py                    # 手动运行一次
     python 脚本/自动交易.py --loop             # 循环运行
-    python 脚本/自动交易.py --strategy 双均线   # 指定策略
+    python 脚本/自动交易.py --strategy 加密双均线1 --symbol BTC-USD --loop
 """
 
 import sys
 import os
 import time
 import json
+import threading
 from datetime import datetime, date, timedelta
 from typing import Dict, List, Optional, Any
 
@@ -28,14 +29,16 @@ except ImportError as e:
     print(f"⚠️ 模块导入失败: {e}")
     # 创建兼容模块
     class 简单订单引擎:
-        def __init__(self): self.持仓 = {}; self.可用资金 = 1000000
-        def 买入(self, *args): return {"success": False}
-        def 卖出(self, *args): return {"success": False}
+        def __init__(self): self.持仓 = {}; self.可用资金 = 1000000; self.初始资金 = 1000000
+        def 买入(self, *args, **kwargs): return {"success": False, "error": "引擎未初始化"}
+        def 卖出(self, *args, **kwargs): return {"success": False, "error": "引擎未初始化"}
         def 获取总资产(self): return 1000000
+        def 获取可用资金(self): return 1000000
     
     订单引擎 = 简单订单引擎
-    消息推送 = type('obj', (), {'发送飞书消息': lambda x,y=None: None, '发送交易信号': lambda **k: None})()
+    消息推送 = type('obj', (), {'发送飞书消息': lambda x,y=None: None, '发送交易信号': lambda **k: None, '发送交易执行': lambda **k: None})()
     数据库 = type('obj', (), {'保存交易记录': lambda x: None})()
+    行情获取 = type('obj', (), {'获取价格': lambda x: None})()
 
 
 # ==================== 配置 ====================
@@ -46,6 +49,25 @@ except ImportError as e:
     "最大持仓数": 5,       # 最大持仓品种数
     "自动交易开关": False,  # 自动交易总开关
     "检查间隔": 60,        # 检查间隔（秒）
+    "AI检查间隔": 300,     # AI信号检查间隔（秒）
+}
+
+
+# ==================== 策略配置模板 ====================
+策略配置模板 = {
+    "加密货币": [
+        {"名称": "加密双均线1", "品种": "BTC-USD", "执行间隔": 60, "资金分配": 0.30},
+        {"名称": "加密双均线1", "品种": "ETH-USD", "执行间隔": 60, "资金分配": 0.30},
+        {"名称": "加密风控策略", "品种": "BTC-USD", "执行间隔": 60, "资金分配": 0.30},
+    ],
+    "A股": [
+        {"名称": "A股双均线1", "品种": "000001.SS", "执行间隔": 3600, "资金分配": 0.25},
+        {"名称": "A股量价策略2", "品种": "000001.SS", "执行间隔": 3600, "资金分配": 0.25},
+    ],
+    "美股": [
+        {"名称": "美股简单策略1", "品种": "AAPL", "执行间隔": 1800, "资金分配": 0.25},
+        {"名称": "美股动量策略", "品种": "NVDA", "执行间隔": 1800, "资金分配": 0.25},
+    ],
 }
 
 
@@ -64,21 +86,59 @@ class 自动交易机器人:
         
         # 状态
         self.运行中 = False
-        self.今日已执行 = {}  # 记录今日已执行的策略
+        self.今日已执行 = {}
         self.今日日期 = date.today()
         self.今日交易次数 = 0
         self.今日盈亏 = 0.0
         
         # 策略实例缓存
         self.策略实例 = {}
+        self.策略配置列表 = []
+        
+        # 上次检查时间
+        self.上次AI检查时间 = 0
+        self.上次止损检查时间 = 0
         
         # 交易记录
         self.交易记录 = []
+        
+        # 加载策略配置
+        self._加载策略配置()
         
         print(f"✅ 自动交易机器人初始化完成")
         print(f"   初始资金: ¥{初始资金:,.0f}")
         print(f"   止损: {self.配置['止损比例']*100:.0f}%")
         print(f"   止盈: {self.配置['止盈比例']*100:.0f}%")
+        print(f"   加载策略数量: {len(self.策略配置列表)}")
+    
+    def _加载策略配置(self):
+        """加载策略配置"""
+        # 优先从配置文件加载
+        try:
+            config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "配置", "策略调度配置.json")
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    self.策略配置列表 = data.get("策略调度", [])
+                    print(f"✅ 从配置文件加载 {len(self.策略配置列表)} 个策略")
+                    return
+        except Exception as e:
+            print(f"⚠️ 加载配置文件失败: {e}")
+        
+        # 使用默认配置
+        for 市场, 策略列表 in 策略配置模板.items():
+            for 策略 in 策略列表:
+                if 策略.get("启用", True):
+                    self.策略配置列表.append({
+                        "名称": 策略["名称"],
+                        "类别": 市场,
+                        "启用": True,
+                        "品种": [策略["品种"]],
+                        "执行间隔": 策略.get("执行间隔", 60),
+                        "资金分配": 策略.get("资金分配", 0.25),
+                        "最大持仓": 3
+                    })
+        print(f"✅ 使用默认策略配置，共 {len(self.策略配置列表)} 个策略")
     
     def 重置每日状态(self):
         """重置每日状态"""
@@ -94,7 +154,7 @@ class 自动交易机器人:
             self.今日盈亏 = 0.0
             print(f"\n📅 进入新的一天 ({today.strftime('%Y-%m-%d')})，重置状态")
     
-    def 获取策略(self, 策略名称: str, 品种: str):
+    def 获取策略实例(self, 策略名称: str, 品种: str):
         """获取或创建策略实例"""
         缓存key = f"{策略名称}_{品种}"
         if 缓存key in self.策略实例:
@@ -102,7 +162,11 @@ class 自动交易机器人:
         
         try:
             # 从策略库加载策略
-            策略信息 = self.策略加载器.获取策略(策略名称)
+            if hasattr(self.策略加载器, '获取策略'):
+                策略信息 = self.策略加载器.获取策略(策略名称)
+            else:
+                策略信息 = None
+            
             if 策略信息 and 策略信息.get("类"):
                 策略实例 = 策略信息["类"](
                     名称=策略名称,
@@ -110,156 +174,172 @@ class 自动交易机器人:
                     初始资金=self.引擎.初始资金
                 )
                 self.策略实例[缓存key] = 策略实例
-                print(f"   ✅ 策略实例化成功: {策略名称}")
+                print(f"   ✅ 策略实例化成功: {策略名称} - {品种}")
                 return 策略实例
         except Exception as e:
-            print(f"   ❌ 策略实例化失败: {e}")
+            print(f"   ❌ 策略实例化失败 {策略名称}: {e}")
         
         return None
     
-    def 尾盘买入检查(self, 策略配置: Dict = None):
-        """
-        尾盘买入检查
-        
-        参数:
-            策略配置: {
-                '策略名称': 'A股隔夜套利',
-                '品种': '000001.SS',
-                '买入时间': '14:55',
-                '最小涨幅': 0.01,
-                '最大涨幅': 0.05
-            }
-        """
-        self.重置每日状态()
-        
+    def 策略信号检查(self):
+        """检查所有策略的买入卖出信号"""
         if not self.配置["自动交易开关"]:
             return
         
-        # 默认配置
-        if 策略配置 is None:
-            策略配置 = {
-                '策略名称': 'A股隔夜套利',
-                '品种': '000001.SS',
-                '买入时间': '14:55'
+        for 策略配置 in self.策略配置列表:
+            if not 策略配置.get("启用", True):
+                continue
+            
+            策略名称 = 策略配置.get("名称", "")
+            品种列表 = 策略配置.get("品种", [])
+            
+            for 品种 in 品种列表:
+                try:
+                    # 获取策略实例
+                    策略实例 = self.获取策略实例(策略名称, 品种)
+                    if not 策略实例:
+                        continue
+                    
+                    # 获取行情
+                    行情 = self._获取行情数据(品种)
+                    if not 行情:
+                        continue
+                    
+                    # 调用策略处理行情
+                    信号 = 策略实例.处理行情(行情)
+                    
+                    if 信号 == 'buy':
+                        print(f"   🟢 [{策略名称}] 买入信号: {品种}")
+                        self._执行AI买入(品种, 策略实例, 行情)
+                    
+                    elif 信号 == 'sell':
+                        print(f"   🔴 [{策略名称}] 卖出信号: {品种}")
+                        self._执行AI卖出(品种, 策略实例, 行情)
+                    
+                except Exception as e:
+                    print(f"   ❌ 策略检查失败 {策略名称} {品种}: {e}")
+    
+    def _获取行情数据(self, 品种):
+        """获取行情数据"""
+        try:
+            价格结果 = self.行情.获取价格(品种)
+            if not 价格结果 or not hasattr(价格结果, '价格'):
+                return None
+            
+            # 尝试获取K线数据
+            try:
+                df = self.行情.获取K线数据(品种, "日线", 100)
+            except:
+                df = None
+            
+            return {
+                'close': 价格结果.价格,
+                'volume': getattr(价格结果, '成交量', 0),
+                'high': getattr(价格结果, '最高', 价格结果.价格),
+                'low': getattr(价格结果, '最低', 价格结果.价格),
+                'open': getattr(价格结果, '开盘', 价格结果.价格),
+                'date': datetime.now(),
+                'df': df
             }
+        except Exception as e:
+            print(f"获取行情失败 {品种}: {e}")
+            return None
+    
+    def _执行AI买入(self, 品种, 策略实例, 行情):
+        """执行AI策略买入"""
+        价格 = 行情['close']
         
-        策略名称 = 策略配置.get('策略名称', 'A股隔夜套利')
-        品种 = 策略配置.get('品种', '000001.SS')
-        买入时间 = 策略配置.get('买入时间', '14:55')
-        
-        # 检查是否已执行
-        执行key = f"尾盘买入_{策略名称}_{品种}"
-        if 执行key in self.今日已执行:
-            return
-        
-        # 检查时间
-        now = datetime.now()
-        now_str = now.strftime("%H:%M")
-        if now_str != 买入时间:
-            return
-        
-        # 检查是否持仓
+        # 检查是否已有持仓
         if 品种 in self.引擎.持仓:
             print(f"   ⚪ 已有持仓 {品种}，跳过买入")
             return
         
-        # 检查持仓数量
+        # 检查持仓数量上限
         if len(self.引擎.持仓) >= self.配置["最大持仓数"]:
             print(f"   ⚠️ 已达最大持仓数 {self.配置['最大持仓数']}，跳过买入")
             return
         
-        print(f"\n📊 [{now.strftime('%H:%M:%S')}] 尾盘买入检查 - {策略名称}")
+        # 计算买入数量
+        if hasattr(策略实例, '计算仓位'):
+            总资金 = self.引擎.获取总资产()
+            数量 = 策略实例.计算仓位(总资金, 价格)
+        else:
+            可用资金 = self.引擎.获取可用资金()
+            买入金额 = 可用资金 * self.配置["单笔风险"]
+            数量 = 买入金额 / 价格
         
-        try:
-            # 获取行情
-            行情结果 = self.行情.获取价格(品种)
-            if not 行情结果 or not hasattr(行情结果, '价格'):
-                print(f"   ❌ 无法获取 {品种} 行情")
-                return
+        if 数量 <= 0:
+            print(f"   ❌ 买入数量无效: {数量}")
+            return
+        
+        # 执行买入，传入策略名称
+        结果 = self.引擎.买入(品种, 价格, 数量, 策略名称=策略实例.名称)
+        
+        if 结果.get("success"):
+            self.今日交易次数 += 1
+            print(f"   ✅ AI买入成功: {品种} {数量:.4f} @ {价格:.2f}")
             
-            价格 = 行情结果.价格
+            # 发送飞书通知
+            try:
+                消息推送.发送交易执行(品种, 'buy', 数量, 价格, 价格 * 数量)
+            except:
+                pass
             
-            # 获取策略信号
-            策略实例 = self.获取策略(策略名称, 品种)
-            if 策略实例:
-                # 准备K线数据
-                k线数据 = {
-                    'close': 价格,
-                    'volume': getattr(行情结果, '成交量', 0),
-                    'high': getattr(行情结果, '最高', 价格),
-                    'low': getattr(行情结果, '最低', 价格),
-                    'open': getattr(行情结果, '开盘', 价格),
-                    'date': now
-                }
-                
-                信号 = 策略实例.处理行情(k线数据)
-                
-                if 信号 == 'buy':
-                    print(f"   🟢 触发买入信号")
-                    self._执行买入(品种, 价格, 策略名称)
-                    self.今日已执行[执行key] = True
-                else:
-                    print(f"   ⚪ 无买入信号 (信号: {信号})")
-            else:
-                # 无策略实例，使用简单判断
-                print(f"   ⚪ 策略实例不存在，跳过")
-                
-        except Exception as e:
-            print(f"   ❌ 买入检查失败: {e}")
+            # 记录交易
+            self.交易记录.append({
+                '时间': datetime.now().isoformat(),
+                '品种': 品种,
+                '动作': '买入',
+                '价格': 价格,
+                '数量': 数量,
+                '策略': 策略实例.名称,
+                '理由': f"{策略实例.名称}策略信号"
+            })
+        else:
+            print(f"   ❌ AI买入失败: {结果.get('error')}")
     
-    def 早盘卖出检查(self, 策略配置: Dict = None):
-        """
-        早盘卖出检查（隔夜平仓）
+    def _执行AI卖出(self, 品种, 策略实例, 行情):
+        """执行AI策略卖出"""
+        价格 = 行情['close']
         
-        参数:
-            策略配置: {
-                '策略名称': 'A股隔夜套利',
-                '品种': '000001.SS',
-                '卖出时间': '09:30'
-            }
-        """
-        self.重置每日状态()
-        
-        if not self.配置["自动交易开关"]:
-            return
-        
-        if 策略配置 is None:
-            策略配置 = {
-                '策略名称': 'A股隔夜套利',
-                '品种': '000001.SS',
-                '卖出时间': '09:30'
-            }
-        
-        策略名称 = 策略配置.get('策略名称', 'A股隔夜套利')
-        品种 = 策略配置.get('品种', '000001.SS')
-        卖出时间 = 策略配置.get('卖出时间', '09:30')
-        
-        # 检查时间
-        now = datetime.now()
-        now_str = now.strftime("%H:%M")
-        if now_str != 卖出时间:
-            return
-        
-        # 检查是否持仓
         if 品种 not in self.引擎.持仓:
             print(f"   ⚪ 无持仓 {品种}，跳过卖出")
             return
         
-        print(f"\n💰 [{now.strftime('%H:%M:%S')}] 早盘卖出检查 - {策略名称}")
+        pos = self.引擎.持仓[品种]
+        数量 = pos.数量
         
-        try:
-            行情结果 = self.行情.获取价格(品种)
-            if not 行情结果 or not hasattr(行情结果, '价格'):
-                print(f"   ❌ 无法获取 {品种} 价格")
-                return
+        # 执行卖出
+        结果 = self.引擎.卖出(品种, 价格, 数量, 策略名称=策略实例.名称)
+        
+        if 结果.get("success"):
+            # 计算盈亏
+            成本 = getattr(pos, '平均成本', 0)
+            盈亏 = (价格 - 成本) * 数量
+            self.今日盈亏 += 盈亏
+            self.今日交易次数 += 1
             
-            价格 = 行情结果.价格
-            pos = self.引擎.持仓[品种]
+            print(f"   ✅ AI卖出成功: {品种} {数量:.4f} @ {价格:.2f} 盈亏:{盈亏:.2f}")
             
-            self._执行卖出(品种, pos.数量, 价格, f"{策略名称}隔夜平仓")
+            # 发送飞书通知
+            try:
+                消息推送.发送交易执行(品种, 'sell', 数量, 价格, 价格 * 数量)
+            except:
+                pass
             
-        except Exception as e:
-            print(f"   ❌ 卖出检查失败: {e}")
+            # 记录交易
+            self.交易记录.append({
+                '时间': datetime.now().isoformat(),
+                '品种': 品种,
+                '动作': '卖出',
+                '价格': 价格,
+                '数量': 数量,
+                '策略': 策略实例.名称,
+                '理由': f"{策略实例.名称}策略信号",
+                '盈亏': 盈亏
+            })
+        else:
+            print(f"   ❌ AI卖出失败: {结果.get('error')}")
     
     def 止损止盈检查(self):
         """检查所有持仓的止损止盈"""
@@ -286,169 +366,61 @@ class 自动交易机器人:
                 if 盈亏率 <= -self.配置["止损比例"]:
                     亏损金额 = (成本 - 现价) * 数量
                     print(f"   🛑 止损触发: {品种} 亏损{亏损金额:.2f}")
-                    self._执行卖出(品种, 数量, 现价, f"止损触发 (亏损{盈亏率*100:.1f}%)")
+                    self._执行风控卖出(品种, 数量, 现价, f"止损触发 (亏损{盈亏率*100:.1f}%)")
                     self._发送止损通知(品种, 现价, 亏损金额)
                 
                 # 止盈检查
                 elif 盈亏率 >= self.配置["止盈比例"]:
                     盈利金额 = (现价 - 成本) * 数量
-                    # 部分止盈：卖出50%
-                    卖出数量 = 数量 * 0.5
-                    if 卖出数量 > 0:
-                        print(f"   🎯 部分止盈: {品种} 盈利{盈利金额:.2f}")
-                        self._执行卖出(品种, 卖出数量, 现价, f"部分止盈 (盈利{盈亏率*100:.1f}%)")
-                        self._发送止盈通知(品种, 现价, 盈利金额, 数量 - 卖出数量)
+                    print(f"   🎯 止盈触发: {品种} 盈利{盈利金额:.2f}")
+                    self._执行风控卖出(品种, 数量, 现价, f"止盈触发 (盈利{盈亏率*100:.1f}%)")
+                    self._发送止盈通知(品种, 现价, 盈利金额, 0)
                         
             except Exception as e:
                 print(f"   止损止盈检查失败 {品种}: {e}")
     
-    def AI信号检查(self, 市场: str = "A股", 策略类型: str = "量价策略"):
-        """
-        AI信号检查 - 根据AI推荐执行交易
-        
-        参数:
-            市场: A股/美股/加密货币
-            策略类型: 策略类型
-        """
-        if not self.配置["自动交易开关"]:
-            return
-        
-        print(f"\n🤖 [{datetime.now().strftime('%H:%M:%S')}] AI信号检查")
-        
+    def _执行风控卖出(self, 品种, 数量, 价格, 理由):
+        """执行风控卖出"""
         try:
-            # 获取AI推荐
-            ai结果 = self.AI引擎.AI推荐(市场, 策略类型, use_real_ai=False)
+            结果 = self.引擎.卖出(品种, 价格, 数量, 策略名称="风控")
             
-            if not ai结果 or not ai结果.get("推荐"):
-                print(f"   ⚪ 无AI推荐")
-                return
-            
-            for 推荐 in ai结果["推荐"][:3]:  # 最多处理3个推荐
-                品种 = 推荐.get("代码")
-                得分 = 推荐.get("得分", 0)
-                理由 = 推荐.get("理由", "")
-                
-                if 得分 < 60:
-                    continue
-                
-                # 检查是否已持仓
+            if 结果.get("success"):
+                # 计算盈亏
                 if 品种 in self.引擎.持仓:
-                    continue
+                    pos = self.引擎.持仓[品种]
+                    成本 = getattr(pos, '平均成本', 0)
+                    盈亏 = (价格 - 成本) * 数量
+                    self.今日盈亏 += 盈亏
                 
-                # 检查持仓数量
-                if len(self.引擎.持仓) >= self.配置["最大持仓数"]:
-                    break
+                self.今日交易次数 += 1
+                print(f"   ✅ 风控卖出成功: {品种} {数量:.4f} @ {价格:.2f}")
                 
-                # 获取价格
-                行情结果 = self.行情.获取价格(品种)
-                if not 行情结果 or not hasattr(行情结果, '价格'):
-                    continue
-                
-                价格 = 行情结果.价格
-                
-                # 执行买入
-                print(f"   🟢 AI推荐买入: {品种} (得分{得分})")
-                self._执行买入(品种, 价格, f"AI推荐_{策略类型}", 理由)
-                
-        except Exception as e:
-            print(f"   ❌ AI信号检查失败: {e}")
-    
-    def _执行买入(self, 品种: str, 价格: float, 策略名称: str, 理由: str = ""):
-        """执行买入操作"""
-        try:
-            # 计算买入数量
-            可用资金 = self.引擎.获取可用资金() if hasattr(self.引擎, '获取可用资金') else self.引擎.可用资金
-            买入金额 = 可用资金 * self.配置["单笔风险"]
-            数量 = 买入金额 / 价格
-            
-            if 数量 <= 0:
-                print(f"   ❌ 买入数量无效: {数量}")
-                return
-            
-            # 执行买入
-            if hasattr(self.引擎, '买入'):
-                结果 = self.引擎.买入(品种, 价格, 数量)
-                
-                if 结果.get("success"):
-                    self.今日交易次数 += 1
-                    print(f"   ✅ 买入成功: {品种} {数量:.4f} @ {价格:.2f}")
-                    
-                    # 发送飞书通知
-                    try:
-                        消息推送.发送交易执行(品种, 'buy', 数量, 价格, 买入金额)
-                    except:
-                        pass
-                    
-                    # 记录交易
-                    self.交易记录.append({
-                        '时间': datetime.now().isoformat(),
-                        '品种': 品种,
-                        '动作': '买入',
-                        '价格': 价格,
-                        '数量': 数量,
-                        '策略': 策略名称,
-                        '理由': 理由
-                    })
-                else:
-                    print(f"   ❌ 买入失败: {结果.get('error')}")
+                self.交易记录.append({
+                    '时间': datetime.now().isoformat(),
+                    '品种': 品种,
+                    '动作': '卖出',
+                    '价格': 价格,
+                    '数量': 数量,
+                    '策略': '风控',
+                    '理由': 理由,
+                    '盈亏': 盈亏
+                })
             else:
-                print(f"   ❌ 引擎无买入方法")
-                
+                print(f"   ❌ 风控卖出失败: {结果.get('error')}")
         except Exception as e:
-            print(f"   ❌ 买入执行异常: {e}")
+            print(f"   ❌ 风控卖出异常: {e}")
     
-    def _执行卖出(self, 品种: str, 数量: float, 价格: float, 理由: str = ""):
-        """执行卖出操作"""
-        try:
-            if hasattr(self.引擎, '卖出'):
-                结果 = self.引擎.卖出(品种, 价格, 数量)
-                
-                if 结果.get("success"):
-                    # 计算盈亏
-                    if 品种 in self.引擎.持仓:
-                        pos = self.引擎.持仓[品种]
-                        成本 = getattr(pos, '平均成本', 0)
-                        盈亏 = (价格 - 成本) * 数量
-                        self.今日盈亏 += 盈亏
-                    
-                    self.今日交易次数 += 1
-                    print(f"   ✅ 卖出成功: {品种} {数量:.4f} @ {价格:.2f}")
-                    
-                    # 发送飞书通知
-                    try:
-                        消息推送.发送交易执行(品种, 'sell', 数量, 价格, 价格 * 数量)
-                    except:
-                        pass
-                    
-                    # 记录交易
-                    self.交易记录.append({
-                        '时间': datetime.now().isoformat(),
-                        '品种': 品种,
-                        '动作': '卖出',
-                        '价格': 价格,
-                        '数量': 数量,
-                        '理由': 理由,
-                        '盈亏': 盈亏
-                    })
-                else:
-                    print(f"   ❌ 卖出失败: {结果.get('error')}")
-            else:
-                print(f"   ❌ 引擎无卖出方法")
-                
-        except Exception as e:
-            print(f"   ❌ 卖出执行异常: {e}")
-    
-    def _发送止损通知(self, 品种: str, 价格: float, 亏损金额: float):
+    def _发送止损通知(self, 品种, 价格, 亏损金额):
         """发送止损通知"""
         try:
-            消息推送.发送止损通知(品种, 价格 * 0.95, 价格, 亏损金额)
+            消息推送.发送止损通知(品种, 价格, 价格, 亏损金额)
         except:
             print(f"   📢 止损: {品种} @ {价格:.2f} 亏损{亏损金额:.2f}")
     
-    def _发送止盈通知(self, 品种: str, 价格: float, 盈利金额: float, 剩余数量: float):
+    def _发送止盈通知(self, 品种, 价格, 盈利金额, 剩余数量):
         """发送止盈通知"""
         try:
-            消息推送.发送止盈通知(品种, 价格 * 0.95, 价格, 盈利金额, 剩余数量)
+            消息推送.发送止盈通知(品种, 价格, 价格, 盈利金额, 剩余数量)
         except:
             print(f"   📢 止盈: {品种} @ {价格:.2f} 盈利{盈利金额:.2f}")
     
@@ -536,7 +508,7 @@ class 自动交易机器人:
         except Exception as e:
             print(f"保存交易记录失败: {e}")
     
-    def 运行一次(self, 策略配置: Dict = None):
+    def 运行一次(self):
         """运行一次完整流程（用于手动测试）"""
         print("\n" + "="*50)
         print("🚀 手动运行自动交易流程")
@@ -544,73 +516,43 @@ class 自动交易机器人:
         
         self.重置每日状态()
         
-        if 策略配置:
-            self.尾盘买入检查(策略配置)
-            self.早盘卖出检查(策略配置)
-        else:
-            # 默认策略：A股隔夜套利
-            self.尾盘买入检查({
-                '策略名称': 'A股隔夜套利',
-                '品种': '000001.SS',
-                '买入时间': self._获取当前时间窗口()
-            })
+        # 执行一次策略检查
+        self.策略信号检查()
         
+        # 执行一次止损止盈检查
         self.止损止盈检查()
+        
         self.显示状态()
         
         print("="*50)
     
-    def _获取当前时间窗口(self) -> str:
-        """获取当前时间窗口"""
-        now = datetime.now()
-        if now.hour == 14 and now.minute >= 55:
-            return now.strftime("%H:%M")
-        return "14:55"
-    
-    def 运行循环(self, 策略配置列表: List[Dict] = None):
+    def 运行循环(self):
         """
         运行自动交易循环
-        
-        参数:
-            策略配置列表: 多个策略配置
         """
         print("\n" + "="*50)
         print("🚀 自动交易机器人启动")
         print("="*50)
         print(f"   止损: {self.配置['止损比例']*100:.0f}%")
         print(f"   止盈: {self.配置['止盈比例']*100:.0f}%")
-        print(f"   检查间隔: {self.配置['检查间隔']}秒")
+        print(f"   策略检查间隔: {self.配置['检查间隔']}秒")
+        print(f"   加载策略数量: {len(self.策略配置列表)}")
         print("="*50)
         
         self.运行中 = True
-        
-        if 策略配置列表 is None:
-            策略配置列表 = [
-                {
-                    '策略名称': 'A股隔夜套利',
-                    '品种': '000001.SS',
-                    '买入时间': '14:55',
-                    '卖出时间': '09:30'
-                }
-            ]
         
         try:
             while self.运行中:
                 # 1. 重置每日状态
                 self.重置每日状态()
                 
-                # 2. 执行各策略的尾盘买入检查
-                for 策略配置 in 策略配置列表:
-                    self.尾盘买入检查(策略配置)
+                # 2. 策略信号检查（AI自动买入卖出）
+                self.策略信号检查()
                 
-                # 3. 执行各策略的早盘卖出检查
-                for 策略配置 in 策略配置列表:
-                    self.早盘卖出检查(策略配置)
-                
-                # 4. 止损止盈检查
+                # 3. 止损止盈检查
                 self.止损止盈检查()
                 
-                # 5. 显示状态
+                # 4. 显示状态
                 self.显示状态()
                 
                 # 等待下次检查
@@ -622,6 +564,21 @@ class 自动交易机器人:
             self.运行中 = False
             self.保存交易记录()
             print("🛑 自动交易机器人已停止")
+    
+    def 获取状态(self) -> dict:
+        """获取机器人状态"""
+        return {
+            "运行中": self.运行中,
+            "自动交易开关": self.配置["自动交易开关"],
+            "今日交易次数": self.今日交易次数,
+            "今日盈亏": self.今日盈亏,
+            "持仓数量": len(self.引擎.持仓),
+            "策略数量": len(self.策略配置列表)
+        }
+    
+    def 设置引擎(self, 引擎):
+        """设置订单引擎"""
+        self.引擎 = 引擎
 
 
 # ==================== 便捷函数 ====================
@@ -635,11 +592,11 @@ def 获取机器人() -> 自动交易机器人:
     return _机器人实例
 
 
-def 启动自动交易(策略配置列表: List[Dict] = None):
+def 启动自动交易():
     """启动自动交易"""
     机器人 = 获取机器人()
     机器人.设置自动交易(True)
-    机器人.运行循环(策略配置列表)
+    机器人.运行循环()
 
 
 def 停止自动交易():
@@ -654,8 +611,8 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description='自动交易机器人')
     parser.add_argument('--loop', action='store_true', help='循环运行')
-    parser.add_argument('--strategy', type=str, default='A股隔夜套利', help='策略名称')
-    parser.add_argument('--symbol', type=str, default='000001.SS', help='品种代码')
+    parser.add_argument('--strategy', type=str, default=None, help='策略名称')
+    parser.add_argument('--symbol', type=str, default=None, help='品种代码')
     parser.add_argument('--stop-loss', type=float, default=0.05, help='止损比例')
     parser.add_argument('--take-profit', type=float, default=0.10, help='止盈比例')
     
@@ -669,21 +626,21 @@ if __name__ == "__main__":
     if args.take_profit:
         机器人.更新配置({"止盈比例": args.take_profit})
     
+    # 如果指定了策略，添加自定义策略配置
+    if args.strategy and args.symbol:
+        机器人.策略配置列表 = [{
+            "名称": args.strategy,
+            "类别": "自定义",
+            "启用": True,
+            "品种": [args.symbol],
+            "执行间隔": 60,
+            "资金分配": 0.30,
+            "最大持仓": 1
+        }]
+        print(f"✅ 使用自定义策略: {args.strategy} - {args.symbol}")
+    
     if args.loop:
-        # 循环运行
-        策略配置 = {
-            '策略名称': args.strategy,
-            '品种': args.symbol,
-            '买入时间': '14:55',
-            '卖出时间': '09:30'
-        }
         机器人.设置自动交易(True)
-        机器人.运行循环([策略配置])
+        机器人.运行循环()
     else:
-        # 手动运行一次
-        策略配置 = {
-            '策略名称': args.strategy,
-            '品种': args.symbol,
-            '买入时间': '14:55'
-        }
-        机器人.运行一次(策略配置)
+        机器人.运行一次()
