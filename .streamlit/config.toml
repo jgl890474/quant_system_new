@@ -9,6 +9,22 @@ font = "sans serif"
 maxUploadSize = 10
 enableXsrfProtection = true
 enableCORS = false
+# ========== 新增：防止频繁重启 ==========
+runOnSave = false
+fileWatcherType = "none"
+enableWebsocketCompression = true
 
 [browser]
 gatherUsageStats = false
+# ========== 新增：服务器配置 ==========
+serverAddress = "82.156.82.168"
+serverPort = 8501
+
+[runner]
+# ========== 新增：关闭魔法命令 ==========
+magicEnabled = false
+installTracer = false
+
+[logger]
+# ========== 新增：日志级别 ==========
+level = "WARNING"
