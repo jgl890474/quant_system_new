@@ -90,8 +90,11 @@ def 显示(引擎=None):
         # 日期范围
         if 选中品种信息 and 选中品种信息["类型"] == "加密货币":
             st.info("💡 加密货币7x24小时交易，建议选择近期日期")
+            开始日期默认 = datetime.date.today() - datetime.timedelta(days=90)
+        else:
+            开始日期默认 = datetime.date(2024, 1, 1)
         
-        开始日期 = st.date_input("开始日期", value=datetime.date(2024, 1, 1))
+        开始日期 = st.date_input("开始日期", value=开始日期默认)
         结束日期 = st.date_input("结束日期", value=datetime.date.today())
         初始资金 = st.number_input("初始资金", value=1000000, step=100000, format="%d")
         手续费率 = st.number_input("手续费率", value=0.001, step=0.0005, format="%.4f")
@@ -99,7 +102,7 @@ def 显示(引擎=None):
         st.markdown("---")
         st.markdown("### 📊 策略来源")
 
-        # ========== 新增：策略来源选择 ==========
+        # ========== 策略来源选择 ==========
         策略来源 = st.radio(
             "选择策略来源",
             ["技术指标策略", "策略库策略"],
@@ -109,6 +112,16 @@ def 显示(引擎=None):
 
         st.markdown("### 📊 策略参数")
 
+        # 初始化变量
+        策略名称 = ""
+        使用策略库策略 = False
+        策略类型 = "双均线策略"
+        短期均线 = 5
+        长期均线 = 20
+        布林带周期 = 20
+        布林带标准差 = 2.0
+        策略库参数 = {}
+
         if 策略来源 == "技术指标策略":
             # 原有的技术指标选择
             策略类型 = st.selectbox("交易策略", ["双均线策略", "买入持有策略", "布林带策略"], index=0)
@@ -116,20 +129,17 @@ def 显示(引擎=None):
             if 策略类型 == "双均线策略":
                 短期均线 = st.slider("短期均线（买入信号）", 3, 30, 5, 1)
                 长期均线 = st.slider("长期均线（卖出信号）", 10, 60, 20, 1)
-            else:
-                短期均线, 长期均线 = 5, 20
 
             if 策略类型 == "布林带策略":
                 布林带周期 = st.slider("布林带周期", 10, 50, 20, 5)
                 布林带标准差 = st.slider("标准差倍数", 1.0, 3.0, 2.0, 0.5)
             
             策略名称 = 策略类型
-            使用策略库策略 = False
 
         else:
-            # ========== 新增：从策略库获取策略 ==========
+            # ========== 从策略库获取策略 ==========
             try:
-                from 核心 import 策略加载器, 策略运行器
+                from 核心 import 策略加载器
                 加载器 = 策略加载器()
                 所有策略 = 加载器.获取策略()
                 
@@ -151,27 +161,85 @@ def 显示(引擎=None):
                     st.warning(f"没有找到适合 {选中品种信息['类型']} 的策略，请使用技术指标策略")
                     策略来源 = "技术指标策略"
                     策略类型 = st.selectbox("交易策略", ["双均线策略", "买入持有策略", "布林带策略"], index=0)
-                    使用策略库策略 = False
                 else:
                     策略选项 = [s.get("名称", "") for s in 匹配策略]
                     策略名称 = st.selectbox("选择策略", 策略选项)
                     使用策略库策略 = True
                     
-                    # 显示策略信息
+                    # 找到选中的策略详情
+                    当前策略详情 = None
                     for s in 匹配策略:
                         if s.get("名称") == 策略名称:
-                            st.caption(f"📋 策略类型: {s.get('类别', '未知')}")
+                            当前策略详情 = s
                             break
                     
-                    # 策略参数不可调（使用策略内置参数）
-                    st.info("策略库策略使用内置参数，不可手动调整")
-                    短期均线, 长期均线 = 5, 20
-                    布林带周期, 布林带标准差 = 20, 2.0
+                    if 当前策略详情:
+                        st.caption(f"📋 策略类型: {当前策略详情.get('类别', '未知')}")
+                        st.caption(f"📝 策略描述: {当前策略详情.get('描述', '无描述')}")
+                        
+                        # ========== 显示策略参数（可调整） ==========
+                        策略参数配置 = 当前策略详情.get('参数', {})
+                        
+                        if 策略参数配置:
+                            st.markdown("---")
+                            st.markdown("#### 🔧 策略参数调整")
+                            
+                            # 动态生成参数控件
+                            for 参数名, 参数配置 in 策略参数配置.items():
+                                if isinstance(参数配置, dict):
+                                    参数类型 = 参数配置.get('类型', 'float')
+                                    参数默认值 = 参数配置.get('默认值', 0)
+                                    参数最小值 = 参数配置.get('最小值', 0)
+                                    参数最大值 = 参数配置.get('最大值', 100)
+                                    参数步长 = 参数配置.get('步长', 1)
+                                    参数描述 = 参数配置.get('描述', 参数名)
+                                    
+                                    if 参数类型 == 'int':
+                                        策略库参数[参数名] = st.number_input(
+                                            f"{参数描述}",
+                                            value=int(参数默认值),
+                                            min_value=int(参数最小值),
+                                            max_value=int(参数最大值),
+                                            step=int(参数步长),
+                                            key=f"param_{参数名}"
+                                        )
+                                    elif 参数类型 == 'float':
+                                        策略库参数[参数名] = st.number_input(
+                                            f"{参数描述}",
+                                            value=float(参数默认值),
+                                            min_value=float(参数最小值),
+                                            max_value=float(参数最大值),
+                                            step=float(参数步长),
+                                            format="%.2f",
+                                            key=f"param_{参数名}"
+                                        )
+                                    elif 参数类型 == 'bool':
+                                        策略库参数[参数名] = st.checkbox(
+                                            f"{参数描述}",
+                                            value=bool(参数默认值),
+                                            key=f"param_{参数名}"
+                                        )
+                                    elif 参数类型 == 'select':
+                                        参数选项 = 参数配置.get('选项', [])
+                                        if 参数默认值 in 参数选项:
+                                            默认索引 = 参数选项.index(参数默认值)
+                                        else:
+                                            默认索引 = 0
+                                        策略库参数[参数名] = st.selectbox(
+                                            f"{参数描述}",
+                                            参数选项,
+                                            index=默认索引,
+                                            key=f"param_{参数名}"
+                                        )
+                            
+                            # 保存到session_state供回测使用
+                            st.session_state['策略库参数'] = 策略库参数
+                        else:
+                            st.info("该策略使用内置默认参数，无可调整参数")
                     
             except Exception as e:
                 st.error(f"加载策略库失败: {e}")
                 策略类型 = st.selectbox("交易策略", ["双均线策略", "买入持有策略", "布林带策略"], index=0)
-                使用策略库策略 = False
 
         st.markdown("---")
         st.markdown("### 🎯 止盈止损")
@@ -180,7 +248,7 @@ def 显示(引擎=None):
         止损百分比 = st.number_input("止损目标 (%)", value=-3.0, step=0.5, min_value=-30.0, max_value=0.0)
 
         st.markdown("---")
-        运行按钮 = st.button("🚀 开始回测", type="primary", width='stretch')
+        运行按钮 = st.button("🚀 开始回测", type="primary", width="stretch")
 
     # ==================== 显示当前有效持仓列表 ====================
     with st.expander("📋 当前有效持仓列表", expanded=False):
@@ -198,7 +266,7 @@ def 显示(引擎=None):
         
         if 持仓显示数据:
             df_持仓 = pd.DataFrame(持仓显示数据)
-            st.dataframe(df_持仓, width='stretch', hide_index=True)
+            st.dataframe(df_持仓, width="stretch", hide_index=True)
             st.caption(f"💡 共 {len(持仓显示数据)} 个有效持仓（数量 > 0）")
 
     if not 运行按钮:
@@ -208,14 +276,22 @@ def 显示(引擎=None):
     # ==================== 执行回测 ====================
     with st.spinner(f"正在获取 {品种代码} 的历史数据并执行回测..."):
         try:
-            # 获取历史数据
+            # 获取历史数据 - 根据类型选择不同的数据源
             if 选中品种信息 and 选中品种信息["类型"] == "A股":
                 df = 获取A股历史数据(品种代码, 开始日期, 结束日期)
+            elif 选中品种信息 and 选中品种信息["类型"] == "加密货币":
+                df = 获取加密货币历史数据(品种代码, 开始日期, 结束日期)
+            elif 选中品种信息 and 选中品种信息["类型"] == "美股":
+                df = 获取美股历史数据(品种代码, 开始日期, 结束日期)
             else:
                 df = 获取通用演示数据(品种代码, 开始日期, 结束日期)
 
             if df is None or df.empty:
-                st.error(f"❌ 无法获取 {品种代码} 的历史数据")
+                st.error(f"❌ 无法获取 {品种代码} 的历史数据，尝试使用演示数据...")
+                df = 获取通用演示数据(品种代码, 开始日期, 结束日期)
+                
+            if df is None or df.empty:
+                st.error(f"❌ 仍然无法获取数据，请检查网络或稍后重试")
                 return
 
             st.success(f"✅ 成功获取 {len(df)} 条历史数据")
@@ -225,7 +301,6 @@ def 显示(引擎=None):
             if 使用策略库策略:
                 # 使用策略库策略生成信号
                 try:
-                    from 核心 import 策略运行器 as 运行器
                     from 核心 import 策略加载器 as 加载器类
                     
                     加载器 = 加载器类()
@@ -238,26 +313,54 @@ def 显示(引擎=None):
                             break
                     
                     if 目标策略 and 目标策略.get("类"):
+                        # 获取用户修改的策略参数
+                        用户参数 = st.session_state.get('策略库参数', {})
+                        
+                        # 创建策略实例并传入参数
+                        策略类 = 目标策略["类"]
+                        
+                        # 尝试用用户参数初始化策略
+                        try:
+                            策略实例 = 策略类(策略名称, 品种代码, 初始资金, **用户参数)
+                        except:
+                            # 如果参数不匹配，使用默认初始化
+                            策略实例 = 策略类(策略名称, 品种代码, 初始资金)
+                        
                         # 逐行计算信号
                         信号列表 = []
-                        策略实例 = 目标策略["类"](策略名称, 品种代码, 初始资金)
-                        
                         for i in range(len(df)):
-                            当前行情 = {'close': df['收盘'].iloc[i], 'volume': df['成交量'].iloc[i] if '成交量' in df.columns else 0}
-                            信号 = 策略实例.处理行情(当前行情)
-                            if 信号 == 'buy':
-                                信号列表.append(1)
-                            elif 信号 == 'sell':
-                                信号列表.append(-1)
-                            else:
+                            当前行情 = {
+                                'close': df['收盘'].iloc[i],
+                                'open': df['开盘'].iloc[i] if '开盘' in df.columns else df['收盘'].iloc[i],
+                                'high': df['最高'].iloc[i] if '最高' in df.columns else df['收盘'].iloc[i],
+                                'low': df['最低'].iloc[i] if '最低' in df.columns else df['收盘'].iloc[i],
+                                'volume': df['成交量'].iloc[i] if '成交量' in df.columns else 0,
+                                'date': df['日期'].iloc[i]
+                            }
+                            
+                            try:
+                                信号 = 策略实例.处理行情(当前行情)
+                                if 信号 == 'buy' or 信号 == 1:
+                                    信号列表.append(1)
+                                elif 信号 == 'sell' or 信号 == -1:
+                                    信号列表.append(-1)
+                                else:
+                                    信号列表.append(0)
+                            except:
                                 信号列表.append(0)
                         
                         df['信号'] = 信号列表
+                        
+                        # 显示使用的参数
+                        if 用户参数:
+                            with st.expander("📊 策略参数详情", expanded=False):
+                                st.json(用户参数)
                     else:
-                        st.warning(f"无法加载策略 {策略名称}，使用默认信号")
-                        df['信号'] = 0
+                        st.warning(f"无法加载策略 {策略名称}，使用双均线策略")
+                        df = 计算均线(df, 5, 20)
+                        
                 except Exception as e:
-                    st.warning(f"策略库策略运行失败: {e}，使用技术指标策略")
+                    st.warning(f"策略库策略运行失败: {e}，使用双均线策略")
                     df = 计算均线(df, 5, 20)
             else:
                 # 使用技术指标策略
@@ -282,6 +385,157 @@ def 显示(引擎=None):
             import traceback
             with st.expander("详细错误信息"):
                 st.code(traceback.format_exc())
+
+
+def 获取加密货币历史数据(品种代码, 开始日期, 结束日期):
+    """
+    获取加密货币历史数据（使用Binance API）
+    支持: BTC-USD, ETH-USD, DOGE-USD, BNB-USD 等
+    """
+    try:
+        symbol = 品种代码.upper()
+        
+        # 转换symbol格式: BTC-USD -> BTCUSDT
+        binance_symbol = symbol.replace('-', '').replace('USD', 'USDT')
+        if 'USDT' not in binance_symbol:
+            binance_symbol = binance_symbol + 'USDT'
+        
+        # 计算时间戳（毫秒）
+        start_ts = int(开始日期.timestamp() * 1000)
+        end_ts = int(结束日期.timestamp() * 1000)
+        
+        url = "https://api.binance.com/api/v3/klines"
+        params = {
+            'symbol': binance_symbol,
+            'interval': '1d',
+            'startTime': start_ts,
+            'endTime': end_ts,
+            'limit': 1000
+        }
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        response = requests.get(url, params=params, headers=headers, timeout=15)
+        
+        if response.status_code == 200:
+            data = response.json()
+            
+            if isinstance(data, list) and len(data) > 0:
+                rows = []
+                for k in data:
+                    rows.append({
+                        '日期': pd.to_datetime(k[0], unit='ms'),
+                        '开盘': float(k[1]),
+                        '最高': float(k[2]),
+                        '最低': float(k[3]),
+                        '收盘': float(k[4]),
+                        '成交量': float(k[5])
+                    })
+                
+                df = pd.DataFrame(rows)
+                df = df.sort_values('日期')
+                df = df.drop_duplicates(subset=['日期'])
+                
+                if len(df) > 0:
+                    st.success(f"✅ Binance API 获取 {symbol} 数据成功，共 {len(df)} 条")
+                    return df
+                    
+    except Exception as e:
+        print(f"Binance API 获取失败: {e}")
+    
+    # 尝试备用API
+    return 获取加密货币数据_备用(品种代码, 开始日期, 结束日期)
+
+
+def 获取加密货币数据_备用(品种代码, 开始日期, 结束日期):
+    """使用 CoinGecko API 获取加密货币数据"""
+    try:
+        # CoinGecko ID 映射
+        coin_map = {
+            'BTC': 'bitcoin',
+            'ETH': 'ethereum',
+            'BNB': 'binancecoin',
+            'DOGE': 'dogecoin',
+            'SOL': 'solana',
+            'XRP': 'ripple',
+            'ADA': 'cardano',
+            'AVAX': 'avalanche-2'
+        }
+        
+        symbol = 品种代码.upper().split('-')[0]
+        coin_id = coin_map.get(symbol, symbol.lower())
+        
+        # 计算天数
+        days = (结束日期 - 开始日期).days
+        if days <= 0:
+            days = 90
+        if days > 365:
+            days = 365
+        
+        url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart/range"
+        params = {
+            'vs_currency': 'usd',
+            'from': int(开始日期.timestamp()),
+            'to': int(结束日期.timestamp())
+        }
+        
+        response = requests.get(url, params=params, timeout=15)
+        
+        if response.status_code == 200:
+            data = response.json()
+            
+            if 'prices' in data and len(data['prices']) > 0:
+                rows = []
+                for item in data['prices']:
+                    timestamp = item[0]
+                    price = item[1]
+                    rows.append({
+                        '日期': pd.to_datetime(timestamp, unit='ms'),
+                        '收盘': price,
+                        '开盘': price,
+                        '最高': price,
+                        '最低': price,
+                        '成交量': 0
+                    })
+                
+                df = pd.DataFrame(rows)
+                df = df.drop_duplicates(subset=['日期'])
+                st.info(f"📊 使用 CoinGecko API 数据，共 {len(df)} 条")
+                return df
+                
+    except Exception as e:
+        print(f"CoinGecko API 获取失败: {e}")
+    
+    return None
+
+
+def 获取美股历史数据(股票代码, 开始日期, 结束日期):
+    """获取美股历史数据（使用yfinance）"""
+    try:
+        import yfinance as yf
+        
+        start_str = 开始日期.strftime("%Y-%m-%d")
+        end_str = 结束日期.strftime("%Y-%m-%d")
+        
+        ticker = yf.Ticker(股票代码.upper())
+        df = ticker.history(start=start_str, end=end_str, interval="1d")
+        
+        if not df.empty:
+            df = df.reset_index()
+            df.columns = ['日期', '开盘', '最高', '最低', '收盘', '成交量', '拆股', '分红']
+            df = df[['日期', '开盘', '最高', '最低', '收盘', '成交量']]
+            df['日期'] = pd.to_datetime(df['日期'])
+            df = df.dropna()
+            
+            st.success(f"✅ 美股数据获取成功: {len(df)}条数据")
+            return df
+            
+    except Exception as e:
+        print(f"美股数据获取失败: {e}")
+    
+    return None
 
 
 def 获取A股历史数据(股票代码, 开始日期, 结束日期):
@@ -359,6 +613,7 @@ def 获取通用演示数据(品种代码, 开始日期, 结束日期):
         '收盘': price,
         '成交量': np.random.randint(1000, 10000, len(dates))
     })
+    st.info(f"📊 使用演示数据模拟 {品种代码}")
     return df
 
 
@@ -397,12 +652,12 @@ def 计算布林带(df, 周期, 标准差倍数):
 
 
 def 执行持仓回测(df, 初始资金, 手续费率, 止盈率, 止损率):
-    """执行持仓回测"""
+    """执行持仓回测（支持加密货币小数持仓）"""
     资金 = 初始资金
-    持仓数量 = 0
+    持仓数量 = 0.0  # 改为浮点数，支持加密货币小数
     交易记录 = []
     每日净值 = []
-    买入价 = 0
+    买入价 = 0.0
 
     for i in range(len(df)):
         当前日期 = df['日期'].iloc[i]
@@ -429,14 +684,16 @@ def 执行持仓回测(df, 初始资金, 手续费率, 止盈率, 止损率):
                 '日期': 当前日期,
                 '行动': '止盈卖出' if 止盈触发 else '止损卖出',
                 '价格': 当前收盘,
-                '数量': 持仓数量,
+                '数量': round(持仓数量, 4),
                 '盈亏': round(盈亏, 2)
             })
-            持仓数量 = 0
-            买入价 = 0
+            持仓数量 = 0.0
+            买入价 = 0.0
 
         elif df['信号'].iloc[i] == 1 and 持仓数量 == 0:
-            买入数量 = int(资金 / 当前收盘 / 100) * 100
+            # 使用95%资金买入，预留手续费
+            买入数量 = (资金 * 0.95) / 当前收盘
+            
             if 买入数量 > 0:
                 买入金额 = 买入数量 * 当前收盘
                 手续费 = 买入金额 * 手续费率
@@ -447,7 +704,7 @@ def 执行持仓回测(df, 初始资金, 手续费率, 止盈率, 止损率):
                     '日期': 当前日期,
                     '行动': '买入',
                     '价格': 当前收盘,
-                    '数量': 持仓数量,
+                    '数量': round(持仓数量, 4),
                     '盈亏': 0
                 })
 
@@ -461,11 +718,11 @@ def 执行持仓回测(df, 初始资金, 手续费率, 止盈率, 止损率):
                 '日期': 当前日期,
                 '行动': '卖出(信号)',
                 '价格': 当前收盘,
-                '数量': 持仓数量,
+                '数量': round(持仓数量, 4),
                 '盈亏': round(盈亏, 2)
             })
-            持仓数量 = 0
-            买入价 = 0
+            持仓数量 = 0.0
+            买入价 = 0.0
 
         当前持仓市值 = 持仓数量 * 当前收盘
         当日总资产 = 资金 + 当前持仓市值
@@ -481,7 +738,7 @@ def 执行持仓回测(df, 初始资金, 手续费率, 止盈率, 止损率):
             '日期': df['日期'].iloc[-1],
             '行动': '强制平仓',
             '价格': 最后价格,
-            '数量': 持仓数量,
+            '数量': round(持仓数量, 4),
             '盈亏': round(盈亏, 2)
         })
         每日净值[-1] = 资金
@@ -554,156 +811,4 @@ def 绘制动态净值曲线(df, 回测结果, 品种代码):
     买入记录 = [t for t in 回测结果['交易记录'] if t['行动'] == '买入']
     卖出记录 = [t for t in 回测结果['交易记录'] if t['行动'] in ['卖出(信号)', '止盈卖出', '止损卖出', '强制平仓']]
 
-    if 买入记录:
-        买入日期 = [t['日期'] for t in 买入记录]
-        买入净值 = []
-        for d in 买入日期:
-            try:
-                idx = dates.index(d)
-                买入净值.append(净值[idx])
-            except ValueError:
-                pass
-        if 买入净值:
-            fig.add_trace(
-                go.Scatter(x=买入日期, y=买入净值, mode='markers', name='买入信号',
-                          marker=dict(symbol='triangle-up', size=10, color='#2ECC71')),
-                row=1, col=1
-            )
-
-    if 卖出记录:
-        卖出日期 = [t['日期'] for t in 卖出记录]
-        卖出净值 = []
-        for d in 卖出日期:
-            try:
-                idx = dates.index(d)
-                卖出净值.append(净值[idx])
-            except ValueError:
-                pass
-        if 卖出净值:
-            fig.add_trace(
-                go.Scatter(x=卖出日期, y=卖出净值, mode='markers', name='卖出信号',
-                          marker=dict(symbol='triangle-down', size=10, color='#E74C3C')),
-                row=1, col=1
-            )
-
-    fig.add_trace(
-        go.Scatter(x=dates, y=回撤, mode='lines', name='回撤',
-                  line=dict(color='#E74C3C', width=2),
-                  fill='tozeroy', fillcolor='rgba(231,76,60,0.2)'),
-        row=2, col=1
-    )
-
-    fig.add_hline(y=0, line_dash="dash", line_color="gray", row=2, col=1)
-
-    最大回撤值 = 回测结果['最大回撤']
-    回撤列表 = 回测结果['回撤']
-    最大回撤索引 = 回撤列表.index(min(回撤列表)) if 回撤列表 else 0
-    if 最大回撤索引 < len(dates):
-        fig.add_annotation(
-            x=dates[最大回撤索引], y=最大回撤值,
-            text=f"最大回撤: {最大回撤值:.2f}%",
-            showarrow=True, arrowhead=2, arrowsize=1, arrowwidth=2,
-            arrowcolor="#E74C3C", ax=0, ay=-30,
-            row=2, col=1
-        )
-
-    fig.update_layout(
-        title=dict(text=f"{品种代码} - 动态回测曲线", x=0.5, font=dict(size=18)),
-        hovermode='x unified',
-        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
-        height=600, plot_bgcolor='white'
-    )
-
-    fig.update_xaxes(title_text="日期", row=2, col=1, gridcolor='#E8E8E8')
-    fig.update_yaxes(title_text="净值 (元)", row=1, col=1, gridcolor='#E8E8E8', tickformat=',.0f')
-    fig.update_yaxes(title_text="回撤 (%)", row=2, col=1, gridcolor='#E8E8E8', tickformat='.1f')
-
-    return fig
-
-
-def 显示回测结果(回测结果, 品种代码, 短期均线, 长期均线, 止盈百分比, 止损百分比, 策略名称, 品种类型):
-    """显示回测结果"""
-    st.markdown("---")
-    st.subheader("📊 回测指标")
-
-    col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("初始资金", f"¥{回测结果['初始资金']:,.0f}")
-    col2.metric("最终资金", f"¥{回测结果['最终资金']:,.0f}", delta=f"¥{回测结果['总盈亏']:+,.0f}")
-    col3.metric("总收益率", f"{回测结果['总收益率']:+.2f}%")
-    col4.metric("最大回撤", f"{回测结果['最大回撤']:.2f}%")
-    col5.metric("交易次数", len([t for t in 回测结果['交易记录'] if t['行动'] != '买入']))
-
-    st.markdown("---")
-    st.subheader("📈 动态净值曲线 & 动态回撤曲线")
-
-    fig = 绘制动态净值曲线(回测结果['数据'], 回测结果, 品种代码)
-    st.plotly_chart(fig, width='stretch')
-
-    with st.expander("📖 策略参数", expanded=False):
-        col1, col2 = st.columns(2)
-        col1.markdown(f"""
-        - **品种类型**: {品种类型}
-        - **品种代码**: {品种代码}
-        - **回测区间**: {回测结果['数据']['日期'].iloc[0].strftime('%Y-%m-%d')} 至 {回测结果['数据']['日期'].iloc[-1].strftime('%Y-%m-%d')}
-        - **策略名称**: {策略名称}
-        """)
-        if "双均线" in 策略名称:
-            col1.markdown(f"- **短期均线**: {短期均线}日\n- **长期均线**: {长期均线}日")
-        col2.markdown(f"""
-        - **手续费率**: {回测结果['手续费率']*100:.2f}%
-        - **止盈目标**: {止盈百分比}%
-        - **止损目标**: {止损百分比}%
-        - **初始资金**: ¥{回测结果['初始资金']:,.0f}
-        """)
-
-    st.subheader("📊 收益分析")
-
-    盈利交易 = [t for t in 回测结果['交易记录'] if t['盈亏'] > 0]
-    亏损交易 = [t for t in 回测结果['交易记录'] if t['盈亏'] < 0]
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        if len(盈利交易) + len(亏损交易) > 0:
-            fig_pie = go.Figure(data=[go.Pie(
-                labels=['盈利交易', '亏损交易'],
-                values=[len(盈利交易), len(亏损交易)],
-                marker_colors=['#2ECC71', '#E74C3C'],
-                hole=0.4
-            )])
-            fig_pie.update_layout(title="盈亏交易比例", height=350)
-            st.plotly_chart(fig_pie, width='stretch')
-        else:
-            st.info("暂无盈亏数据")
-
-    with col2:
-        if 盈利交易 or 亏损交易:
-            盈利总额 = sum(t['盈亏'] for t in 盈利交易) if 盈利交易 else 0
-            亏损总额 = abs(sum(t['盈亏'] for t in 亏损交易)) if 亏损交易 else 0
-            st.metric("总盈利", f"¥{盈利总额:,.2f}")
-            st.metric("总亏损", f"¥{亏损总额:,.2f}")
-            if len(盈利交易) + len(亏损交易) > 0:
-                胜率 = len(盈利交易) / (len(盈利交易) + len(亏损交易)) * 100
-                st.metric("胜率", f"{胜率:.1f}%")
-
-    if 回测结果['交易记录']:
-        st.subheader("📋 交易记录")
-        交易_df = pd.DataFrame(回测结果['交易记录'])
-        st.dataframe(交易_df, width='stretch', hide_index=True)
-    else:
-        st.info("本次回测没有产生任何交易记录")
-
-    st.markdown("---")
-    st.subheader("💡 回测总结")
-
-    if 回测结果['总收益率'] > 0:
-        st.success(f"✅ 策略在回测区间内取得了 {回测结果['总收益率']:+.2f}% 的正收益")
-    else:
-        st.warning(f"⚠️ 策略在回测区间内取得了 {回测结果['总收益率']:+.2f}% 的负收益")
-
-    st.markdown("""
-    **⚠️ 风险提示**：
-    - 历史回测结果不代表未来收益
-    - 实际交易中可能存在滑点和流动性风险
-    - 建议在实盘前进行充分的参数优化和压力测试
-    """)
+    if 买入记录
