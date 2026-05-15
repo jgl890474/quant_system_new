@@ -345,13 +345,11 @@ if st.session_state.错误消息:
 with st.sidebar:
     st.markdown("### 🛠️ 系统工具")
     
-    # ========== 修复：清空所有持仓数据 ==========
     if st.button("🗑️ 清空所有持仓数据", width="stretch"):
         try:
             数据库.清空所有持仓()
             st.session_state.订单引擎 = 订单引擎(初始资金=INITIAL_CAPITAL)
             引擎 = st.session_state.订单引擎
-            # 安全更新自动交易器的引擎
             if st.session_state.自动交易器 and hasattr(st.session_state.自动交易器, '设置引擎'):
                 st.session_state.自动交易器.设置引擎(引擎)
             st.success("✅ 已清空")
@@ -614,13 +612,16 @@ auto_save_session()
 
 # ========== 页面卸载时清理 ==========
 import atexit
+
 def 清理资源():
-    if st.session_state.自动交易器 and hasattr(st.session_state.自动交易器, '运行中'):
-        st.session_state.自动交易器.运行中 = False
+    auto_trader = st.session_state.get("自动交易器", None)
+    if auto_trader and hasattr(auto_trader, '运行中'):
+        auto_trader.运行中 = False
         print("🛑 资源已清理")
     
-    if st.session_state.策略调度器 and hasattr(st.session_state.策略调度器, '停止'):
-        st.session_state.策略调度器.停止()
+    scheduler = st.session_state.get("策略调度器", None)
+    if scheduler and hasattr(scheduler, '停止'):
+        scheduler.停止()
 
 atexit.register(清理资源)
 
