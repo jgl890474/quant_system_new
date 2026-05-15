@@ -43,7 +43,6 @@ except ImportError:
 try:
     from 核心.策略运行器 import 策略运行器
 except ImportError:
-    # 如果策略运行器不存在，创建一个简单的兼容类
     class 策略运行器:
         _策略状态 = {}
         @classmethod
@@ -262,17 +261,22 @@ def 启动后台调度器():
         # 注册定时任务
         调度器 = 定时任务模块.获取调度器()
         
-        # 注册函数
+        # ========== 修复：安全获取 session_state 值 ==========
         def 自动交易检查():
-            if st.session_state.自动交易开关 and st.session_state.自动交易器:
-                try:
-                    st.session_state.自动交易器.止损止盈检查()
-                except Exception as e:
-                    print(f"自动交易检查失败: {e}")
+            try:
+                auto_trade = st.session_state.get("自动交易开关", False)
+                auto_trader = st.session_state.get("自动交易器", None)
+                if auto_trade and auto_trader:
+                    auto_trader.止损止盈检查()
+            except Exception as e:
+                print(f"自动交易检查失败: {e}")
         
         def 发送心跳():
-            if st.session_state.自动交易开关:
-                print(f"💓 系统心跳: {datetime.now().strftime('%H:%M:%S')}")
+            try:
+                if st.session_state.get("自动交易开关", False):
+                    print(f"💓 系统心跳: {datetime.now().strftime('%H:%M:%S')}")
+            except Exception as e:
+                pass
         
         # 添加任务
         调度器.注册函数("自动交易检查", 自动交易检查)
@@ -345,7 +349,6 @@ with st.sidebar:
             数据库.清空所有持仓()
             st.session_state.订单引擎 = 订单引擎(初始资金=INITIAL_CAPITAL)
             引擎 = st.session_state.订单引擎
-            # 更新自动交易器的引擎
             if st.session_state.自动交易器:
                 st.session_state.自动交易器.设置引擎(引擎)
             st.success("✅ 已清空")
@@ -379,11 +382,9 @@ with st.sidebar:
     # ========== 自动交易控制 ==========
     st.markdown("### 🤖 自动交易控制")
     
-    # 初始化自动交易器
     if 自动交易可用:
         初始化自动交易器()
         
-        # 自动交易开关
         新开关状态 = st.checkbox(
             "🔴 开启自动交易", 
             value=st.session_state.自动交易开关,
@@ -404,13 +405,11 @@ with st.sidebar:
                     pass
             st.rerun()
         
-        # 显示自动交易状态
         if st.session_state.自动交易器:
             状态 = st.session_state.自动交易器.获取状态() if hasattr(st.session_state.自动交易器, '获取状态') else {}
             st.caption(f"📊 今日交易: {状态.get('今日交易次数', 0)} 次")
             st.caption(f"💰 今日盈亏: ¥{状态.get('今日盈亏', 0):+,.2f}")
         
-        # 启动后台调度器
         if not st.session_state.后台服务已启动:
             启动后台调度器()
     
@@ -424,7 +423,6 @@ with st.sidebar:
         st.caption(f"📋 运行中: {'🟢是' if 调度器状态.get('运行中') else '🔴否'}")
         st.caption(f"🎯 策略数量: {调度器状态.get('策略数量', 0)}")
         
-        # 显示策略列表
         if 调度器状态.get('策略数量', 0) > 0:
             with st.expander("📋 运行中的策略"):
                 for s in 调度器状态.get('策略列表', []):
@@ -432,12 +430,10 @@ with st.sidebar:
     else:
         st.caption("⚙️ 策略调度器未启动")
         
-        # 显示调试信息（展开显示）
         with st.expander("🔧 调试信息", expanded=True):
             st.write(f"策略调度器可用: {策略调度器可用}")
             st.write(f"策略调度器实例: {st.session_state.策略调度器}")
             
-            # 手动启动按钮
             if st.button("🚀 手动启动策略调度器", key="manual_start_scheduler"):
                 with st.spinner("正在启动策略调度器..."):
                     if 初始化策略调度器():
@@ -460,14 +456,12 @@ with st.sidebar:
     if hasattr(引擎, '持仓') and 引擎.持仓:
         st.caption(f"📊 当前持仓数量: {len(引擎.持仓)}")
         
-        # 计算实时总资产
         实时总资产 = 引擎.获取可用资金() if hasattr(引擎, '获取可用资金') else getattr(引擎, '可用资金', INITIAL_CAPITAL)
         
         for 品种, pos in 引擎.持仓.items():
             平均成本 = getattr(pos, '平均成本', 0)
             数量 = getattr(pos, '数量', 0)
             
-            # 获取实时价格
             try:
                 if 行情获取:
                     价格结果 = 行情获取.获取价格(品种)
@@ -480,15 +474,12 @@ with st.sidebar:
             except Exception:
                 现价 = 平均成本
             
-            # 更新持仓当前价格
             if hasattr(pos, '当前价格'):
                 pos.当前价格 = 现价
             
-            # 计算盈亏
             盈亏 = (现价 - 平均成本) * 数量
             实时总资产 += 数量 * 现价
             
-            # 格式化数量显示
             if 品种 in ["ETH-USD", "BTC-USD", "SOL-USD", "BNB-USD"]:
                 数量显示 = f"{数量:.4f}个"
             else:
@@ -501,8 +492,6 @@ with st.sidebar:
             )
         
         st.markdown("---")
-        
-        # 显示总资产和可用资金（使用实时计算）
         st.metric("💰 总资产", f"¥{实时总资产:,.0f}")
         st.metric("💵 可用资金", f"¥{引擎.获取可用资金():,.0f}" if hasattr(引擎, '获取可用资金') else f"¥{getattr(引擎, '可用资金', 0):,.0f}")
     else:
@@ -534,17 +523,12 @@ with st.sidebar:
     except:
         st.caption(f"当前时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
-    # 系统状态
     st.markdown("---")
     st.caption(f"🤖 后台服务: {'🟢运行中' if st.session_state.后台服务已启动 else '🔴未启动'}")
     st.caption(f"📊 自动交易: {'🟢开启' if st.session_state.自动交易开关 else '🔴关闭'}")
 
-# ========== 安全调用函数包装器（修复回测模块参数问题） ==========
+# ========== 安全调用函数包装器 ==========
 def 安全调用(模块, 默认信息="模块开发中"):
-    """
-    安全调用模块的显示函数
-    自动适配不同模块的参数签名
-    """
     if 模块 is None:
         st.info(默认信息)
         return
@@ -553,24 +537,18 @@ def 安全调用(模块, 默认信息="模块开发中"):
         st.info(默认信息)
         return
     
-    # 获取显示函数的参数签名
     import inspect
     try:
         sig = inspect.signature(模块.显示)
         params = list(sig.parameters.keys())
         
-        # 根据参数数量决定传入什么
         if len(params) == 0:
-            # 无参数
             模块.显示()
         elif len(params) == 1:
-            # 只接受引擎参数
             模块.显示(引擎)
         elif len(params) == 2:
-            # 接受引擎和策略加载器
             模块.显示(引擎, 策略加载器)
         elif len(params) >= 3:
-            # 接受三个或更多参数
             try:
                 模块.显示(引擎, 策略加载器, AI引擎)
             except:
@@ -579,7 +557,6 @@ def 安全调用(模块, 默认信息="模块开发中"):
             模块.显示()
             
     except Exception as e:
-        # 如果获取签名失败，尝试最常见的调用方式
         try:
             模块.显示(引擎)
         except TypeError:
@@ -639,7 +616,6 @@ def 清理资源():
         st.session_state.自动交易器.运行中 = False
         print("🛑 资源已清理")
     
-    # 停止策略调度器
     if st.session_state.策略调度器 and hasattr(st.session_state.策略调度器, '停止'):
         st.session_state.策略调度器.停止()
 
@@ -650,7 +626,6 @@ print("=" * 50)
 print("🚀 系统启动，准备初始化策略调度器...")
 print("=" * 50)
 
-# 在最后启动策略调度器
 if 策略调度器可用 and st.session_state.策略调度器 is None:
     初始化策略调度器()
 else:
