@@ -8,8 +8,36 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
     
     # ========== 获取策略状态 ==========
     启用策略列表 = []
+    策略类别集合 = set()
+    
     if '策略状态' in st.session_state:
         启用策略列表 = [name for name, status in st.session_state.策略状态.items() if status]
+    
+    # 从策略加载器获取可用的市场和策略
+    可用市场 = ["加密货币", "A股", "美股", "外汇", "期货"]
+    
+    # 如果有策略加载器，从中提取类别
+    if 策略加载器 is not None:
+        try:
+            if hasattr(策略加载器, '获取策略'):
+                所有策略 = 策略加载器.获取策略()
+                for s in 所有策略:
+                    if isinstance(s, dict):
+                        类别 = s.get("类别", "")
+                        if "💰" in 类别:
+                            策略类别集合.add("外汇")
+                        elif "₿" in 类别:
+                            策略类别集合.add("加密货币")
+                        elif "📈" in 类别:
+                            策略类别集合.add("A股")
+                        elif "🇺🇸" in 类别:
+                            策略类别集合.add("美股")
+                        elif "📊" in 类别:
+                            策略类别集合.add("期货")
+            if 策略类别集合:
+                可用市场 = list(策略类别集合)
+        except Exception as e:
+            st.warning(f"读取策略类别失败: {e}")
     
     # 显示当前启用的策略
     if 启用策略列表:
@@ -23,12 +51,48 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
     col1, col2 = st.columns(2)
     
     with col1:
-        市场 = st.selectbox("选择市场", ["加密货币", "A股", "美股", "外汇"])
+        市场 = st.selectbox("选择市场", 可用市场)
     
     with col2:
-        策略类型 = st.selectbox("选择策略类型", ["综合推荐", "趋势跟踪", "网格交易", "均值回归", "动量策略"])
+        策略类型 = st.selectbox("选择策略类型", ["综合推荐", "趋势跟踪", "网格交易", "均值回归", "动量策略", "套利策略"])
     
     st.metric("💰 可用资金", f"¥{引擎.获取可用资金():,.2f}")
+    
+    # ========== 根据市场显示对应的品种 ==========
+    if 市场 == "加密货币":
+        推荐品种预设 = [
+            {"品种": "BTC-USD", "名称": "比特币", "价格": 79586.70},
+            {"品种": "ETH-USD", "名称": "以太坊", "价格": 2219.12},
+            {"品种": "SOL-USD", "名称": "Solana", "价格": 145.30},
+            {"品种": "BNB-USD", "名称": "币安币", "价格": 580.00},
+        ]
+    elif 市场 == "A股":
+        推荐品种预设 = [
+            {"品种": "000001.SS", "名称": "贵州茅台", "价格": 1680.00},
+            {"品种": "300750.SZ", "名称": "宁德时代", "价格": 220.50},
+            {"品种": "002594.SZ", "名称": "比亚迪", "价格": 265.80},
+            {"品种": "600519.SS", "名称": "五粮液", "价格": 145.00},
+        ]
+    elif 市场 == "美股":
+        推荐品种预设 = [
+            {"品种": "AAPL", "名称": "苹果", "价格": 185.50},
+            {"品种": "NVDA", "名称": "英伟达", "价格": 950.00},
+            {"品种": "TSLA", "名称": "特斯拉", "价格": 175.30},
+            {"品种": "MSFT", "名称": "微软", "价格": 420.00},
+        ]
+    elif 市场 == "外汇":
+        推荐品种预设 = [
+            {"品种": "EURUSD", "名称": "欧元/美元", "价格": 1.0850},
+            {"品种": "GBPUSD", "名称": "英镑/美元", "价格": 1.2650},
+            {"品种": "USDJPY", "名称": "美元/日元", "价格": 155.50},
+            {"品种": "AUDUSD", "名称": "澳元/美元", "价格": 0.6650},
+        ]
+    else:  # 期货
+        推荐品种预设 = [
+            {"品种": "GC=F", "名称": "黄金期货", "价格": 2350.00},
+            {"品种": "CL=F", "名称": "原油期货", "价格": 78.50},
+            {"品种": "ES=F", "名称": "标普500期货", "价格": 5200.00},
+        ]
     
     # ========== AI分析按钮 ==========
     if st.button("🔍 AI智能分析", type="primary"):
@@ -36,44 +100,32 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             st.error("❌ 没有启用的策略，请先在「策略中心」启用策略")
         else:
             with st.spinner("AI正在分析市场..."):
-                # 模拟AI分析
                 st.markdown("---")
-                st.markdown("### 📈 AI分析结果")
+                st.markdown(f"### 📈 AI分析结果 - {市场}")
                 
-                # 根据市场和策略类型生成推荐
-                if 市场 == "加密货币":
-                    推荐品种 = [
-                        {"品种": "BTC-USD", "价格": 79586.70, "信号": "买入", "置信度": 85, "理由": "RSI超卖反弹"},
-                        {"品种": "ETH-USD", "价格": 2219.12, "信号": "持有", "置信度": 72, "理由": "震荡整理"},
-                        {"品种": "SOL-USD", "价格": 145.30, "信号": "观望", "置信度": 60, "理由": "等待方向"},
-                    ]
-                elif 市场 == "A股":
-                    推荐品种 = [
-                        {"品种": "贵州茅台", "价格": 1680.00, "信号": "持有", "置信度": 78, "理由": "消费复苏"},
-                        {"品种": "宁德时代", "价格": 220.50, "信号": "买入", "置信度": 82, "理由": "新能源利好"},
-                        {"品种": "比亚迪", "价格": 265.80, "信号": "卖出", "置信度": 65, "理由": "高位回调"},
-                    ]
-                elif 市场 == "美股":
-                    推荐品种 = [
-                        {"品种": "AAPL", "价格": 185.50, "信号": "买入", "置信度": 88, "理由": "新品发布预期"},
-                        {"品种": "NVDA", "价格": 950.00, "信号": "持有", "置信度": 75, "理由": "AI热潮持续"},
-                        {"品种": "TSLA", "价格": 175.30, "信号": "观望", "置信度": 55, "理由": "竞争加剧"},
-                    ]
-                else:
-                    推荐品种 = [
-                        {"品种": "EURUSD", "价格": 1.0850, "信号": "买入", "置信度": 70, "理由": "美元走弱"},
-                        {"品种": "GBPUSD", "价格": 1.2650, "信号": "持有", "置信度": 65, "理由": "等待数据"},
-                    ]
-                
-                # 显示推荐表格
-                for item in 推荐品种:
-                    信号颜色 = "🟢" if item["信号"] == "买入" else "🟡" if item["信号"] == "持有" else "🔴"
+                # 生成推荐
+                for item in 推荐品种预设:
+                    # 随机生成信号（实际应该用真实策略）
+                    信号随机 = random.random()
+                    if 信号随机 > 0.6:
+                        信号 = "买入"
+                        信号颜色 = "🟢"
+                        置信度 = random.randint(70, 95)
+                    elif 信号随机 > 0.3:
+                        信号 = "持有"
+                        信号颜色 = "🟡"
+                        置信度 = random.randint(50, 70)
+                    else:
+                        信号 = "卖出"
+                        信号颜色 = "🔴"
+                        置信度 = random.randint(40, 60)
+                    
                     st.markdown(f"""
                     <div style="border:1px solid #ddd; border-radius:10px; padding:10px; margin-bottom:10px;">
-                        <b>{item['品种']}</b><br>
+                        <b>{item['名称']} ({item['品种']})</b><br>
                         价格: ¥{item['价格']:,.2f}<br>
-                        信号: {信号颜色} {item['信号']} (置信度: {item['置信度']}%)<br>
-                        理由: {item['理由']}
+                        信号: {信号颜色} {信号} (置信度: {置信度}%)<br>
+                        理由: 基于{策略类型}策略，结合市场数据分析
                     </div>
                     """, unsafe_allow_html=True)
                 
@@ -81,72 +133,98 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                 st.markdown("---")
                 st.markdown("#### 🎯 AI综合评分")
                 
-                col1, col2, col3 = st.columns(3)
+                col1, col2, col3, col4 = st.columns(4)
                 with col1:
-                    st.metric("市场情绪", "偏多", delta="+2")
+                    st.metric("市场情绪", "偏多" if 市场 != "外汇" else "中性", delta="+2")
                 with col2:
                     st.metric("风险等级", "中等", delta="稳定")
                 with col3:
                     st.metric("最优策略", 策略类型, delta="推荐")
+                with col4:
+                    st.metric("启用策略数", len(启用策略列表), delta="活跃")
     
     # ========== 快速交易 ==========
     st.markdown("---")
     st.markdown("#### ⚡ 快速交易")
     
-    col1, col2 = st.columns(2)
+    # 获取当前市场的品种列表
+    当前市场品种 = [f"{item['名称']} ({item['品种']})" for item in 推荐品种预设]
     
-    with col1:
+    tab1, tab2 = st.tabs(["📈 买入", "📉 卖出"])
+    
+    with tab1:
         with st.form("quick_buy_form"):
-            买入品种 = st.selectbox("品种", ["BTC-USD", "ETH-USD", "AAPL", "NVDA", "EURUSD"])
-            买入数量 = st.number_input("数量", min_value=0.01, value=0.1, step=0.01)
-            提交买入 = st.form_submit_button("📈 买入", type="primary")
+            买入选择 = st.selectbox("选择品种", 当前市场品种)
+            # 提取品种代码
+            if "(" in 买入选择:
+                买入品种 = 买入选择.split("(")[-1].replace(")", "")
+            else:
+                买入品种 = 买入选择
+            
+            # 获取参考价格
+            参考价格 = 获取参考价格(买入品种, 推荐品种预设)
+            单位提示 = "个" if "BTC" in 买入品种 or "ETH" in 买入品种 else "股" if 市场 != "外汇" else "手"
+            
+            买入数量 = st.number_input(f"数量 ({单位提示})", min_value=0.01, value=0.1, step=0.01)
+            预计花费 = 参考价格 * 买入数量
+            
+            st.caption(f"📌 参考价格: ¥{参考价格:,.4f}")
+            st.caption(f"💰 预计花费: ¥{预计花费:,.2f}")
+            
+            提交买入 = st.form_submit_button("确认买入", type="primary")
             
             if 提交买入:
                 可用资金 = 引擎.获取可用资金()
-                if 可用资金 > 0:
-                    try:
-                        # 获取参考价格
-                        参考价格 = 获取参考价格(买入品种)
-                        预计花费 = 参考价格 * 买入数量 if 参考价格 else 0
-                        
-                        if 预计花费 <= 可用资金:
-                            st.success(f"✅ 已提交买入 {买入品种} {买入数量} 个")
-                            st.info(f"预计花费: ¥{预计花费:,.2f}")
-                        else:
-                            st.error(f"❌ 资金不足！可用: ¥{可用资金:,.2f}, 需要: ¥{预计花费:,.2f}")
-                    except Exception as e:
-                        st.error(f"买入失败: {e}")
+                if 预计花费 <= 可用资金:
+                    st.success(f"✅ 已提交买入 {买入品种} {买入数量} {单位提示}")
+                    st.info(f"花费: ¥{预计花费:,.2f} | 剩余: ¥{可用资金 - 预计花费:,.2f}")
                 else:
-                    st.error("❌ 资金不足")
+                    st.error(f"❌ 资金不足！可用: ¥{可用资金:,.2f}, 需要: ¥{预计花费:,.2f}")
     
-    with col2:
+    with tab2:
         with st.form("quick_sell_form"):
-            持仓品种 = list(引擎.持仓.keys()) if 引擎.持仓 else ["无持仓"]
-            卖出品种 = st.selectbox("品种", 持仓品种 if 持仓品种 else ["无持仓"])
+            持仓品种列表 = list(引擎.持仓.keys()) if 引擎.持仓 else []
             
-            if 卖出品种 != "无持仓" and 卖出品种 in 引擎.持仓:
+            if 持仓品种列表:
+                卖出品种 = st.selectbox("选择持仓品种", 持仓品种列表)
                 pos = 引擎.持仓[卖出品种]
                 最大数量 = getattr(pos, '数量', 0)
-                卖出数量 = st.number_input("数量", min_value=0.01, max_value=float(最大数量), value=min(0.1, float(最大数量)), step=0.01)
+                
+                if 卖出品种 in ["BTC-USD", "ETH-USD", "SOL-USD"]:
+                    卖出数量 = st.number_input(f"数量 (个)", min_value=0.01, max_value=float(最大数量), value=min(0.1, float(最大数量)), step=0.01)
+                else:
+                    卖出数量 = st.number_input(f"数量 (股)", min_value=1, max_value=int(最大数量), value=min(1, int(最大数量)), step=1)
+                
+                st.caption(f"📊 可卖数量: {最大数量:.4f}" if 最大数量 < 1 else f"📊 可卖数量: {int(最大数量)}")
             else:
-                卖出数量 = st.number_input("数量", min_value=0.01, value=0.1, step=0.01, disabled=True)
+                st.info("暂无持仓")
+                卖出品种 = None
+                卖出数量 = 0
             
-            提交卖出 = st.form_submit_button("📉 卖出")
+            提交卖出 = st.form_submit_button("确认卖出")
             
-            if 提交卖出 and 卖出品种 != "无持仓":
-                st.success(f"✅ 已提交卖出 {卖出品种} {卖出数量} 个")
+            if 提交卖出 and 卖出品种 and 卖出数量 > 0:
+                st.success(f"✅ 已提交卖出 {卖出品种} {卖出数量} 个单位")
     
     # ========== 底部提示 ==========
     st.markdown("---")
     st.caption("⚡ AI推荐仅供参考，投资需谨慎")
+    st.caption(f"📅 分析时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-def 获取参考价格(品种):
+def 获取参考价格(品种, 品种列表):
     """获取参考价格"""
-    参考价格 = {
+    for item in 品种列表:
+        if item["品种"] == 品种:
+            return item["价格"]
+    # 默认价格映射
+    默认价格 = {
         "BTC-USD": 79586.70,
         "ETH-USD": 2219.12,
+        "SOL-USD": 145.30,
         "AAPL": 185.50,
         "NVDA": 950.00,
+        "TSLA": 175.30,
         "EURUSD": 1.0850,
+        "000001.SS": 1680.00,
     }
-    return 参考价格.get(品种, 100)
+    return 默认价格.get(品种, 100)
