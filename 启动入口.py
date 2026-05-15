@@ -119,6 +119,8 @@ if '策略加载器' not in st.session_state:
                 return []
             def 获取策略列表(self):
                 return []
+            def 获取策略列表_带状态(self):
+                return []
             def 加载策略(self, 策略名):
                 return None
             def 刷新(self):
@@ -130,6 +132,8 @@ if '策略加载器' not in st.session_state:
             def 获取策略(self):
                 return []
             def 获取策略列表(self):
+                return []
+            def 获取策略列表_带状态(self):
                 return []
             def 加载策略(self, 策略名):
                 return None
@@ -146,7 +150,6 @@ try:
     
     if 策略列表 and isinstance(策略列表, list):
         for 策略 in 策略列表:
-            # 兼容两种策略格式
             if isinstance(策略, dict):
                 策略名称 = 策略.get("名称", "")
             elif isinstance(策略, str):
@@ -564,16 +567,21 @@ def 安全调用(模块, 默认信息="模块开发中"):
         st.info(默认信息)
         return
     
+    # 直接传入所有三个参数，因为有默认值，所以对只需要一个参数的模块也兼容
     try:
-        模块.显示(引擎)
+        模块.显示(引擎, 策略加载器, AI引擎)
     except TypeError:
+        # 如果三个参数不行，尝试两个参数
         try:
             模块.显示(引擎, 策略加载器)
         except TypeError:
+            # 如果两个参数不行，尝试一个参数
             try:
-                模块.显示(引擎, 策略加载器, AI引擎)
-            except:
+                模块.显示(引擎)
+            except Exception:
                 st.info(默认信息)
+    except Exception:
+        st.info(默认信息)
 
 # ========== 页面刷新监听 ==========
 query_params = st.query_params
