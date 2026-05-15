@@ -15,4 +15,4 @@ def 显示(引擎):
     st.metric("💰 可用资金", f"¥{引擎.获取可用资金():,.2f}")
     
     if st.button("执行AI交易"):
-        st.success("AI交易执行成功")
+        st.success("✅ AI交易执行成功")
