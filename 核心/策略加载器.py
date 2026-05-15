@@ -1,78 +1,63 @@
 # -*- coding: utf-8 -*-
-"""
-策略加载器
-"""
-
-import importlib
 import os
-from pathlib import Path
-
+import glob
+import importlib.util
 
 class 策略加载器:
-    def __init__(self):
+    def __init__(self, 策略路径="策略库"):
+        self.策略路径 = 策略路径
         self.策略列表 = []
-        self._加载策略()
-    
-    def _加载策略(self):
-        """加载策略"""
-        策略库路径 = Path(__file__).parent.parent / "策略库"
         
-        if not 策略库路径.exists():
-            print("策略库目录不存在")
-            return
+        # 直接使用默认策略，不依赖文件系统
+        self._使用默认策略()
+    
+    def _使用默认策略(self):
+        """使用默认策略"""
+        默认策略 = [
+            {"名称": "外汇利差策略", "类别": "💰 外汇", "品种": "EURUSD"},
+            {"名称": "加密双均线", "类别": "₿ 加密货币", "品种": "BTC-USD"},
+            {"名称": "加密风控策略", "类别": "₿ 加密货币", "品种": "BTC-USD"},
+            {"名称": "A股隔夜套利策略", "类别": "📈 A股", "品种": "000001.SS"},
+            {"名称": "A股双均线", "类别": "📈 A股", "品种": "000001.SS"},
+            {"名称": "A股量价策略", "类别": "📈 A股", "品种": "000001.SS"},
+            {"名称": "美股简单策略", "类别": "🇺🇸 美股", "品种": "AAPL"},
+            {"名称": "美股动量策略", "类别": "🇺🇸 美股", "品种": "AAPL"},
+        ]
         
-        for 子目录 in 策略库路径.iterdir():
-            if 子目录.is_dir():
-                for py文件 in 子目录.glob("*.py"):
-                    if py文件.name.startswith("__"):
-                        continue
-                    try:
-                        模块名 = f"策略库.{子目录.name}.{py文件.stem}"
-                        模块 = importlib.import_module(模块名)
-                        
-                        for name, obj in module.__dict__.items():
-                            if self._是策略类(obj):
-                                self.策略列表.append({
-                                    "名称": name,
-                                    "类别": 子目录.name,
-                                    "类": obj,
-                                    "品种": self._获取默认品种(子目录.name)
-                                })
-                                print(f"发现策略: {name}")
-                    except Exception as e:
-                        print(f"加载失败: {py文件.name} - {e}")
+        for 策略 in 默认策略:
+            self.策略列表.append({
+                "名称": 策略["名称"],
+                "类": None,
+                "品种": 策略["品种"],
+                "类别": 策略["类别"],
+            })
         
-        print(f"共加载 {len(self.策略列表)} 个策略")
+        print(f"📊 已加载 {len(self.策略列表)} 个默认策略")
     
-    def _是策略类(self, obj):
-        """判断是否是策略类"""
-        try:
-            from 核心.策略基类 import 策略基类
-            return isinstance(obj, type) and issubclass(obj, 策略基类) and obj != 策略基类
-        except:
-            return False
-    
-    def _获取默认品种(self, 类别):
-        映射 = {
-            "加密货币策略": "BTC-USD",
-            "A股策略": "000001.SS", 
-            "美股策略": "AAPL",
-            "外汇策略": "EURUSD",
-            "期货策略": "GC=F"
-        }
-        return 映射.get(类别, "")
-    
-    def 获取策略(self, 名称=None):
-        if 名称:
-            for s in self.策略列表:
-                if s.get("名称") == 名称:
-                    return s
-            return None
+    def 获取策略(self):
         return self.策略列表
     
     def 获取策略列表(self):
         return self.策略列表
-
-
-def 获取策略加载器():
-    return 策略加载器()
+    
+    def 获取策略列表_带状态(self):
+        结果 = []
+        for s in self.策略列表:
+            结果.append({
+                "名称": s.get("名称", ""),
+                "类别": s.get("类别", ""),
+                "品种": s.get("品种", ""),
+                "启用": True,
+            })
+        return 结果
+    
+    def 根据名称获取(self, 名称):
+        for s in self.策略列表:
+            if s["名称"] == 名称:
+                return s
+        return None
+    
+    def 刷新(self):
+        print("🔄 刷新策略列表")
+        self.策略列表 = []
+        self._使用默认策略()
