@@ -243,7 +243,8 @@ def 初始化自动交易器():
     if st.session_state.自动交易器 is None:
         try:
             st.session_state.自动交易器 = 获取机器人()
-            st.session_state.自动交易器.设置引擎(引擎)
+            if hasattr(st.session_state.自动交易器, '设置引擎'):
+                st.session_state.自动交易器.设置引擎(引擎)
             print("✅ 自动交易器已初始化")
         except Exception as e:
             print(f"自动交易器初始化失败: {e}")
@@ -261,13 +262,13 @@ def 启动后台调度器():
         # 注册定时任务
         调度器 = 定时任务模块.获取调度器()
         
-        # ========== 修复：安全获取 session_state 值 ==========
         def 自动交易检查():
             try:
                 auto_trade = st.session_state.get("自动交易开关", False)
                 auto_trader = st.session_state.get("自动交易器", None)
                 if auto_trade and auto_trader:
-                    auto_trader.止损止盈检查()
+                    if hasattr(auto_trader, '止损止盈检查'):
+                        auto_trader.止损止盈检查()
             except Exception as e:
                 print(f"自动交易检查失败: {e}")
         
@@ -344,12 +345,14 @@ if st.session_state.错误消息:
 with st.sidebar:
     st.markdown("### 🛠️ 系统工具")
     
+    # ========== 修复：清空所有持仓数据 ==========
     if st.button("🗑️ 清空所有持仓数据", width="stretch"):
         try:
             数据库.清空所有持仓()
             st.session_state.订单引擎 = 订单引擎(初始资金=INITIAL_CAPITAL)
             引擎 = st.session_state.订单引擎
-            if st.session_state.自动交易器:
+            # 安全更新自动交易器的引擎
+            if st.session_state.自动交易器 and hasattr(st.session_state.自动交易器, '设置引擎'):
                 st.session_state.自动交易器.设置引擎(引擎)
             st.success("✅ 已清空")
             st.rerun()
@@ -370,7 +373,7 @@ with st.sidebar:
             if hasattr(引擎, '_恢复持仓'):
                 引擎._恢复持仓()
             st.session_state.订单引擎 = 引擎
-            if st.session_state.自动交易器:
+            if st.session_state.自动交易器 and hasattr(st.session_state.自动交易器, '设置引擎'):
                 st.session_state.自动交易器.设置引擎(引擎)
             st.success(f"✅ 持仓已刷新，当前持仓: {len(引擎.持仓)} 个品种")
             st.rerun()
@@ -393,7 +396,7 @@ with st.sidebar:
         
         if 新开关状态 != st.session_state.自动交易开关:
             st.session_state.自动交易开关 = 新开关状态
-            if st.session_state.自动交易器:
+            if st.session_state.自动交易器 and hasattr(st.session_state.自动交易器, '设置自动交易'):
                 st.session_state.自动交易器.设置自动交易(新开关状态)
             if 推送可用:
                 try:
@@ -574,7 +577,7 @@ if query_params.get("refresh") == "true":
     if hasattr(引擎, '_恢复持仓'):
         引擎._恢复持仓()
         st.session_state.订单引擎 = 引擎
-        if st.session_state.自动交易器:
+        if st.session_state.自动交易器 and hasattr(st.session_state.自动交易器, '设置引擎'):
             st.session_state.自动交易器.设置引擎(引擎)
     st.query_params.clear()
 
