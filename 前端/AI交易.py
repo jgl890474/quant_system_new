@@ -5,30 +5,25 @@ import random
 from datetime import datetime
 
 def 显示(引擎):
-    # 固定key前缀，避免重复key错误
-    _key = "ai_trade"
-    
     st.markdown("### 🤖 AI智能交易系统")
     
-    # ========== 市场与策略选择 ==========
+    # ========== 市场与策略选择（不加key，让streamlit自动处理）==========
     col1, col2 = st.columns(2)
     
     with col1:
         市场 = st.selectbox(
             "📊 交易市场",
-            ["加密货币", "A股", "美股", "港股", "外汇"],
-            key=f"{_key}_market"
+            ["加密货币", "A股", "美股", "港股", "外汇"]
         )
     
     with col2:
         策略模式 = st.selectbox(
             "🎯 AI策略模式",
-            ["保守型", "稳健型", "激进型", "自适应"],
-            key=f"{_key}_strategy"
+            ["保守型", "稳健型", "激进型", "自适应"]
         )
     
     # ========== AI信号按钮 ==========
-    if st.button("🔍 获取AI信号", type="primary", key=f"{_key}_signal_btn"):
+    if st.button("🔍 获取AI信号", type="primary"):
         with st.spinner("AI分析中..."):
             # 模拟AI分析结果
             if 市场 == "加密货币":
@@ -56,7 +51,7 @@ def 显示(引擎):
                 ]
             
             df = pd.DataFrame(推荐)
-            st.dataframe(df, use_container_width=True, key=f"{_key}_signal_table")
+            st.dataframe(df, use_container_width=True)
             st.success(f"✅ AI信号生成完成 | 市场: {市场} | 策略: {策略模式}")
     
     # ========== AI市场分析 ==========
@@ -66,19 +61,19 @@ def 显示(引擎):
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.metric("市场情绪", "中性偏多", delta="+0.2", key=f"{_key}_sentiment")
-        st.metric("波动率", "22.5%", delta="-1.2%", key=f"{_key}_volatility")
+        st.metric("市场情绪", "中性偏多", delta="+0.2")
+        st.metric("波动率", "22.5%", delta="-1.2%")
     
     with col2:
-        st.metric("资金流向", "净流入", delta="+1.8亿", key=f"{_key}_flow")
-        st.metric("多空比", "1.35", delta="+0.08", key=f"{_key}_ratio")
+        st.metric("资金流向", "净流入", delta="+1.8亿")
+        st.metric("多空比", "1.35", delta="+0.08")
     
     with col3:
-        st.metric("贪婪指数", "58", delta="+3", key=f"{_key}_greed")
-        st.metric("成交量", "+12%", delta="+5%", key=f"{_key}_volume")
+        st.metric("贪婪指数", "58", delta="+3")
+        st.metric("成交量", "+12%", delta="+5%")
     
     # ========== 一键交易 ==========
-    if st.button("⚡ 一键AI交易", key=f"{_key}_auto_trade"):
+    if st.button("⚡ 一键AI交易"):
         金额 = random.randint(1000, 50000)
         st.success(f"✅ 已触发 {市场} - {策略模式} 自动交易，金额: ¥{金额:,.0f}")
         
@@ -110,19 +105,15 @@ def 显示(引擎):
                 
                 if 盈亏 > 0:
                     建议 = "✅ 盈利中，建议设置移动止损"
-                    颜色 = "green"
                 elif 盈亏 < 0:
                     建议 = "⚠️ 亏损中，建议确认止损点"
-                    颜色 = "orange"
                 else:
                     建议 = "ℹ️ 持平，等待方向"
-                    颜色 = "gray"
                 
                 st.metric(
                     label=f"{品种}",
                     value=f"{数量} 单位 | 市值 ¥{市值:,.0f}",
-                    delta=f"盈亏 ¥{盈亏:+,.0f} ({盈亏率:+.1f}%)",
-                    key=f"{_key}_pos_{品种}"
+                    delta=f"盈亏 ¥{盈亏:+,.0f} ({盈亏率:+.1f}%)"
                 )
                 st.caption(f"📌 AI建议: {建议}")
     
