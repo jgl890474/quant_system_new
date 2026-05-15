@@ -19,7 +19,7 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         市场 = st.selectbox("选择市场", ["加密货币", "A股", "美股"], key=f"market_{st.session_state.page_key}")
     with col2:
         if 市场 == "加密货币":
-            策略选项 = ["加密双均线1", "加密风控策略"]
+            策略选项 = ["加密双均线1", "加密风控策略2"]
         elif 市场 == "A股":
             策略选项 = ["A股双均线1", "A股量价策略2", "A股隔夜套利策略3"]
         else:
@@ -58,15 +58,12 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                     # 计算建议数量
                     if item['价格'] > 0:
                         if 市场 == "A股":
-                            # A股按100股整数倍，使用5%资金
                             建议数量 = max(100, int(可用资金 * 0.05 / item['价格'] / 100) * 100)
                         elif 市场 == "加密货币":
-                            # 加密货币，使用5%资金，限制最大100个
                             建议数量 = round(可用资金 * 0.05 / item['价格'], 2)
                             if 建议数量 > 1000:
                                 建议数量 = 100
                         else:
-                            # 美股，使用5%资金
                             建议数量 = max(1, int(可用资金 * 0.05 / item['价格']))
                         item['建议数量'] = 建议数量
                     else:
@@ -119,7 +116,10 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                 with col4:
                     数量单位 = "个" if 市场 == "加密货币" else "股"
                     st.caption(f"建议: {建议数量}{数量单位}")
-                    st.caption(理由[:15] + "..." if len(理由) > 15 else 理由)
+                    if len(理由) > 15:
+                        st.caption(理由[:15] + "...")
+                    else:
+                        st.caption(理由)
                 
                 with col5:
                     if st.button(f"买入", key=f"buy_{idx}_{代码}_{st.session_state.page_key}"):
@@ -128,11 +128,9 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                                 if 价格 <= 0:
                                     st.error("价格无效，请稍后再试")
                                 else:
-                                    # 使用策略名称进行买入
                                     结果 = 引擎.买入(代码, 价格, 建议数量, 策略名称=策略)
                                     if 结果.get("success"):
                                         st.success(f"✅ 已买入 {名称} {建议数量} {数量单位}")
-                                        # 清除推荐，刷新页面
                                         st.session_state.pop(rec_key, None)
                                         time.sleep(0.5)
                                         st.rerun()
@@ -228,6 +226,6 @@ def 手动获取推荐(市场):
             "价格": 0,
             "得分": 评分,
             "评分": 评分,
-            "理由": f"技术指标向好"
+            "理由": "技术指标向好"
         })
     return 推荐列表
