@@ -5,6 +5,7 @@ import importlib.util
 
 class 策略加载器:
     def __init__(self, 策略路径="策略库"):
+        self.策略路径 = 策略路径
         self.策略列表 = []
         self._加载所有(策略路径)
         
@@ -13,8 +14,6 @@ class 策略加载器:
     
     def _使用默认策略(self):
         """使用默认策略"""
-        print("⚠️ 未找到策略文件，使用默认策略")
-        
         默认策略 = [
             {"名称": "双均线策略", "类别": "📈 A股", "品种": "000001"},
             {"名称": "量价策略", "类别": "📈 A股", "品种": "000002"},
@@ -32,12 +31,9 @@ class 策略加载器:
                 "品种": 策略["品种"],
                 "类别": 策略["类别"],
             })
-        
-        print(f"📊 已加载 {len(self.策略列表)} 个默认策略")
     
     def _加载所有(self, 路径):
         if not os.path.exists(路径):
-            print(f"路径不存在: {路径}")
             return
         
         类别配置 = {
@@ -75,8 +71,8 @@ class 策略加载器:
                                     "类别": 配置["显示"],
                                 })
                                 break
-                except Exception as e:
-                    print(f"加载失败 {文件名}: {e}")
+                except Exception:
+                    pass
     
     def 获取策略(self):
         return self.策略列表
@@ -103,8 +99,7 @@ class 策略加载器:
         return None
     
     def 刷新(self):
-        print("🔄 刷新策略列表")
         self.策略列表 = []
-        self._加载所有("策略库")
+        self._加载所有(self.策略路径)
         if not self.策略列表:
             self._使用默认策略()
