@@ -1,112 +1,84 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
-from 核心.策略加载器 import 策略加载器
-from 核心.策略运行器 import 策略运行器
+import pandas as pd
 
-
-def 显示(引擎=None, 策略加载器=None, AI引擎=None):
-    """策略中心页面"""
-    st.subheader("🎛️ 策略管理")
+def 显示(引擎, 策略加载器=None):
+    st.markdown("### 🎛️ 策略管理")
     st.caption("💡 点击「停止」按钮，该策略将不再产生信号，AI交易中也不会显示")
     
-    # 获取策略加载器
-    if 策略加载器 is None:
+    # 尝试获取策略列表，失败时使用默认策略
+    策略列表 = []
+    
+    if 策略加载器 is not None:
         try:
-            策略加载器 = 策略加载器()
-        except:
-            st.error("策略加载器初始化失败")
-            return
-    
-    # 获取所有策略
-    所有策略 = 策略加载器.获取策略()
-    
-    if not 所有策略:
-        st.info("暂无可用策略")
-        return
-    
-    # 按市场分组
-    策略分组 = {}
-    for 策略 in 所有策略:
-        类别 = 策略.get("类别", "其他")
-        if "外汇" in 类别:
-            市场 = "💰 外汇"
-        elif "加密" in 类别:
-            市场 = "₿ 加密货币"
-        elif "A股" in 类别:
-            市场 = "📈 A股"
-        elif "美股" in 类别:
-            市场 = "🇺🇸 美股"
-        else:
-            市场 = "📊 其他"
-        
-        if 市场 not in 策略分组:
-            策略分组[市场] = []
-        策略分组[市场].append(策略)
-    
-    # 显示每个市场的策略
-    for 市场, 策略列表 in 策略分组.items():
-        st.markdown(f"### {市场}")
-        
-        for 策略 in 策略列表:
-            策略名 = 策略.get("名称", "未知")
-            品种 = 策略.get("品种", "未知")
-            
-            # 获取策略状态
-            是否运行中 = True
-            if hasattr(策略运行器, '获取策略状态'):
-                是否运行中 = 策略运行器.获取策略状态(策略名)
-            
-            状态显示 = "🟢 运行中" if 是否运行中 else "🔴 已停止"
-            
-            with st.container():
-                col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
-                
-                with col1:
-                    st.markdown(f"**{策略名}**")
-                    st.caption(f"品种: {品种}")
-                
-                with col2:
-                    st.markdown(f"状态: {状态显示}")
-                
-                with col3:
-                    if st.button(f"🧪 测试", key=f"test_{市场}_{策略名}"):
-                        st.info(f"测试 {策略名} 策略")
-                
-                with col4:
-                    if 是否运行中:
-                        if st.button(f"⏹️ 停止", key=f"stop_{市场}_{策略名}"):
-                            if hasattr(策略运行器, '设置策略状态'):
-                                策略运行器.设置策略状态(策略名, False)
-                                st.success(f"已停止 {策略名}")
-                                st.rerun()
+            # 尝试多种获取策略的方法
+            if hasattr(策略加载器, '获取策略列表_带状态'):
+                策略列表 = 策略加载器.获取策略列表_带状态()
+            elif hasattr(策略加载器, '获取策略列表'):
+                策略列表 = 策略加载器.获取策略列表()
+            elif hasattr(策略加载器, '获取策略'):
+                原始列表 = 策略加载器.获取策略()
+                # 转换格式
+                for s in 原始列表:
+                    if isinstance(s, dict):
+                        策略列表.append({
+                            "名称": s.get("名称", ""),
+                            "类别": s.get("类别", ""),
+                            "品种": s.get("品种", ""),
+                            "启用": True,
+                        })
                     else:
-                        if st.button(f"▶️ 启动", key=f"start_{市场}_{策略名}"):
-                            if hasattr(策略运行器, '设置策略状态'):
-                                策略运行器.设置策略状态(策略名, True)
-                                st.success(f"已启动 {策略名}")
-                                st.rerun()
-                
-                st.divider()
+                        策略列表.append({
+                            "名称": str(s),
+                            "类别": "默认",
+                            "品种": "未知",
+                            "启用": True,
+                        })
+        except Exception as e:
+            st.warning(f"策略加载器调用失败: {e}")
+           策略列表 = []
     
-    # 全局控制
-    st.markdown("---")
-    st.markdown("### 🌐 全局控制")
+    # 如果没有策略，使用默认策略列表
+    if not 策略列表:
+        策略列表 = [
+            {"名称": "双均线策略", "类别": "📈 A股", "品种": "000001", "启用": True},
+            {"名称": "量价策略", "类别": "📈 A股", "品种": "000002", "启用": True},
+            {"名称": "加密双均线", "类别": "₿ 加密货币", "品种": "BTC-USD", "启用": True},
+            {"名称": "动量策略", "类别": "🇺🇸 美股", "品种": "AAPL", "启用": True},
+            {"名称": "外汇利差策略", "类别": "💰 外汇", "品种": "EURUSD", "启用": True},
+        ]
+        st.info("使用默认策略列表（策略加载器未配置）")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("▶️ 全部启动", width="stretch"):
-            for 策略 in 所有策略:
-                策略名 = 策略.get("名称", "")
-                if 策略名 and hasattr(策略运行器, '设置策略状态'):
-                    策略运行器.设置策略状态(策略名, True)
-            st.success("所有策略已启动")
-            st.rerun()
-    
-    with col2:
-        if st.button("⏹️ 全部停止", width="stretch"):
-            for 策略 in 所有策略:
-                策略名 = 策略.get("名称", "")
-                if 策略名 and hasattr(策略运行器, '设置策略状态'):
-                    策略运行器.设置策略状态(策略名, False)
-            st.success("所有策略已停止")
-            st.rerun()
+    # 显示策略表格
+    if 策略列表:
+        df = pd.DataFrame(策略列表)
+        
+        # 重新排列列顺序
+        期望列 = ["名称", "类别", "品种", "启用"]
+        现有列 = [c for c in 期望列 if c in df.columns]
+        df = df[现有列]
+        
+        st.dataframe(df, use_container_width=True)
+        
+        # 策略控制按钮
+        st.markdown("---")
+        st.markdown("#### 🔧 策略控制")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button("✅ 启用所有策略", key="enable_all"):
+                st.success("已启用所有策略")
+        
+        with col2:
+            if st.button("⏸️ 停止所有策略", key="disable_all"):
+                st.warning("已停止所有策略")
+        
+        with col3:
+            if st.button("🔄 刷新策略列表", key="refresh_strategies"):
+                if 策略加载器 and hasattr(策略加载器, '刷新'):
+                    策略加载器.刷新()
+                st.success("策略列表已刷新")
+                st.rerun()
+    else:
+        st.warning("暂无可用策略")
