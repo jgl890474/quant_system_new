@@ -106,31 +106,66 @@ INITIAL_CAPITAL = 1000000
 if '订单引擎' not in st.session_state:
     st.session_state.订单引擎 = 订单引擎(初始资金=INITIAL_CAPITAL)
 
-# 初始化策略加载器（兼容处理）
+# ========== 初始化策略加载器 ==========
 if '策略加载器' not in st.session_state:
     try:
         from 核心.策略加载器 import 策略加载器
         st.session_state.策略加载器 = 策略加载器()
-    except ImportError:
+        print("✅ 策略加载器导入成功")
+    except ImportError as e:
+        print(f"⚠️ 策略加载器导入失败: {e}，使用简单策略加载器")
         class 简单策略加载器:
+            def 获取策略(self):
+                return []
             def 获取策略列表(self):
                 return []
             def 加载策略(self, 策略名):
                 return None
+            def 刷新(self):
+                pass
+        st.session_state.策略加载器 = 简单策略加载器()
+    except Exception as e:
+        print(f"⚠️ 策略加载器初始化失败: {e}，使用简单策略加载器")
+        class 简单策略加载器:
+            def 获取策略(self):
+                return []
+            def 获取策略列表(self):
+                return []
+            def 加载策略(self, 策略名):
+                return None
+            def 刷新(self):
+                pass
         st.session_state.策略加载器 = 简单策略加载器()
 
 # ========== 初始化策略状态（所有策略默认启用） ==========
 try:
-    策略列表 = st.session_state.策略加载器.获取策略()
-    for 策略 in 策略列表:
-        策略名称 = 策略.get("名称", "")
-        if 策略名称:
-            策略运行器.设置策略状态(策略名称, True)
-    print(f"✅ 已初始化 {len(策略列表)} 个策略状态")
+    if hasattr(st.session_state.策略加载器, '获取策略'):
+        策略列表 = st.session_state.策略加载器.获取策略()
+    else:
+        策略列表 = []
+    
+    if 策略列表 and isinstance(策略列表, list):
+        for 策略 in 策略列表:
+            # 兼容两种策略格式
+            if isinstance(策略, dict):
+                策略名称 = 策略.get("名称", "")
+            elif isinstance(策略, str):
+                策略名称 = 策略
+            else:
+                策略名称 = getattr(策略, "名称", str(策略))
+            
+            if 策略名称:
+                if hasattr(策略运行器, '设置策略状态'):
+                    策略运行器.设置策略状态(策略名称, True)
+        print(f"✅ 已初始化 {len(策略列表)} 个策略状态")
+    else:
+        print("⚠️ 策略列表为空，跳过初始化")
 except Exception as e:
     print(f"策略状态初始化失败: {e}")
+    import traceback
+    traceback.print_exc()
 
-# 初始化AI引擎（兼容处理）
+# ========== 初始化AI引擎 ==========
 if 'AI引擎' not in st.session_state:
     try:
         from 核心.AI引擎 import AI引擎
@@ -173,7 +208,7 @@ if '策略调度器' not in st.session_state:
 AI引擎 = st.session_state.AI引擎
 策略信号 = st.session_state.策略信号
 
-# ========== 初始化风控引擎（兼容处理） ==========
+# ========== 初始化风控引擎 ==========
 if '风控引擎' not in st.session_state:
     try:
         from 核心.风控引擎 import 风控引擎
@@ -234,7 +269,7 @@ def 初始化策略调度器():
         print(f"ℹ️ [DEBUG] 策略调度器已存在")
         return True
 
-# ========== 初始化自动交易器（后台服务） ==========
+# ========== 初始化自动交易器 ==========
 def 初始化自动交易器():
     """初始化自动交易器（只执行一次）"""
     if not 自动交易可用:
@@ -249,7 +284,6 @@ def 初始化自动交易器():
         except Exception as e:
             print(f"自动交易器初始化失败: {e}")
 
-
 def 启动后台调度器():
     """启动后台定时任务调度器"""
     if st.session_state.后台服务已启动:
@@ -259,7 +293,6 @@ def 启动后台调度器():
         return
     
     try:
-        # 注册定时任务
         调度器 = 定时任务模块.获取调度器()
         
         def 自动交易检查():
@@ -279,20 +312,14 @@ def 启动后台调度器():
             except Exception as e:
                 pass
         
-        # 添加任务
         调度器.注册函数("自动交易检查", 自动交易检查)
         调度器.注册函数("心跳", 发送心跳)
-        
-        # 间隔任务
         调度器.添加间隔任务(自动交易检查, 60, 任务名称="自动交易检查")
         调度器.添加间隔任务(发送心跳, 300, 任务名称="心跳")
-        
-        # 启动调度器
         调度器.启动后台()
         st.session_state.后台服务已启动 = True
         print("🚀 后台调度器已启动")
         
-        # 发送启动通知
         if 推送可用:
             try:
                 推送.发送系统启动通知("v5.0", "腾讯云")
@@ -301,7 +328,6 @@ def 启动后台调度器():
                 
     except Exception as e:
         print(f"后台调度器启动失败: {e}")
-
 
 # ========== 紧凑样式 ==========
 st.markdown("""
@@ -528,7 +554,7 @@ with st.sidebar:
     st.caption(f"🤖 后台服务: {'🟢运行中' if st.session_state.后台服务已启动 else '🔴未启动'}")
     st.caption(f"📊 自动交易: {'🟢开启' if st.session_state.自动交易开关 else '🔴关闭'}")
 
-# ========== 安全调用函数包装器（简化版） ==========
+# ========== 安全调用函数 ==========
 def 安全调用(模块, 默认信息="模块开发中"):
     if 模块 is None:
         st.info(默认信息)
@@ -538,7 +564,6 @@ def 安全调用(模块, 默认信息="模块开发中"):
         st.info(默认信息)
         return
     
-    # 直接调用，不加任何防重复逻辑
     try:
         模块.显示(引擎)
     except TypeError:
