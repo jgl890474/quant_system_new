@@ -6,55 +6,103 @@ from datetime import datetime
 def 显示(引擎, 策略加载器=None, AI引擎=None):
     st.markdown("### 🤖 AI 智能交易")
     
-    # ========== 获取策略状态 ==========
-    启用策略列表 = []
-    策略类别集合 = set()
+    # ========== 从策略加载器获取策略和市场 ==========
+    策略列表 = []
+    可用市场 = ["加密货币", "A股", "美股", "外汇", "期货"]  # 默认市场
     
-    if '策略状态' in st.session_state:
-        启用策略列表 = [name for name, status in st.session_state.策略状态.items() if status]
-    
-    # 从策略加载器获取可用的市场和策略
-    可用市场 = ["加密货币", "A股", "美股", "外汇", "期货"]
-    
-    # 如果有策略加载器，从中提取类别
+    # 尝试从策略加载器获取策略
     if 策略加载器 is not None:
         try:
+            # 获取策略列表
             if hasattr(策略加载器, '获取策略'):
-                所有策略 = 策略加载器.获取策略()
-                for s in 所有策略:
+                原始策略 = 策略加载器.获取策略()
+                for s in 原始策略:
                     if isinstance(s, dict):
-                        类别 = s.get("类别", "")
-                        if "💰" in 类别:
-                            策略类别集合.add("外汇")
-                        elif "₿" in 类别:
-                            策略类别集合.add("加密货币")
-                        elif "📈" in 类别:
-                            策略类别集合.add("A股")
-                        elif "🇺🇸" in 类别:
-                            策略类别集合.add("美股")
-                        elif "📊" in 类别:
-                            策略类别集合.add("期货")
-            if 策略类别集合:
-                可用市场 = list(策略类别集合)
+                        策略列表.append(s)
+                    else:
+                        策略列表.append({"名称": str(s), "类别": "默认", "品种": "未知"})
+            elif hasattr(策略加载器, '获取策略列表'):
+                原始策略 = 策略加载器.获取策略列表()
+                for s in 原始策略:
+                    if isinstance(s, dict):
+                        策略列表.append(s)
+                    else:
+                        策略列表.append({"名称": str(s), "类别": "默认", "品种": "未知"})
+            
+            # 从策略中提取市场类别
+            if 策略列表:
+                提取的市场 = set()
+                for s in 策略列表:
+                    类别 = s.get("类别", "")
+                    if "💰" in 类别 or "外汇" in 类别:
+                        提取的市场.add("外汇")
+                    elif "₿" in 类别 or "加密" in 类别:
+                        提取的市场.add("加密货币")
+                    elif "📈" in 类别 or "A股" in 类别:
+                        提取的市场.add("A股")
+                    elif "🇺🇸" in 类别 or "美股" in 类别:
+                        提取的市场.add("美股")
+                    elif "📊" in 类别 or "期货" in 类别:
+                        提取的市场.add("期货")
+                
+                if 提取的市场:
+                    可用市场 = sorted(list(提取的市场))
+                    
         except Exception as e:
-            st.warning(f"读取策略类别失败: {e}")
+            st.warning(f"读取策略失败: {e}")
     
-    # 显示当前启用的策略
-    if 启用策略列表:
-        with st.expander(f"📋 当前启用的策略 ({len(启用策略列表)}个)", expanded=False):
-            for name in 启用策略列表:
-                st.caption(f"✅ {name}")
+    # 获取当前启用的策略
+    启用策略名称列表 = []
+    if '策略状态' in st.session_state:
+        启用策略名称列表 = [name for name, status in st.session_state.策略状态.items() if status]
+    
+    # 过滤出启用的策略详情
+    启用策略详情 = []
+    for s in 策略列表:
+        if s.get("名称") in 启用策略名称列表:
+            启用策略详情.append(s)
+    
+    # 显示启用的策略
+    if 启用策略详情:
+        with st.expander(f"📋 当前启用的策略 ({len(启用策略详情)}个)", expanded=False):
+            for s in 启用策略详情:
+                st.caption(f"✅ {s.get('名称')} - {s.get('类别')} - {s.get('品种')}")
     else:
-        st.warning("⚠️ 暂无启用的策略，请前往「策略中心」启用策略")
+        if 策略列表:
+            st.warning("⚠️ 请前往「策略中心」启用策略")
+        else:
+            st.warning("⚠️ 暂无可用策略，请检查策略库")
     
     # ========== 市场与策略选择 ==========
     col1, col2 = st.columns(2)
     
     with col1:
-        市场 = st.selectbox("选择市场", 可用市场)
+        # 使用提取的市场列表
+        if 可用市场:
+            市场 = st.selectbox("选择市场", 可用市场)
+        else:
+            市场 = st.selectbox("选择市场", ["加密货币", "A股", "美股", "外汇", "期货"])
     
     with col2:
-        策略类型 = st.selectbox("选择策略类型", ["综合推荐", "趋势跟踪", "网格交易", "均值回归", "动量策略", "套利策略"])
+        # 根据选中的市场过滤策略
+        当前市场策略 = ["综合推荐"]
+        for s in 策略列表:
+            类别 = s.get("类别", "")
+            if 市场 == "加密货币" and ("₿" in 类别 or "加密" in 类别):
+                当前市场策略.append(s.get("名称"))
+            elif 市场 == "A股" and ("📈" in 类别 or "A股" in 类别):
+                当前市场策略.append(s.get("名称"))
+            elif 市场 == "美股" and ("🇺🇸" in 类别 or "美股" in 类别):
+                当前市场策略.append(s.get("名称"))
+            elif 市场 == "外汇" and ("💰" in 类别 or "外汇" in 类别):
+                当前市场策略.append(s.get("名称"))
+            elif 市场 == "期货" and ("📊" in 类别 or "期货" in 类别):
+                当前市场策略.append(s.get("名称"))
+        
+        if not 当前市场策略 or len(当前市场策略) == 1:
+            当前市场策略 = ["综合推荐", "趋势跟踪", "网格交易", "均值回归"]
+        
+        策略 = st.selectbox("选择策略", 当前市场策略)
     
     st.metric("💰 可用资金", f"¥{引擎.获取可用资金():,.2f}")
     
@@ -96,16 +144,17 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
     
     # ========== AI分析按钮 ==========
     if st.button("🔍 AI智能分析", type="primary"):
-        if not 启用策略列表:
+        if not 启用策略详情:
             st.error("❌ 没有启用的策略，请先在「策略中心」启用策略")
         else:
             with st.spinner("AI正在分析市场..."):
                 st.markdown("---")
                 st.markdown(f"### 📈 AI分析结果 - {市场}")
+                st.markdown(f"**使用策略: {策略}**")
                 
                 # 生成推荐
                 for item in 推荐品种预设:
-                    # 随机生成信号（实际应该用真实策略）
+                    # 模拟信号（实际应该用真实策略计算）
                     信号随机 = random.random()
                     if 信号随机 > 0.6:
                         信号 = "买入"
@@ -125,7 +174,7 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                         <b>{item['名称']} ({item['品种']})</b><br>
                         价格: ¥{item['价格']:,.2f}<br>
                         信号: {信号颜色} {信号} (置信度: {置信度}%)<br>
-                        理由: 基于{策略类型}策略，结合市场数据分析
+                        理由: 基于{策略}策略，结合{市场}市场数据分析
                     </div>
                     """, unsafe_allow_html=True)
                 
@@ -139,9 +188,9 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                 with col2:
                     st.metric("风险等级", "中等", delta="稳定")
                 with col3:
-                    st.metric("最优策略", 策略类型, delta="推荐")
+                    st.metric("最优策略", 策略, delta="推荐")
                 with col4:
-                    st.metric("启用策略数", len(启用策略列表), delta="活跃")
+                    st.metric("启用策略数", len(启用策略详情), delta="活跃")
     
     # ========== 快速交易 ==========
     st.markdown("---")
@@ -163,7 +212,7 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             
             # 获取参考价格
             参考价格 = 获取参考价格(买入品种, 推荐品种预设)
-            单位提示 = "个" if "BTC" in 买入品种 or "ETH" in 买入品种 else "股" if 市场 != "外汇" else "手"
+            单位提示 = "个" if "BTC" in 买入品种 or "ETH" in 买入品种 else "股" if 市场 not in ["外汇", "期货"] else "手"
             
             买入数量 = st.number_input(f"数量 ({单位提示})", min_value=0.01, value=0.1, step=0.01)
             预计花费 = 参考价格 * 买入数量
