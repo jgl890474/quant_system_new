@@ -10,17 +10,13 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
     策略列表 = []
     可用市场 = []
     
-    # 调试信息（部署后可以看到）
     if 策略加载器 is not None:
-        st.info(f"✅ 策略加载器已连接")
         try:
             if hasattr(策略加载器, '获取策略'):
                 原始策略 = 策略加载器.获取策略()
-                st.info(f"📊 获取到 {len(原始策略)} 个策略")
                 for s in 原始策略:
                     if isinstance(s, dict):
                         策略列表.append(s)
-                        # 根据类别提取市场
                         类别 = s.get("类别", "")
                         if "外汇" in 类别:
                             可用市场.append("外汇")
@@ -32,12 +28,8 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                             可用市场.append("美股")
                         elif "期货" in 类别:
                             可用市场.append("期货")
-                    else:
-                        策略列表.append({"名称": str(s), "类别": "默认", "品种": "未知"})
         except Exception as e:
             st.warning(f"读取策略失败: {e}")
-    else:
-        st.warning("⚠️ 策略加载器未连接")
     
     # 去重并排序
     可用市场 = sorted(list(set(可用市场)))
@@ -45,7 +37,6 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
     # 如果没有获取到市场，使用默认值
     if not 可用市场:
         可用市场 = ["加密货币", "A股", "美股", "外汇", "期货"]
-        st.info("📋 使用默认市场列表")
     
     # 获取当前启用的策略
     启用策略名称列表 = []
@@ -55,7 +46,7 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
     # 显示启用的策略
     if 启用策略名称列表:
         with st.expander(f"📋 当前启用的策略 ({len(启用策略名称列表)}个)", expanded=False):
-            for name in 启用策略名称列表[:10]:  # 最多显示10个
+            for name in 启用策略名称列表[:10]:
                 st.caption(f"✅ {name}")
     else:
         if 策略列表:
@@ -68,7 +59,6 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         市场 = st.selectbox("选择市场", 可用市场)
     
     with col2:
-        # 根据选中的市场过滤策略
         当前市场策略 = ["综合推荐"]
         for s in 策略列表:
             类别 = s.get("类别", "")
