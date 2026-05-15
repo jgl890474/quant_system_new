@@ -528,7 +528,15 @@ with st.sidebar:
     st.caption(f"🤖 后台服务: {'🟢运行中' if st.session_state.后台服务已启动 else '🔴未启动'}")
     st.caption(f"📊 自动交易: {'🟢开启' if st.session_state.自动交易开关 else '🔴关闭'}")
 
-# ========== 安全调用函数包装器 ==========
+# ========== 重置模块调用标记（每次页面加载时） ==========
+if '页面已加载' not in st.session_state:
+    # 清除所有历史调用标记，确保模块正常加载
+    for key in list(st.session_state.keys()):
+        if key.startswith('_已调用_'):
+            del st.session_state[key]
+    st.session_state.页面已加载 = True
+
+# ========== 安全调用函数包装器（带防重复调用） ==========
 def 安全调用(模块, 默认信息="模块开发中"):
     if 模块 is None:
         st.info(默认信息)
@@ -536,6 +544,14 @@ def 安全调用(模块, 默认信息="模块开发中"):
     
     if not hasattr(模块, '显示'):
         st.info(默认信息)
+        return
+    
+    # 🔑 关键修复：防止同一个模块被重复调用
+    模块名 = getattr(模块, '__name__', str(模块))
+    调用标记 = f"_已调用_{模块名}"
+    
+    if st.session_state.get(调用标记, False):
+        # 已经调用过了，跳过本次渲染
         return
     
     import inspect
@@ -556,6 +572,9 @@ def 安全调用(模块, 默认信息="模块开发中"):
                 模块.显示(引擎, 策略加载器)
         else:
             模块.显示()
+        
+        # 标记已调用
+        st.session_state[调用标记] = True
             
     except Exception as e:
         try:
