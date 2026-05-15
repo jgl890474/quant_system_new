@@ -273,7 +273,8 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                 "盈亏率": f"{盈亏率:+.1f}%"
             })
         
-        st.dataframe(持仓数据, use_container_width=True)
+        # 修复 use_container_width 警告
+        st.dataframe(持仓数据, width="stretch", hide_index=True)
     else:
         st.info("暂无持仓，去上面买入吧～")
     
