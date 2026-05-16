@@ -6,36 +6,47 @@ from pathlib import Path
 class 策略加载器:
     def __init__(self):
         self.策略列表 = []
-        self._加载策略()
+        self._加载所有策略()
     
-    def _加载策略(self):
+    def _加载所有策略(self):
         策略库路径 = Path(__file__).parent.parent / "策略库"
+        
         if not 策略库路径.exists():
+            print(f"策略库不存在: {策略库路径}")
             return
         
         for 子目录 in 策略库路径.iterdir():
-            if 子目录.is_dir():
-                for py文件 in 子目录.glob("*.py"):
-                    if py文件.name.startswith("__"):
-                        continue
-                    try:
-                        模块名 = f"策略库.{子目录.name}.{py文件.stem}"
-                        模块 = importlib.import_module(模块名)
-                        
-                        for name, obj in 模块.__dict__.items():
-                            if self._是策略类(obj):
-                                self.策略列表.append({
-                                    "名称": name,
-                                    "类别": 子目录.name,
-                                    "类": obj,
-                                })
-                    except:
-                        pass
+            if not 子目录.is_dir():
+                continue
+            
+            for py文件 in 子目录.glob("*.py"):
+                if py文件.name.startswith("__"):
+                    continue
+                
+                try:
+                    模块名 = f"策略库.{子目录.name}.{py文件.stem}"
+                    模块 = importlib.import_module(模块名)
+                    
+                    for name, obj in 模块.__dict__.items():
+                        if self._是策略类(obj):
+                            self.策略列表.append({
+                                "名称": name,
+                                "类别": 子目录.name,
+                                "类": obj,
+                            })
+                            print(f"✅ 加载策略: {name} ({子目录.name})")
+                            
+                except Exception as e:
+                    print(f"❌ 加载失败 {py文件.name}: {e}")
+        
+        print(f"📊 共加载 {len(self.策略列表)} 个策略")
     
     def _是策略类(self, obj):
         try:
             from 核心.策略基类 import 策略基类
-            return isinstance(obj, type) and issubclass(obj, 策略基类) and obj != 策略基类
+            return (isinstance(obj, type) and 
+                    issubclass(obj, 策略基类) and 
+                    obj != 策略基类)
         except:
             return False
     
