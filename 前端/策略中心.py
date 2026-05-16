@@ -40,34 +40,24 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             品种 = s["品种"]
             启用 = st.session_state.策略状态.get(名称, True)
             
-            # 策略信息行
-            col1, col2, col3 = st.columns([3, 2, 1])
+            # 使用两行布局
+            st.markdown(f"**{名称}**")
+            st.caption(f"品种: {品种}")
             
-            with col1:
-                st.write(f"**{名称}**")
-                st.caption(f"品种: {品种}")
-            
-            with col2:
-                if 启用:
-                    st.success("🟢 运行中")
-                else:
-                    st.error("🔴 已停止")
-            
-            with col3:
-                # 使用唯一的 key
-                button_key = f"toggle_{名称}"
-                if 启用:
-                    if st.button("⏸️ 停止", key=button_key):
-                        st.session_state.策略状态[名称] = False
-                        st.toast(f"✅ 策略 [{名称}] 已停止", icon="⏸️")
-                else:
-                    if st.button("▶️ 启动", key=button_key):
-                        st.session_state.策略状态[名称] = True
-                        st.toast(f"✅ 策略 [{名称}] 已启动", icon="▶️")
+            if 启用:
+                st.markdown("🟢 运行中")
+                if st.button(f"⏸️ 停止", key=f"stop_{名称}"):
+                    st.session_state.策略状态[名称] = False
+                    st.rerun()
+            else:
+                st.markdown("🔴 已停止")
+                if st.button(f"▶️ 启动", key=f"start_{名称}"):
+                    st.session_state.策略状态[名称] = True
+                    st.rerun()
             
             st.markdown("---")
     
-    # 统计
+    # 统计信息
     总数 = len(策略列表)
     运行中 = sum(1 for name, status in st.session_state.策略状态.items() if status)
     
@@ -89,18 +79,15 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         if st.button("✅ 启用所有策略", key="enable_all", use_container_width=True):
             for s in 策略列表:
                 st.session_state.策略状态[s["名称"]] = True
-            st.toast("✅ 所有策略已启用", icon="✅")
             st.rerun()
     
     with col2:
         if st.button("⏸️ 停止所有策略", key="disable_all", use_container_width=True):
             for s in 策略列表:
                 st.session_state.策略状态[s["名称"]] = False
-            st.toast("⏸️ 所有策略已停止", icon="⏸️")
             st.rerun()
     
-    # 调试面板
-    with st.expander("🔧 当前状态调试", expanded=False):
-        st.write("策略状态字典:")
+    # 调试：显示当前状态
+    with st.expander("🔍 查看当前策略状态", expanded=False):
         for name, status in st.session_state.策略状态.items():
-            st.write(f"  - {name}: {'运行中' if status else '已停止'}")
+            st.write(f"{name}: {'运行中' if status else '已停止'}")
