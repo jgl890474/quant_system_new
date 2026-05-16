@@ -48,7 +48,7 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             分组[类别] = []
         分组[类别].append(s)
     
-    # 显示策略（每个策略单独一行，带停止/启动按钮）
+    # 显示策略
     for 类别, 策略组 in 分组.items():
         st.markdown(f"#### {类别}")
         
@@ -57,28 +57,26 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             品种 = s["品种"]
             启用 = st.session_state.策略状态.get(名称, True)
             
-            # 使用容器布局
-            col1, col2, col3 = st.columns([3, 2, 1])
-            
+            # 第一行：名称和状态
+            col1, col2 = st.columns([3, 1])
             with col1:
                 st.write(f"**{名称}**")
                 st.caption(f"品种: {品种}")
-            
             with col2:
                 if 启用:
                     st.markdown("🟢 **运行中**")
                 else:
                     st.markdown("🔴 **已停止**")
             
-            with col3:
-                if 启用:
-                    if st.button("⏸️ 停止", key=f"stop_{名称}"):
-                        st.session_state.策略状态[名称] = False
-                        st.rerun()
-                else:
-                    if st.button("▶️ 启动", key=f"start_{名称}"):
-                        st.session_state.策略状态[名称] = True
-                        st.rerun()
+            # 第二行：按钮
+            if 启用:
+                if st.button("⏸️ 停止", key=f"stop_{名称}"):
+                    st.session_state.策略状态[名称] = False
+                    st.rerun()
+            else:
+                if st.button("▶️ 启动", key=f"start_{名称}"):
+                    st.session_state.策略状态[名称] = True
+                    st.rerun()
             
             st.markdown("---")
     
@@ -107,9 +105,3 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             for s in 策略列表:
                 st.session_state.策略状态[s["名称"]] = False
             st.rerun()
-    
-    # 显示当前状态调试
-    with st.expander("🔧 调试信息", expanded=False):
-        st.write("当前策略状态:")
-        for name, status in st.session_state.策略状态.items():
-            st.write(f"  {name}: {'运行中' if status else '已停止'}")
