@@ -1,118 +1,72 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
-import os
-import glob
 import random
 import time
-from pathlib import Path
 from datetime import datetime
 
 def 显示(引擎, 策略加载器=None, AI引擎=None):
     st.markdown("### 🤖 AI 智能交易")
     
-    # ========== 直接从策略库文件夹读取策略 ==========
+    # ========== 从策略加载器获取策略（和策略中心一样） ==========
     策略列表 = []
     
-    # 获取策略库路径
-    当前文件路径 = Path(__file__).resolve()
-    项目根目录 = 当前文件路径.parent.parent
-    策略库路径 = 项目根目录 / "策略库"
+    if 策略加载器 is not None:
+        try:
+            if hasattr(策略加载器, '获取策略'):
+                策略列表 = 策略加载器.获取策略()
+                st.success(f"✅ 已加载 {len(策略列表)} 个策略")
+            elif hasattr(策略加载器, '获取策略列表'):
+                策略列表 = 策略加载器.获取策略列表()
+                st.success(f"✅ 已加载 {len(策略列表)} 个策略")
+        except Exception as e:
+            st.error(f"加载策略失败: {e}")
     
-    st.info(f"📂 策略库路径: {策略库路径}")
+    # 如果策略加载器没有数据，尝试从 session_state 获取
+    if not 策略列表 and '策略加载器' in st.session_state:
+        try:
+            sl = st.session_state.策略加载器
+            if hasattr(sl, '获取策略'):
+                策略列表 = sl.获取策略()
+                st.success(f"✅ 从 session_state 加载 {len(策略列表)} 个策略")
+        except Exception as e:
+            st.error(f"从 session_state 加载失败: {e}")
     
-    # 类别映射
-    类别映射 = {
-        "外汇策略": "💰 外汇",
-        "加密货币策略": "₿ 加密货币",
-        "A股策略": "📈 A股",
-        "美股策略": "🇺🇸 美股",
-    }
+    # 如果还是没有，显示错误
+    if not 策略列表:
+        st.error("❌ 无法获取策略数据，请检查策略中心")
+        return
     
-    品种映射 = {
-        "外汇策略": "EURUSD",
-        "加密货币策略": "BTC-USD",
-        "A股策略": "000001.SS",
-        "美股策略": "AAPL",
-    }
-    
-    if 策略库路径.exists():
-        for 子目录 in 策略库_path.iterdir():
-            if not 子目录.is_dir():
-                continue
-            
-            目录名 = 子目录.name
-            类别 = 类别映射.get(目录名, 目录名)
-            品种 = 品种映射.get(目录名, "")
-            
-            for py文件 in 子目录.glob("*.py"):
-                if py文件.name.startswith("__"):
-                    continue
-                
-                策略名 = py_file.stem
-                策略列表.append({
-                    "名称": 策略名,
-                    "类别": 类别,
-                    "品种": 品种,
-                    "文件路径": str(py文件),
-                })
-        
-        st.success(f"✅ 从策略库读取到 {len(策略列表)} 个策略")
-    else:
-        st.error(f"❌ 策略库目录不存在: {策略库路径}")
-        # 使用默认策略
-        策略列表 = [
-            {"名称": "外汇利差策略1", "类别": "💰 外汇", "品种": "EURUSD"},
-            {"名称": "加密双均线1", "类别": "₿ 加密货币", "品种": "BTC-USD"},
-            {"名称": "加密风控策略", "类别": "₿ 加密货币", "品种": "BTC-USD"},
-            {"名称": "A股双均线1", "类别": "📈 A股", "品种": "000001.SS"},
-            {"名称": "A股量价策略2", "类别": "📈 A股", "品种": "000001.SS"},
-            {"名称": "A股隔夜套利策略3", "类别": "📈 A股", "品种": "000001.SS"},
-            {"名称": "美股简单策略1", "类别": "🇺🇸 美股", "品种": "AAPL"},
-            {"名称": "美股动量策略", "类别": "🇺🇸 美股", "品种": "AAPL"},
-        ]
-        st.info("📋 使用默认策略列表")
-    
-    # 初始化策略状态
-    if 'ai_strategy_status' not in st.session_state:
-        st.session_state.ai_strategy_status = {}
+    # ========== 同步策略中心的状态 ==========
+    # 使用策略中心的状态（如果存在）
+    if '策略状态' not in st.session_state:
+        st.session_state.策略状态 = {}
         for s in 策略列表:
-            st.session_state.ai_strategy_status[s["名称"]] = True
-    
-    # 显示策略列表（可勾选）
-    with st.expander("📋 策略管理 (勾选启用的策略)", expanded=True):
-        # 按类别分组
-        分组 = {}
-        for s in 策略列表:
-            类别 = s["类别"]
-            if 类别 not in 分组:
-                分组[类别] = []
-            分组[类别].append(s)
-        
-        for 类别, 策略组 in 分组.items():
-            st.markdown(f"#### {类别}")
-            cols = st.columns(2)
-            for i, s in enumerate(策略组):
-                col = cols[i % 2]
-                with col:
-                    名称 = s["名称"]
-                    是否启用 = st.session_state.ai_strategy_status.get(名称, True)
-                    if st.checkbox(f"{名称}", value=是否启用, key=f"ai_{名称}"):
-                        st.session_state.ai_strategy_status[名称] = True
-                    else:
-                        st.session_state.ai_strategy_status[名称] = False
+            名称 = s.get("名称", "")
+            if 名称:
+                st.session_state.策略状态[名称] = True
     
     # 获取启用的策略
-    启用策略 = [s for s in 策略列表 if st.session_state.ai_strategy_status.get(s["名称"], False)]
+    启用策略 = [s for s in 策略列表 if st.session_state.策略状态.get(s.get("名称", ""), False)]
     
+    # 显示启用的策略
     if 启用策略:
-        st.success(f"✅ 当前启用 {len(启用策略)} 个策略")
+        with st.expander(f"📋 当前启用的策略 ({len(启用策略)}个)", expanded=False):
+            for s in 启用策略:
+                st.caption(f"✅ {s.get('名称')} - {s.get('类别')} - {s.get('品种')}")
     else:
-        st.warning("⚠️ 请勾选至少一个策略")
+        st.warning("⚠️ 请前往「策略中心」启用策略")
     
-    # ========== 市场选择 ==========
-    # 从策略中提取可用市场
-    可用市场 = list(set([s["类别"] for s in 策略列表]))
+    # ========== 提取可用市场 ==========
+    可用市场 = []
+    for s in 策略列表:
+        类别 = s.get("类别", "")
+        if 类别 and 类别 not in 可用市场:
+            可用市场.append(类别)
     
+    if not 可用市场:
+        可用市场 = ["💰 外汇", "₿ 加密货币", "📈 A股", "🇺🇸 美股"]
+    
+    # ========== 交易界面 ==========
     col1, col2 = st.columns(2)
     
     with col1:
@@ -149,15 +103,14 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
     # ========== AI分析按钮 ==========
     if st.button("🔍 AI智能分析", type="primary"):
         if not 启用策略:
-            st.error("❌ 请先勾选启用的策略")
+            st.error("❌ 请先在策略中心启用策略")
         else:
             with st.spinner("AI正在分析市场..."):
                 st.markdown("---")
                 st.markdown(f"### 📈 AI分析结果 - {市场}")
-                st.markdown(f"**使用策略: {', '.join([s['名称'] for s in 启用策略[:3]])}**")
+                st.markdown(f"**基于策略: {', '.join([s.get('名称') for s in 启用策略[:3]])}**")
                 
                 for item in 交易品种:
-                    # 模拟AI信号
                     信号随机 = random.random()
                     if 信号随机 > 0.6:
                         信号, 颜色, 置信度 = "买入", "🟢", random.randint(70, 95)
