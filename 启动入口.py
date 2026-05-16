@@ -606,7 +606,75 @@ with tabs[1]:
     安全调用(策略中心, "策略中心模块开发中")
 
 with tabs[2]:
-    安全调用(AI交易, "AI交易模块开发中")
+    # ========== AI交易功能（直接内置，不依赖外部文件） ==========
+    st.markdown("### 🤖 AI 智能交易")
+    
+    # 从策略加载器获取策略
+    策略列表 = []
+    if 策略加载器 is not None:
+        try:
+            if hasattr(策略加载器, '获取策略'):
+                策略列表 = 策略加载器.获取策略()
+            elif hasattr(策略加载器, '获取策略列表'):
+                策略列表 = 策略加载器.获取策略列表()
+        except Exception as e:
+            st.warning(f"获取策略失败: {e}")
+    
+    # 显示策略列表
+    if 策略列表:
+        with st.expander(f"📋 当前策略 ({len(策略列表)}个)", expanded=False):
+            for s in 策略列表:
+                st.caption(f"✅ {s.get('名称')} - {s.get('类别')} - {s.get('品种')}")
+    else:
+        st.info("等待策略加载...")
+    
+    # 交易界面
+    col1, col2 = st.columns(2)
+    with col1:
+        品种 = st.selectbox("选择品种", ["BTC-USD", "ETH-USD", "AAPL", "NVDA", "EURUSD"])
+    with col2:
+        操作 = st.selectbox("操作", ["买入", "卖出"])
+    
+    数量 = st.number_input("数量", min_value=0.01, value=0.1, step=0.01)
+    
+    可用资金 = 引擎.获取可用资金()
+    st.metric("💰 可用资金", f"¥{可用资金:,.2f}")
+    
+    if st.button("确认交易", type="primary"):
+        if 操作 == "买入":
+            try:
+                结果 = 引擎.买入(品种, None, 数量)
+                if 结果.get("success"):
+                    st.success(f"✅ 已买入 {品种} {数量} 个")
+                    st.rerun()
+                else:
+                    st.error(f"买入失败: {结果.get('error')}")
+            except Exception as e:
+                st.error(f"买入异常: {e}")
+        else:
+            if 品种 in 引擎.持仓:
+                try:
+                    结果 = 引擎.卖出(品种, None, 数量)
+                    if 结果.get("success"):
+                        st.success(f"✅ 已卖出 {品种} {数量} 个")
+                        st.rerun()
+                    else:
+                        st.error(f"卖出失败: {结果.get('error')}")
+                except Exception as e:
+                    st.error(f"卖出异常: {e}")
+            else:
+                st.error(f"❌ 没有持仓 {品种}")
+    
+    # 显示当前持仓
+    st.markdown("---")
+    st.markdown("#### 💼 当前持仓")
+    if 引擎.持仓:
+        for 品种名, pos in 引擎.持仓.items():
+            数量持仓 = getattr(pos, '数量', 0)
+            成本 = getattr(pos, '平均成本', 0)
+            st.caption(f"{品种名}: {数量持仓:.4f}个, 成本 ¥{成本:.2f}")
+    else:
+        st.info("暂无持仓")
 
 with tabs[3]:
     安全调用(持仓管理, "持仓管理模块开发中")
