@@ -1,148 +1,260 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
-import random
 import time
-from datetime import datetime
+import uuid
+from 核心 import 行情获取
+from 核心.策略加载器 import 获取策略加载器
+
 
 def 显示(引擎, 策略加载器=None, AI引擎=None):
-    st.markdown("### 🤖 AI 智能交易")
+    """AI交易页面"""
     
-    # 硬编码策略列表
-    策略列表 = [
-        {"名称": "外汇利差策略1", "类别": "💰 外汇", "品种": "EURUSD"},
-        {"名称": "加密双均线1", "类别": "₿ 加密货币", "品种": "BTC-USD"},
-        {"名称": "加密风控策略", "类别": "₿ 加密货币", "品种": "BTC-USD"},
-        {"名称": "A股双均线1", "类别": "📈 A股", "品种": "000001.SS"},
-        {"名称": "A股量价策略2", "类别": "📈 A股", "品种": "000001.SS"},
-        {"名称": "A股隔夜套利策略3", "类别": "📈 A股", "品种": "000001.SS"},
-        {"名称": "美股简单策略1", "类别": "🇺🇸 美股", "品种": "AAPL"},
-        {"名称": "美股动量策略", "类别": "🇺🇸 美股", "品种": "AAPL"},
-    ]
+    if 'page_key' not in st.session_state:
+        st.session_state.page_key = str(uuid.uuid4())[:8]
     
-    # 初始化策略状态
-    if '策略状态' not in st.session_state:
-        st.session_state.策略状态 = {}
-        for s in 策略列表:
-            st.session_state.策略状态[s["名称"]] = True
+    st.subheader("🤖 AI 智能交易")
     
-    # 获取启用的策略
-    启用策略 = [s for s in 策略列表 if st.session_state.策略状态.get(s["名称"], False)]
+    # ========== 获取策略列表 ==========
+    try:
+        # 优先使用传入的策略加载器，否则创建新的
+        if 策略加载器 is None:
+            策略加载器 = 获取策略加载器()
+        
+        所有策略 = 策略加载器.获取策略列表()
+        
+        # 按类别分组
+        策略分组 = {}
+        for 策略 in 所有策略:
+            类别 = 策略.get("类别", "其他")
+            if 类别 not in 策略分组:
+                策略分组[类别] = []
+            策略分组[类别].append(策略)
+        
+        if not 策略分组:
+            st.warning("⚠️ 暂无可用策略，请先在策略库中添加策略")
+            return
+        
+    except Exception as e:
+        st.error(f"获取策略列表失败: {e}")
+        return
     
-    # 显示启用策略
-    if 启用策略:
-        with st.expander(f"📋 当前启用的策略 ({len(启用策略)}个)", expanded=False):
-            for s in 启用策略[:8]:
-                st.caption(f"✅ {s['名称']}")
-    else:
-        st.warning("⚠️ 请前往「策略中心」启用策略")
-    
-    # 市场选择
-    可用市场 = ["💰 外汇", "₿ 加密货币", "📈 A股", "🇺🇸 美股"]
-    
+    # ========== 选择市场和策略 ==========
     col1, col2 = st.columns(2)
+    
     with col1:
-        市场 = st.selectbox("选择市场", 可用市场)
+        市场选项 = list(策略分组.keys())
+        选中市场 = st.selectbox("选择市场", 市场选项, key=f"market_{st.session_state.page_key}")
+    
     with col2:
-        策略选项 = ["综合推荐", "趋势跟踪", "网格交易", "均值回归"]
-        策略 = st.selectbox("选择策略", 策略选项)
+        该市场策略 = 策略分组.get(选中市场, [])
+        策略选项 = [s.get("名称", "未知") for s in 该市场策略]
+        
+        if 策略选项:
+            选中策略 = st.selectbox("选择策略", 策略选项, key=f"strategy_{st.session_state.page_key}")
+        else:
+            st.warning(f"⚠️ {选中市场} 下没有可用策略")
+            return
     
-    st.metric("💰 可用资金", f"¥{引擎.获取可用资金():,.2f}")
+    # 获取选中的策略详情
+    当前策略 = None
+    for s in 该市场策略:
+        if s.get("名称") == 选中策略:
+            当前策略 = s
+            break
     
-    # 品种配置
+    # 显示策略信息
+    if 当前策略:
+        st.caption(f"📋 策略: {当前策略.get('名称', '')}")
+        st.caption(f"📝 描述: {当前策略.get('描述', '无描述')}")
+    
+    # 可用资金
+    可用资金 = 引擎.获取可用资金() if hasattr(引擎, '获取可用资金') else getattr(引擎, '可用资金', 1000000)
+    st.metric("💰 可用资金", f"¥{可用资金:,.2f}")
+    
+    # AI分析按钮
+    if st.button("🚀 AI 分析", type="primary", key=f"analyze_{st.session_state.page_key}"):
+        with st.spinner(f"AI正在分析{选中市场}市场，使用{选中策略}策略..."):
+            try:
+                # 获取推荐列表
+                推荐列表 = 获取AI推荐(选中市场, 选中策略, 引擎, 当前策略, 可用资金)
+                
+                st.session_state[f"recommend_{st.session_state.page_key}"] = 推荐列表
+                if 推荐列表:
+                    st.success(f"✅ AI分析完成！共推荐 {len(推荐列表)} 个品种")
+                else:
+                    st.warning("⚠️ 暂无推荐结果")
+            except Exception as e:
+                st.error(f"AI分析失败: {e}")
+    
+    # 显示推荐
+    rec_key = f"recommend_{st.session_state.page_key}"
+    if rec_key in st.session_state and st.session_state[rec_key]:
+        st.markdown("### 📈 AI推荐买入（按评分排序）")
+        st.caption("💡 评分越高表示越符合当前策略，建议优先买入高分标的")
+        
+        for idx, item in enumerate(st.session_state[rec_key]):
+            代码 = item.get('代码', '')
+            名称 = item.get('名称', 代码)
+            价格 = item.get('价格', 0)
+            评分 = item.get('得分', item.get('评分', 60))
+            建议数量 = item.get('建议数量', 100)
+            理由 = item.get('理由', f"{选中策略}策略评分{评分}分")
+            
+            with st.container():
+                col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 1.5])
+                
+                with col1:
+                    st.markdown(f"**{名称}**")
+                    st.caption(代码)
+                
+                with col2:
+                    if 价格 > 0:
+                        st.metric("💰 价格", f"¥{价格:.2f}")
+                    else:
+                        st.caption("💰 价格获取中")
+                
+                with col3:
+                    if 评分 >= 80:
+                        评分颜色 = "🟢"
+                    elif 评分 >= 60:
+                        评分颜色 = "🟡"
+                    else:
+                        评分颜色 = "⚪"
+                    st.markdown(f"{评分颜色} **评分: {评分}分**")
+                
+                with col4:
+                    数量单位 = "个" if 选中市场 == "加密货币策略" else "股"
+                    st.caption(f"建议: {建议数量}{数量单位}")
+                    if len(理由) > 15:
+                        st.caption(理由[:15] + "...")
+                    else:
+                        st.caption(理由)
+                
+                with col5:
+                    if st.button(f"买入", key=f"buy_{idx}_{代码}_{st.session_state.page_key}"):
+                        if 代码:
+                            try:
+                                if 价格 <= 0:
+                                    st.error("价格无效，请稍后再试")
+                                else:
+                                    结果 = 引擎.买入(代码, 价格, 建议数量, 策略名称=选中策略)
+                                    if 结果.get("success"):
+                                        st.success(f"✅ 已买入 {名称} {建议数量} {数量单位}")
+                                        st.session_state.pop(rec_key, None)
+                                        time.sleep(0.5)
+                                        st.rerun()
+                                    else:
+                                        st.error(f"买入失败: {结果.get('error')}")
+                            except Exception as e:
+                                st.error(f"买入出错: {e}")
+                
+                st.divider()
+    
+    # 显示当前持仓
+    st.markdown("---")
+    st.markdown("### 📦 当前持仓")
+    
+    if hasattr(引擎, '持仓') and 引擎.持仓:
+        持仓数据 = []
+        for sym, pos in 引擎.持仓.items():
+            数量 = getattr(pos, '数量', 0)
+            平均成本 = getattr(pos, '平均成本', 0)
+            
+            try:
+                价格结果 = 行情获取.获取价格(sym)
+                当前价格 = 价格结果.价格 if 价格结果 and hasattr(价格结果, '价格') else 平均成本
+            except:
+                当前价格 = 平均成本
+            
+            浮动盈亏 = (当前价格 - 平均成本) * 数量
+            
+            if sym in ["ETH-USD", "BTC-USD", "SOL-USD", "BNB-USD", "ADA-USD", "XRP-USD", "AVAX-USD"]:
+                数量显示 = f"{数量:.4f}"
+            else:
+                数量显示 = f"{int(数量)}"
+            
+            持仓数据.append({
+                "品种": sym,
+                "数量": 数量显示,
+                "成本": round(平均成本, 2),
+                "现价": round(当前价格, 2),
+                "浮动盈亏": round(浮动盈亏, 2)
+            })
+        
+        import pandas as pd
+        st.dataframe(pd.DataFrame(持仓数据), width="stretch", hide_index=True)
+        
+        总盈亏 = sum([d["浮动盈亏"] for d in 持仓数据])
+        if 总盈亏 >= 0:
+            st.success(f"📊 持仓总盈亏: ¥{总盈亏:+,.2f}")
+        else:
+            st.error(f"📊 持仓总盈亏: ¥{总盈亏:+,.2f}")
+    else:
+        st.info("暂无持仓")
+    
+    st.caption("💡 提示：点击买入后页面会自动刷新")
+
+
+def 获取AI推荐(市场, 策略名称, 引擎, 策略详情, 可用资金):
+    """获取AI推荐列表"""
+    推荐列表 = []
+    
+    # 根据市场获取品种列表
     if "加密" in 市场:
         品种列表 = [
-            {"品种": "BTC-USD", "名称": "比特币", "价格": 79586.70},
-            {"品种": "ETH-USD", "名称": "以太坊", "价格": 2219.12},
+            {"代码": "BTC-USD", "名称": "比特币", "评分": 85},
+            {"代码": "ETH-USD", "名称": "以太坊", "评分": 82},
+            {"代码": "SOL-USD", "名称": "Solana", "评分": 78},
+            {"代码": "BNB-USD", "名称": "币安币", "评分": 75},
+            {"代码": "AVAX-USD", "名称": "雪崩币", "评分": 72},
+            {"代码": "ADA-USD", "名称": "艾达币", "评分": 70},
         ]
+        数量单位 = "个"
     elif "A股" in 市场:
         品种列表 = [
-            {"品种": "000001.SS", "名称": "贵州茅台", "价格": 1680.00},
-            {"品种": "300750.SZ", "名称": "宁德时代", "价格": 220.50},
+            {"代码": "600519.SS", "名称": "贵州茅台", "评分": 85},
+            {"代码": "000858.SZ", "名称": "五粮液", "评分": 80},
+            {"代码": "300750.SZ", "名称": "宁德时代", "评分": 78},
+            {"代码": "000333.SZ", "名称": "美的集团", "评分": 75},
         ]
-    elif "美股" in 市场:
-        品种列表 = [
-            {"品种": "AAPL", "名称": "苹果", "价格": 185.50},
-            {"品种": "NVDA", "名称": "英伟达", "价格": 950.00},
-        ]
+        数量单位 = "股"
     else:
         品种列表 = [
-            {"品种": "EURUSD", "名称": "欧元/美元", "价格": 1.0850},
-            {"品种": "GBPUSD", "名称": "英镑/美元", "价格": 1.2650},
+            {"代码": "AAPL", "名称": "苹果", "评分": 88},
+            {"代码": "NVDA", "名称": "英伟达", "评分": 85},
+            {"代码": "MSFT", "名称": "微软", "评分": 82},
+            {"代码": "TSLA", "名称": "特斯拉", "评分": 75},
         ]
+        数量单位 = "股"
     
-    # AI分析
-    if st.button("🔍 AI智能分析", type="primary"):
-        if not 启用策略:
-            st.error("❌ 请先在策略中心启用策略")
+    # 获取实时价格并计算建议数量
+    for item in 品种列表:
+        代码 = item["代码"]
+        try:
+            价格结果 = 行情获取.获取价格(代码)
+            价格 = 价格结果.价格 if 价格结果 and hasattr(价格结果, '价格') else 0
+        except:
+            价格 = 0
+        
+        # 计算建议数量（使用可用资金的5%）
+        if 价格 > 0:
+            建议数量 = max(1, int(可用资金 * 0.05 / 价格))
+            if "加密" in 市场:
+                建议数量 = round(可用资金 * 0.05 / 价格, 2)
         else:
-            with st.spinner("AI正在分析市场..."):
-                st.markdown("---")
-                st.markdown(f"### 📈 AI分析结果 - {市场}")
-                for item in 品种列表:
-                    信号随机 = random.random()
-                    if 信号随机 > 0.6:
-                        信号, 颜色, 置信度 = "买入", "🟢", random.randint(70, 95)
-                    elif 信号随机 > 0.3:
-                        信号, 颜色, 置信度 = "持有", "🟡", random.randint(50, 70)
-                    else:
-                        信号, 颜色, 置信度 = "卖出", "🔴", random.randint(40, 60)
-                    
-                    st.markdown(f"""
-                    <div style="border:1px solid #ddd; border-radius:10px; padding:10px; margin-bottom:10px;">
-                        <b>{item['名称']} ({item['品种']})</b><br>
-                        价格: ¥{item['价格']:,.2f}<br>
-                        信号: {颜色} {信号} (置信度: {置信度}%)
-                    </div>
-                    """, unsafe_allow_html=True)
+            建议数量 = 1
+        
+        推荐列表.append({
+            "代码": 代码,
+            "名称": item["名称"],
+            "价格": 价格,
+            "得分": item["评分"],
+            "评分": item["评分"],
+            "建议数量": 建议数量,
+            "理由": f"{策略名称}策略推荐"
+        })
     
-    # 快速交易
-    st.markdown("---")
-    st.markdown("#### ⚡ 快速交易")
+    # 按评分排序
+    推荐列表.sort(key=lambda x: x["得分"], reverse=True)
     
-    tab1, tab2 = st.tabs(["📈 买入", "📉 卖出"])
-    
-    with tab1:
-        with st.form("buy_form"):
-            买入选择 = st.selectbox("选择品种", [f"{item['名称']} ({item['品种']})" for item in 品种列表])
-            品种代码 = 买入选择.split("(")[-1].replace(")", "")
-            参考价格 = next((item["价格"] for item in 品种列表 if item["品种"] == 品种代码), 100)
-            买入数量 = st.number_input("数量", min_value=0.01, value=0.1, step=0.01)
-            
-            if st.form_submit_button("确认买入", type="primary"):
-                可用资金 = 引擎.获取可用资金()
-                预计花费 = 参考价格 * 买入数量
-                if 预计花费 <= 可用资金:
-                    try:
-                        结果 = 引擎.买入(品种代码, None, 买入数量)
-                        if 结果.get("success"):
-                            st.success(f"✅ 已买入 {品种代码} {买入数量} 个")
-                            st.rerun()
-                        else:
-                            st.error(f"买入失败: {结果.get('error')}")
-                    except Exception as e:
-                        st.error(f"买入异常: {e}")
-                else:
-                    st.error(f"❌ 资金不足！需要: ¥{预计花费:,.2f}")
-    
-    with tab2:
-        with st.form("sell_form"):
-            持仓品种 = list(引擎.持仓.keys()) if 引擎.持仓 else []
-            if 持仓品种:
-                卖出品种 = st.selectbox("选择持仓品种", 持仓品种)
-                pos = 引擎.持仓[卖出品种]
-                最大数量 = getattr(pos, '数量', 0)
-                卖出数量 = st.number_input("数量", min_value=0.01, max_value=float(最大数量), value=min(0.1, float(最大数量)), step=0.01)
-                if st.form_submit_button("确认卖出"):
-                    try:
-                        结果 = 引擎.卖出(卖出品种, None, 卖出数量)
-                        if 结果.get("success"):
-                            st.success(f"✅ 已卖出 {卖出品种} {卖出数量} 个")
-                            st.rerun()
-                        else:
-                            st.error(f"卖出失败: {结果.get('error')}")
-                    except Exception as e:
-                        st.error(f"卖出异常: {e}")
-            else:
-                st.info("暂无持仓")
-    
-    st.caption(f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    return 推荐列表[:5]
