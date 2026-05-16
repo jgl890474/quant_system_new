@@ -168,8 +168,15 @@ if '错误消息' not in st.session_state:
 if '自动交易器' not in st.session_state:
     st.session_state.自动交易器 = None
 
+# ========== 从数据库读取自动交易开关状态 ==========
 if '自动交易开关' not in st.session_state:
-    st.session_state.自动交易开关 = False
+    try:
+        保存的状态 = 数据库.读取自动交易状态()
+        st.session_state.自动交易开关 = 保存的状态
+        print(f"📂 从数据库读取自动交易状态: {'开启' if 保存的状态 else '关闭'}")
+    except Exception as e:
+        print(f"读取自动交易状态失败: {e}")
+        st.session_state.自动交易开关 = False
 
 if '后台服务已启动' not in st.session_state:
     st.session_state.后台服务已启动 = False
@@ -253,6 +260,9 @@ def 初始化自动交易器():
             st.session_state.自动交易器 = 获取机器人()
             if hasattr(st.session_state.自动交易器, '设置引擎'):
                 st.session_state.自动交易器.设置引擎(引擎)
+            # 恢复自动交易开关状态到机器人
+            if hasattr(st.session_state.自动交易器, '设置自动交易'):
+                st.session_state.自动交易器.设置自动交易(st.session_state.自动交易开关)
         except Exception:
             pass
 
@@ -351,6 +361,13 @@ with st.sidebar:
         新开关 = st.checkbox("🔴 开启自动交易", value=st.session_state.自动交易开关)
         if 新开关 != st.session_state.自动交易开关:
             st.session_state.自动交易开关 = 新开关
+            # 保存到数据库
+            try:
+                数据库.保存自动交易状态(新开关)
+                print(f"💾 保存自动交易状态: {'开启' if 新开关 else '关闭'}")
+            except Exception as e:
+                print(f"保存状态失败: {e}")
+            # 更新机器人状态
             if st.session_state.自动交易器 and hasattr(st.session_state.自动交易器, '设置自动交易'):
                 st.session_state.自动交易器.设置自动交易(新开关)
             st.rerun()
