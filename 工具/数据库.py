@@ -65,10 +65,79 @@ def 初始化数据库():
         )
     ''')
     
+    # ========== 新增：系统配置表（用于保存自动交易开关等状态） ==========
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS 系统配置 (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            配置键 TEXT UNIQUE,
+            配置值 TEXT,
+            更新时间 TEXT
+        )
+    ''')
+    
     conn.commit()
     conn.close()
     print("✅ 数据库初始化完成")
 
+
+# ==================== 自动交易状态持久化 ====================
+
+def 保存自动交易状态(开启: bool):
+    """
+    保存自动交易开关状态到数据库
+    
+    参数:
+        开启: True=开启, False=关闭
+    """
+    try:
+        conn = 获取连接()
+        cursor = conn.cursor()
+        
+        当前时间 = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        cursor.execute('''
+            INSERT OR REPLACE INTO 系统配置 (配置键, 配置值, 更新时间)
+            VALUES (?, ?, ?)
+        ''', ('auto_trade_switch', str(开启), 当前时间))
+        
+        conn.commit()
+        conn.close()
+        print(f"💾 保存自动交易状态: {'开启' if 开启 else '关闭'} (时间: {当前时间})")
+        return True
+    except Exception as e:
+        print(f"保存自动交易状态失败: {e}")
+        return False
+
+
+def 读取自动交易状态() -> bool:
+    """
+    从数据库读取自动交易开关状态
+    
+    返回:
+        True=开启, False=关闭（默认关闭）
+    """
+    try:
+        conn = 获取连接()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT 配置值, 更新时间 FROM 系统配置 WHERE 配置键 = ?', ('auto_trade_switch',))
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            is_enabled = row[0].lower() == 'true'
+            update_time = row[1]
+            print(f"📂 读取自动交易状态: {'开启' if is_enabled else '关闭'} (上次保存: {update_time})")
+            return is_enabled
+        
+        print("📂 未找到保存的自动交易状态，使用默认值: 关闭")
+        return False
+    except Exception as e:
+        print(f"读取自动交易状态失败: {e}")
+        return False
+
+
+# ==================== 原有函数 ====================
 
 def 保存交易记录(交易):
     """保存交易记录"""
@@ -299,12 +368,27 @@ class 数据库:
     @staticmethod
     def 初始化数据库():
         return 初始化数据库()
+    
+    # ========== 新增：自动交易状态方法 ==========
+    @staticmethod
+    def 保存自动交易状态(开启: bool):
+        return 保存自动交易状态(开启)
+    
+    @staticmethod
+    def 读取自动交易状态() -> bool:
+        return 读取自动交易状态()
 
 
 # 测试入口
 if __name__ == "__main__":
     初始化数据库()
     print("数据库模块测试完成")
+    
+    # 测试自动交易状态保存
+    print("\n--- 测试自动交易状态 ---")
+    保存自动交易状态(True)
+    status = 读取自动交易状态()
+    print(f"读取到的状态: {'开启' if status else '关闭'}")
     
     # 清理异常数据
     清理异常数据()
