@@ -1,35 +1,65 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
+import os
+import glob
 import random
 import time
+from pathlib import Path
 from datetime import datetime
 
 def 显示(引擎, 策略加载器=None, AI引擎=None):
     st.markdown("### 🤖 AI 智能交易")
     
-    # ========== 调试：检查策略加载器 ==========
-    if 策略加载器 is None:
-        st.error("❌ 策略加载器未传入！请检查启动入口")
-        # 尝试从 session_state 获取
-        if '策略加载器' in st.session_state:
-            策略加载器 = st.session_state.策略加载器
-            st.success("✅ 已从 session_state 获取策略加载器")
-    
-    # ========== 获取策略列表 ==========
+    # ========== 直接从策略库文件夹读取策略 ==========
     策略列表 = []
-    if 策略加载器 is not None:
-        try:
-            if hasattr(策略加载器, '获取策略'):
-                策略列表 = 策略加载器.获取策略()
-                st.success(f"✅ 成功加载 {len(策略列表)} 个策略")
-            elif hasattr(策略加载器, '获取策略列表'):
-                策略列表 = 策略加载器.获取策略列表()
-                st.success(f"✅ 成功加载 {len(策略列表)} 个策略")
-        except Exception as e:
-            st.error(f"加载策略失败: {e}")
     
-    # 如果还是没获取到，使用硬编码
-    if not 策略列表:
+    # 获取策略库路径
+    当前文件路径 = Path(__file__).resolve()
+    项目根目录 = 当前文件路径.parent.parent
+    策略库路径 = 项目根目录 / "策略库"
+    
+    st.info(f"📂 策略库路径: {策略库路径}")
+    
+    # 类别映射
+    类别映射 = {
+        "外汇策略": "💰 外汇",
+        "加密货币策略": "₿ 加密货币",
+        "A股策略": "📈 A股",
+        "美股策略": "🇺🇸 美股",
+    }
+    
+    品种映射 = {
+        "外汇策略": "EURUSD",
+        "加密货币策略": "BTC-USD",
+        "A股策略": "000001.SS",
+        "美股策略": "AAPL",
+    }
+    
+    if 策略库路径.exists():
+        for 子目录 in 策略库_path.iterdir():
+            if not 子目录.is_dir():
+                continue
+            
+            目录名 = 子目录.name
+            类别 = 类别映射.get(目录名, 目录名)
+            品种 = 品种映射.get(目录名, "")
+            
+            for py文件 in 子目录.glob("*.py"):
+                if py文件.name.startswith("__"):
+                    continue
+                
+                策略名 = py_file.stem
+                策略列表.append({
+                    "名称": 策略名,
+                    "类别": 类别,
+                    "品种": 品种,
+                    "文件路径": str(py文件),
+                })
+        
+        st.success(f"✅ 从策略库读取到 {len(策略列表)} 个策略")
+    else:
+        st.error(f"❌ 策略库目录不存在: {策略库路径}")
+        # 使用默认策略
         策略列表 = [
             {"名称": "外汇利差策略1", "类别": "💰 外汇", "品种": "EURUSD"},
             {"名称": "加密双均线1", "类别": "₿ 加密货币", "品种": "BTC-USD"},
@@ -40,11 +70,163 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             {"名称": "美股简单策略1", "类别": "🇺🇸 美股", "品种": "AAPL"},
             {"名称": "美股动量策略", "类别": "🇺🇸 美股", "品种": "AAPL"},
         ]
-        st.info("📋 使用硬编码策略列表")
+        st.info("📋 使用默认策略列表")
     
-    # 显示策略列表
-    st.write("### 📊 可用策略")
-    for s in 策略列表:
-        st.caption(f"✅ {s.get('名称')} - {s.get('类别')} - {s.get('品种')}")
+    # 初始化策略状态
+    if 'ai_strategy_status' not in st.session_state:
+        st.session_state.ai_strategy_status = {}
+        for s in 策略列表:
+            st.session_state.ai_strategy_status[s["名称"]] = True
     
-    # ... 后续代码保持不变 ...
+    # 显示策略列表（可勾选）
+    with st.expander("📋 策略管理 (勾选启用的策略)", expanded=True):
+        # 按类别分组
+        分组 = {}
+        for s in 策略列表:
+            类别 = s["类别"]
+            if 类别 not in 分组:
+                分组[类别] = []
+            分组[类别].append(s)
+        
+        for 类别, 策略组 in 分组.items():
+            st.markdown(f"#### {类别}")
+            cols = st.columns(2)
+            for i, s in enumerate(策略组):
+                col = cols[i % 2]
+                with col:
+                    名称 = s["名称"]
+                    是否启用 = st.session_state.ai_strategy_status.get(名称, True)
+                    if st.checkbox(f"{名称}", value=是否启用, key=f"ai_{名称}"):
+                        st.session_state.ai_strategy_status[名称] = True
+                    else:
+                        st.session_state.ai_strategy_status[名称] = False
+    
+    # 获取启用的策略
+    启用策略 = [s for s in 策略列表 if st.session_state.ai_strategy_status.get(s["名称"], False)]
+    
+    if 启用策略:
+        st.success(f"✅ 当前启用 {len(启用策略)} 个策略")
+    else:
+        st.warning("⚠️ 请勾选至少一个策略")
+    
+    # ========== 市场选择 ==========
+    # 从策略中提取可用市场
+    可用市场 = list(set([s["类别"] for s in 策略列表]))
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        市场 = st.selectbox("选择市场", 可用市场)
+    
+    with col2:
+        策略选项 = ["综合推荐", "趋势跟踪", "网格交易", "均值回归"]
+        策略 = st.selectbox("选择策略类型", 策略选项)
+    
+    st.metric("💰 可用资金", f"¥{引擎.获取可用资金():,.2f}")
+    
+    # ========== 根据市场显示品种 ==========
+    if "加密" in 市场:
+        交易品种 = [
+            {"品种": "BTC-USD", "名称": "比特币", "价格": 79586.70},
+            {"品种": "ETH-USD", "名称": "以太坊", "价格": 2219.12},
+        ]
+    elif "A股" in 市场:
+        交易品种 = [
+            {"品种": "000001.SS", "名称": "贵州茅台", "价格": 1680.00},
+            {"品种": "300750.SZ", "名称": "宁德时代", "价格": 220.50},
+        ]
+    elif "美股" in 市场:
+        交易品种 = [
+            {"品种": "AAPL", "名称": "苹果", "价格": 185.50},
+            {"品种": "NVDA", "名称": "英伟达", "价格": 950.00},
+        ]
+    else:
+        交易品种 = [
+            {"品种": "EURUSD", "名称": "欧元/美元", "价格": 1.0850},
+            {"品种": "GBPUSD", "名称": "英镑/美元", "价格": 1.2650},
+        ]
+    
+    # ========== AI分析按钮 ==========
+    if st.button("🔍 AI智能分析", type="primary"):
+        if not 启用策略:
+            st.error("❌ 请先勾选启用的策略")
+        else:
+            with st.spinner("AI正在分析市场..."):
+                st.markdown("---")
+                st.markdown(f"### 📈 AI分析结果 - {市场}")
+                st.markdown(f"**使用策略: {', '.join([s['名称'] for s in 启用策略[:3]])}**")
+                
+                for item in 交易品种:
+                    # 模拟AI信号
+                    信号随机 = random.random()
+                    if 信号随机 > 0.6:
+                        信号, 颜色, 置信度 = "买入", "🟢", random.randint(70, 95)
+                    elif 信号随机 > 0.3:
+                        信号, 颜色, 置信度 = "持有", "🟡", random.randint(50, 70)
+                    else:
+                        信号, 颜色, 置信度 = "卖出", "🔴", random.randint(40, 60)
+                    
+                    st.markdown(f"""
+                    <div style="border:1px solid #ddd; border-radius:10px; padding:10px; margin-bottom:10px;">
+                        <b>{item['名称']} ({item['品种']})</b><br>
+                        价格: ¥{item['价格']:,.2f}<br>
+                        信号: {颜色} {信号} (置信度: {置信度}%)
+                    </div>
+                    """, unsafe_allow_html=True)
+    
+    # ========== 快速交易 ==========
+    st.markdown("---")
+    st.markdown("#### ⚡ 快速交易")
+    
+    tab1, tab2 = st.tabs(["📈 买入", "📉 卖出"])
+    
+    with tab1:
+        with st.form("buy_form"):
+            买入选择 = st.selectbox("选择品种", [f"{item['名称']} ({item['品种']})" for item in 交易品种])
+            if "(" in 买入选择:
+                买入品种 = 买入选择.split("(")[-1].replace(")", "")
+            else:
+                买入品种 = 买入选择
+            
+            参考价格 = next((item["价格"] for item in 交易品种 if item["品种"] == 买入品种), 100)
+            买入数量 = st.number_input("数量", min_value=0.01, value=0.1, step=0.01)
+            
+            if st.form_submit_button("确认买入", type="primary"):
+                可用资金 = 引擎.获取可用资金()
+                预计花费 = 参考价格 * 买入数量
+                if 预计花费 <= 可用资金:
+                    try:
+                        结果 = 引擎.买入(买入品种, None, 买入数量)
+                        if 结果.get("success"):
+                            st.success(f"✅ 已买入 {买入品种} {买入数量} 个")
+                            st.rerun()
+                        else:
+                            st.error(f"买入失败: {结果.get('error')}")
+                    except Exception as e:
+                        st.error(f"买入异常: {e}")
+                else:
+                    st.error(f"❌ 资金不足！需要: ¥{预计花费:,.2f}")
+    
+    with tab2:
+        with st.form("sell_form"):
+            持仓品种 = list(引擎.持仓.keys()) if 引擎.持仓 else []
+            if 持仓品种:
+                卖出品种 = st.selectbox("选择持仓品种", 持仓品种)
+                pos = 引擎.持仓[卖出品种]
+                最大数量 = getattr(pos, '数量', 0)
+                卖出数量 = st.number_input("数量", min_value=0.01, max_value=float(最大数量), value=min(0.1, float(最大数量)), step=0.01)
+                
+                if st.form_submit_button("确认卖出"):
+                    try:
+                        结果 = 引擎.卖出(卖出品种, None, 卖出数量)
+                        if 结果.get("success"):
+                            st.success(f"✅ 已卖出 {卖出品种} {卖出数量} 个")
+                            st.rerun()
+                        else:
+                            st.error(f"卖出失败: {结果.get('error')}")
+                    except Exception as e:
+                        st.error(f"卖出异常: {e}")
+            else:
+                st.info("暂无持仓")
+    
+    st.caption(f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
