@@ -26,11 +26,12 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         策略列表 = [
             {"名称": "加密双均线1", "类别": "₿ 加密货币", "品种": "BTC-USD"},
             {"名称": "加密风控策略", "类别": "₿ 加密货币", "品种": "BTC-USD"},
+            {"名称": "A股隔夜套利策略3", "类别": "📈 A股", "品种": "000001.SS"},
             {"名称": "A股双均线1", "类别": "📈 A股", "品种": "000001.SS"},
             {"名称": "A股量价策略2", "类别": "📈 A股", "品种": "000001.SS"},
-            {"名称": "A股隔夜套利策略3", "类别": "📈 A股", "品种": "000001.SS"},
+            {"名称": "简单策略", "类别": "📈 A股", "品种": "000001.SS"},
             {"名称": "美股简单策略1", "类别": "🇺🇸 美股", "品种": "AAPL"},
-            {"名称": "美股动量策略", "类别": "🇺🇸 美股", "品种": "AAPL"},
+            {"名称": "美股动量策略1", "类别": "🇺🇸 美股", "品种": "AAPL"},
         ]
     
     # 初始化策略状态
@@ -56,38 +57,27 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
             品种 = s["品种"]
             启用 = st.session_state.策略状态.get(名称, True)
             
-            # 使用列布局
-            col1, col2, col3, col4 = st.columns([2, 2, 1, 1.5])
+            # 使用容器布局
+            col1, col2, col3 = st.columns([3, 2, 1])
             
             with col1:
                 st.write(f"**{名称}**")
+                st.caption(f"品种: {品种}")
+            
             with col2:
-                st.write(f"品种: {品种}")
-            with col3:
                 if 启用:
                     st.markdown("🟢 **运行中**")
                 else:
                     st.markdown("🔴 **已停止**")
-            with col4:
+            
+            with col3:
                 if 启用:
-                    if st.button("⏸️ 停止", key=f"stop_{名称}", use_container_width=True):
+                    if st.button("⏸️ 停止", key=f"stop_{名称}"):
                         st.session_state.策略状态[名称] = False
-                        # 同步到策略运行器
-                        try:
-                            from 核心.策略运行器 import 策略运行器
-                            策略运行器.设置策略状态(名称, False)
-                        except:
-                            pass
                         st.rerun()
                 else:
-                    if st.button("▶️ 启动", key=f"start_{名称}", use_container_width=True):
+                    if st.button("▶️ 启动", key=f"start_{名称}"):
                         st.session_state.策略状态[名称] = True
-                        # 同步到策略运行器
-                        try:
-                            from 核心.策略运行器 import 策略运行器
-                            策略运行器.设置策略状态(名称, True)
-                        except:
-                            pass
                         st.rerun()
             
             st.markdown("---")
@@ -105,7 +95,7 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
         st.metric("🔴 已停止", 总数 - 运行中)
     
     # 全局控制
-    st.markdown("---")
+    st.markdown("### 🌐 全局控制")
     col1, col2 = st.columns(2)
     with col1:
         if st.button("✅ 启用所有策略", use_container_width=True):
@@ -118,12 +108,8 @@ def 显示(引擎, 策略加载器=None, AI引擎=None):
                 st.session_state.策略状态[s["名称"]] = False
             st.rerun()
     
-    # 刷新按钮
-    if st.button("🔄 刷新策略列表", use_container_width=True):
-        if 策略加载器 is not None and hasattr(策略加载器, '刷新'):
-            策略加载器.刷新()
-        st.rerun()
-    
-    # 显示策略状态说明
-    st.markdown("---")
-    st.caption("💡 停止的策略在「AI交易」中不会显示信号")
+    # 显示当前状态调试
+    with st.expander("🔧 调试信息", expanded=False):
+        st.write("当前策略状态:")
+        for name, status in st.session_state.策略状态.items():
+            st.write(f"  {name}: {'运行中' if status else '已停止'}")
