@@ -247,7 +247,7 @@ def 显示(引擎=None):
         止损百分比 = st.number_input("止损目标 (%)", value=-3.0, step=0.5, min_value=-30.0, max_value=0.0)
 
         st.markdown("---")
-        运行按钮 = st.button("🚀 开始回测", type="primary", width="stretch")
+        运行按钮 = st.button("🚀 开始回测", type="primary", use_container_width=True)
 
     # ==================== 显示当前有效持仓列表 ====================
     with st.expander("📋 当前有效持仓列表", expanded=False):
@@ -265,7 +265,7 @@ def 显示(引擎=None):
         
         if 持仓显示数据:
             df_持仓 = pd.DataFrame(持仓显示数据)
-            st.dataframe(df_持仓, width="stretch", hide_index=True)
+            st.dataframe(df_持仓, use_container_width=True, hide_index=True)
             st.caption(f"💡 共 {len(持仓显示数据)} 个有效持仓（数量 > 0）")
 
     if not 运行按钮:
@@ -559,35 +559,117 @@ def 计算回撤(回测结果):
 
 
 def 显示回测结果(回测结果, 品种代码, 短期均线, 长期均线, 止盈百分比, 止损百分比, 策略名称, 品种类型):
-    """显示回测结果"""
+    """显示回测结果 - 动态漂亮的净值曲线"""
     st.markdown("---")
     st.subheader("📊 回测指标")
 
     col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("初始资金", f"¥{回测结果['初始资金']:,.0f}")
     col2.metric("最终资金", f"¥{回测结果['最终资金']:,.0f}", delta=f"¥{回测结果['总盈亏']:+,.0f}")
-    col3.metric("总收益率", f"{回测结果['总收益率']:+.2f}%")
+    col3.metric("总收益率", f"{回测结果['总收益率']:+.2f}%", delta="盈利" if 回测结果['总收益率'] > 0 else "亏损")
     col4.metric("最大回撤", f"{回测结果['最大回撤']:.2f}%")
     col5.metric("交易次数", len([t for t in 回测结果['交易记录'] if t['行动'] != '买入']))
 
     st.markdown("---")
-    st.subheader("📈 净值曲线")
+    st.subheader("📈 净值曲线与回撤分析")
 
-    # 绘制净值曲线
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=回测结果['数据']['日期'], y=回测结果['每日净值'], mode='lines', name='策略净值', line=dict(color='#FF6B6B', width=2)))
-    fig.update_layout(title=f"{品种代码} - 回测净值曲线", xaxis_title="日期", yaxis_title="净值(元)", height=400)
-    st.plotly_chart(fig, width="stretch")
+    # 创建双轴图表
+    fig = make_subplots(
+        rows=2, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.08,
+        row_heights=[0.6, 0.4],
+        subplot_titles=('策略净值曲线', '回撤曲线')
+    )
 
-    with st.expander("📖 策略参数", expanded=False):
-        st.markdown(f"- **品种类型**: {品种类型}\n- **品种代码**: {品种代码}\n- **策略名称**: {策略名称}")
-        st.markdown(f"- **手续费率**: {回测结果['手续费率']*100:.2f}%\n- **止盈目标**: {止盈百分比}%\n- **止损目标**: {止损百分比}%")
+    # 净值曲线
+    dates = 回测结果['数据']['日期']
+    净值 = 回测结果['每日净值']
+    
+    fig.add_trace(
+        go.Scatter(
+            x=dates, y=净值,
+            mode='lines',
+            name='策略净值',
+            line=dict(color='#00FFAA', width=2.5),
+            fill='tozeroy',
+            fillcolor='rgba(0, 255, 170, 0.1)'
+        ),
+        row=1, col=1
+    )
 
+    # 初始资金线
+    fig.add_trace(
+        go.Scatter(
+            x=dates, y=[回测结果['初始资金']] * len(dates),
+            mode='lines',
+            name='初始资金线',
+            line=dict(color='#FF6B6B', width=1.5, dash='dash')
+        ),
+        row=1, col=1
+    )
+
+    # 回撤曲线
+    回撤 = 回测结果['回撤']
+    fig.add_trace(
+        go.Scatter(
+            x=dates, y=回撤,
+            mode='lines',
+            name='回撤',
+            line=dict(color='#FF6B6B', width=1.8),
+            fill='tozeroy',
+            fillcolor='rgba(255, 107, 107, 0.15)'
+        ),
+        row=2, col=1
+    )
+
+    # 添加零线
+    fig.add_hline(y=0, line_dash="dash", line_color="#888888", opacity=0.5, row=2, col=1)
+
+    # 更新布局
+    fig.update_layout(
+        title_text=f"{品种代码} - 回测分析报告",
+        height=600,
+        showlegend=True,
+        legend=dict(
+            orientation='h',
+            yanchor='bottom',
+            y=1.02,
+            xanchor='center',
+            x=0.5
+        ),
+        plot_bgcolor='#0a0c10',
+        paper_bgcolor='#0a0c10',
+        font_color='#e6e6e6'
+    )
+
+    fig.update_xaxes(title_text="日期", gridcolor='#2a2e3a', row=2, col=1)
+    fig.update_yaxes(title_text="净值 (¥)", gridcolor='#2a2e3a', row=1, col=1)
+    fig.update_yaxes(title_text="回撤 (%)", gridcolor='#2a2e3a', row=2, col=1)
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # 策略参数展示
+    with st.expander("📖 策略参数详情", expanded=False):
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown(f"- **品种类型**: {品种类型}")
+            st.markdown(f"- **品种代码**: {品种代码}")
+            st.markdown(f"- **策略名称**: {策略名称}")
+        with col2:
+            st.markdown(f"- **手续费率**: {回测结果['手续费率']*100:.2f}%")
+            st.markdown(f"- **止盈目标**: {止盈百分比}%")
+            st.markdown(f"- **止损目标**: {止损百分比}%")
+
+    # 交易记录
     if 回测结果['交易记录']:
-        st.subheader("📋 交易记录")
-        st.dataframe(pd.DataFrame(回测结果['交易记录']), width="stretch", hide_index=True)
+        st.subheader("📋 交易记录明细")
+        df_交易 = pd.DataFrame(回测结果['交易记录'])
+        st.dataframe(df_交易, use_container_width=True, hide_index=True)
 
+    # 结论
+    st.markdown("---")
     if 回测结果['总收益率'] > 0:
-        st.success(f"✅ 策略取得了 {回测结果['总收益率']:+.2f}% 的正收益")
+        st.success(f"✅ 回测结论：策略取得了 {回测结果['总收益率']:+.2f}% 的正收益，表现良好！")
     else:
-        st.warning(f"⚠️ 策略取得了 {回测结果['总收益率']:+.2f}% 的负收益")
+        st.warning(f"⚠️ 回测结论：策略取得了 {回测结果['总收益率']:+.2f}% 的负收益，建议优化参数或更换策略")
