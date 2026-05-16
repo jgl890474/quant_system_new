@@ -274,6 +274,7 @@ def 初始化策略调度器():
             return False
     return True
 
+# ========== 修改后的初始化自动交易器（启动后台线程） ==========
 def 初始化自动交易器():
     if not 自动交易可用:
         return
@@ -285,8 +286,18 @@ def 初始化自动交易器():
             # 恢复自动交易开关状态到机器人
             if hasattr(st.session_state.自动交易器, '设置自动交易'):
                 st.session_state.自动交易器.设置自动交易(st.session_state.自动交易开关)
-        except Exception:
-            pass
+            
+            # 🔴 关键修改：启动后台循环线程
+            if st.session_state.自动交易开关 and not st.session_state.自动交易器.运行中:
+                def 运行机器人():
+                    print("🚀 自动交易后台线程启动")
+                    st.session_state.自动交易器.运行循环()
+                线程 = threading.Thread(target=运行机器人, daemon=True)
+                线程.start()
+                print("✅ 自动交易后台线程已启动")
+                
+        except Exception as e:
+            print(f"自动交易器初始化失败: {e}")
 
 def 启动后台调度器():
     if st.session_state.后台服务已启动:
@@ -377,6 +388,7 @@ with st.sidebar:
     
     st.markdown("---")
     
+    # ========== 修改后的自动交易控制（启动后台线程） ==========
     st.markdown("### 🤖 自动交易控制")
     if 自动交易可用:
         初始化自动交易器()
@@ -389,14 +401,30 @@ with st.sidebar:
                 print(f"💾 保存自动交易状态: {'开启' if 新开关 else '关闭'}")
             except Exception as e:
                 print(f"保存状态失败: {e}")
+            
             # 更新机器人状态
-            if st.session_state.自动交易器 and hasattr(st.session_state.自动交易器, '设置自动交易'):
-                st.session_state.自动交易器.设置自动交易(新开关)
+            if st.session_state.自动交易器 is not None:
+                if hasattr(st.session_state.自动交易器, '设置自动交易'):
+                    st.session_state.自动交易器.设置自动交易(新开关)
+                
+                # 🔴 关键：开启时启动后台线程，关闭时标记停止
+                if 新开关 and not st.session_state.自动交易器.运行中:
+                    def 运行机器人():
+                        print("🚀 侧边栏触发：启动自动交易循环")
+                        st.session_state.自动交易器.运行循环()
+                    线程 = threading.Thread(target=运行机器人, daemon=True)
+                    线程.start()
+                    st.success("✅ 自动交易已启动")
+                elif not 新开关:
+                    st.warning("⏸️ 自动交易已停止")
+            
             st.rerun()
+        
         if st.session_state.自动交易器:
             状态 = st.session_state.自动交易器.获取状态() if hasattr(st.session_state.自动交易器, '获取状态') else {}
             st.caption(f"📊 今日交易: {状态.get('今日交易次数', 0)} 次")
             st.caption(f"💰 今日盈亏: ¥{状态.get('今日盈亏', 0):+,.2f}")
+        
         if not st.session_state.后台服务已启动:
             启动后台调度器()
     
@@ -542,7 +570,6 @@ with tabs[2]:
             # 生成信号按钮
             if st.button("🔍 生成AI信号", type="primary", use_container_width=True):
                 with st.spinner("AI正在分析市场..."):
-                    # 调用真实策略获取信号（传入策略加载器和品种）
                     信号 = generate_ai_signal(选中策略.get('名称'), 当前价格, 策略加载器, 品种)
                     st.session_state.ai_signal = 信号
                     st.rerun()
