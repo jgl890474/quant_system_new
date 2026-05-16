@@ -42,7 +42,7 @@ except ImportError:
     行情获取 = None
     st.warning("⚠️ 行情获取模块导入失败")
 
-# ========== 导入策略运行器（用于策略状态管理） ==========
+# ========== 导入策略运行器 ==========
 try:
     from 核心.策略运行器 import 策略运行器
 except ImportError:
@@ -160,7 +160,7 @@ if '策略加载器' not in st.session_state:
                 pass
         st.session_state.策略加载器 = 简单策略加载器()
 
-# ========== 初始化策略状态（所有策略默认启用） ==========
+# ========== 初始化策略状态 ==========
 try:
     if hasattr(st.session_state.策略加载器, '获取策略'):
         策略列表 = st.session_state.策略加载器.获取策略()
@@ -250,9 +250,50 @@ if '风控引擎' not in st.session_state:
 
 风控 = st.session_state.风控引擎
 
+# ========== 辅助函数 ==========
+def get模拟价格(品种):
+    """获取模拟价格"""
+    价格映射 = {
+        "BTC-USD": 79586.70,
+        "ETH-USD": 2219.12,
+        "AAPL": 185.50,
+        "NVDA": 950.00,
+        "EURUSD": 1.0850,
+        "000001.SS": 1680.00,
+    }
+    return 价格映射.get(品种, 100)
+
+def generate_ai_signal(策略名称, 当前价格):
+    """根据策略名称生成AI信号"""
+    种子 = int(hashlib.md5(策略名称.encode()).hexdigest()[:8], 16)
+    random.seed(种子)
+    
+    随机值 = random.random()
+    
+    if 随机值 > 0.6:
+        return {
+            "信号": "买入 🟢",
+            "置信度": random.randint(70, 95),
+            "建议数量": round(random.uniform(0.05, 0.2), 2),
+            "理由": f"{策略名称}策略检测到上涨趋势，RSI处于超卖区域"
+        }
+    elif 随机值 > 0.3:
+        return {
+            "信号": "持有 🟡",
+            "置信度": random.randint(50, 70),
+            "建议数量": 0,
+            "理由": f"{策略名称}策略显示市场震荡，建议观望"
+        }
+    else:
+        return {
+            "信号": "卖出 🔴",
+            "置信度": random.randint(40, 60),
+            "建议数量": round(random.uniform(0.05, 0.2), 2),
+            "理由": f"{策略名称}策略检测到下跌趋势，建议止盈或止损"
+        }
+
 # ========== 初始化策略调度器 ==========
 def 初始化策略调度器():
-    """初始化策略调度器（只执行一次）"""
     print("=" * 50)
     print("🔧 [DEBUG] 开始初始化策略调度器...")
     print("=" * 50)
@@ -291,9 +332,7 @@ def 初始化策略调度器():
         print(f"ℹ️ [DEBUG] 策略调度器已存在")
         return True
 
-# ========== 初始化自动交易器 ==========
 def 初始化自动交易器():
-    """初始化自动交易器（只执行一次）"""
     if not 自动交易可用:
         return
     
@@ -307,7 +346,6 @@ def 初始化自动交易器():
             print(f"自动交易器初始化失败: {e}")
 
 def 启动后台调度器():
-    """启动后台定时任务调度器"""
     if st.session_state.后台服务已启动:
         return
     
@@ -351,59 +389,38 @@ def 启动后台调度器():
     except Exception as e:
         print(f"后台调度器启动失败: {e}")
 
-# ========== 辅助函数 ==========
-def get模拟价格(品种):
-    """获取模拟价格"""
-    价格映射 = {
-        "BTC-USD": 79586.70,
-        "ETH-USD": 2219.12,
-        "AAPL": 185.50,
-        "NVDA": 950.00,
-        "EURUSD": 1.0850,
-        "000001.SS": 1680.00,
-    }
-    return 价格映射.get(品种, 100)
-
-def generate_ai_signal(策略名称, 当前价格):
-    """根据策略名称生成AI信号"""
-    # 使用策略名称作为随机种子，使同一策略结果相对稳定
-    种子 = int(hashlib.md5(策略名称.encode()).hexdigest()[:8], 16)
-    random.seed(种子)
+# ========== 安全调用函数 ==========
+def 安全调用(模块, 默认信息="模块开发中"):
+    if 模块 is None:
+        st.info(默认信息)
+        return
     
-    # 生成信号
-    随机值 = random.random()
+    if not hasattr(模块, '显示'):
+        st.info(默认信息)
+        return
     
-    if 随机值 > 0.6:
-        return {
-            "信号": "买入 🟢",
-            "置信度": random.randint(70, 95),
-            "建议数量": round(random.uniform(0.05, 0.2), 2),
-            "理由": f"{策略名称}策略检测到上涨趋势，RSI处于超卖区域"
-        }
-    elif 随机值 > 0.3:
-        return {
-            "信号": "持有 🟡",
-            "置信度": random.randint(50, 70),
-            "建议数量": 0,
-            "理由": f"{策略名称}策略显示市场震荡，建议观望"
-        }
-    else:
-        return {
-            "信号": "卖出 🔴",
-            "置信度": random.randint(40, 60),
-            "建议数量": round(random.uniform(0.05, 0.2), 2),
-            "理由": f"{策略名称}策略检测到下跌趋势，建议止盈或止损"
-        }
+    _引擎 = st.session_state.get('订单引擎', 引擎)
+    _策略加载器 = st.session_state.get('策略加载器', None)
+    _AI引擎 = st.session_state.get('AI引擎', None)
+    
+    try:
+        模块.显示(_引擎, _策略加载器, _AI引擎)
+    except TypeError:
+        try:
+            模块.显示(_引擎, _策略加载器)
+        except TypeError:
+            try:
+                模块.显示(_引擎)
+            except Exception:
+                st.info(默认信息)
+    except Exception:
+        st.info(默认信息)
 
 # ========== 紧凑样式 ==========
 st.markdown("""
 <style>
-    .main .block-container {
-        padding-top: 2rem !important;
-    }
-    header {
-        background-color: transparent !important;
-    }
+    .main .block-container { padding-top: 2rem !important; }
+    header { background-color: transparent !important; }
     .stApp { font-size: 12px; }
     .stMetric label { font-size: 11px !important; }
     .stMetric value { font-size: 18px !important; }
@@ -472,7 +489,7 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # ========== 自动交易控制 ==========
+    # 自动交易控制
     st.markdown("### 🤖 自动交易控制")
     
     if 自动交易可用:
@@ -508,7 +525,7 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # ========== 策略调度器状态 ==========
+    # 策略调度器状态
     st.markdown("### 🧠 策略调度器")
     
     if 策略调度器可用 and st.session_state.策略调度器:
@@ -543,7 +560,7 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # ========== 持仓监控 ==========
+    # 持仓监控
     st.markdown("### 💼 持仓监控")
     
     if hasattr(引擎, '持仓') and 引擎.持仓:
@@ -619,35 +636,6 @@ with st.sidebar:
     st.markdown("---")
     st.caption(f"🤖 后台服务: {'🟢运行中' if st.session_state.后台服务已启动 else '🔴未启动'}")
     st.caption(f"📊 自动交易: {'🟢开启' if st.session_state.自动交易开关 else '🔴关闭'}")
-
-# ========== 安全调用函数 ==========
-def 安全调用(模块, 默认信息="模块开发中"):
-    if 模块 is None:
-        st.info(默认信息)
-        return
-    
-    if not hasattr(模块, '显示'):
-        st.info(默认信息)
-        return
-    
-    # 每次调用时从 session_state 获取最新值
-    _引擎 = st.session_state.get('订单引擎', 引擎)
-    _策略加载器 = st.session_state.get('策略加载器', None)
-    _AI引擎 = st.session_state.get('AI引擎', None)
-    
-    # 直接传入所有三个参数
-    try:
-        模块.显示(_引擎, _策略加载器, _AI引擎)
-    except TypeError:
-        try:
-            模块.显示(_引擎, _策略加载器)
-        except TypeError:
-            try:
-                模块.显示(_引擎)
-            except Exception:
-                st.info(默认信息)
-    except Exception:
-        st.info(默认信息)
 
 # ========== 页面刷新监听 ==========
 query_params = st.query_params
@@ -815,3 +803,16 @@ with tabs[2]:
                             else:
                                 st.error(f"买入失败: {结果.get('error')}")
                         else:
+                            st.error(f"资金不足，需要 ¥{预计花费:,.2f}")
+                elif 信号['信号'] == "卖出 🔴":
+                    if st.button("执行AI卖出建议"):
+                        if 品种 in 引擎.持仓:
+                            结果 = 引擎.卖出(品种, None, 信号['建议数量'])
+                            if 结果.get("success"):
+                                st.success(f"✅ AI已卖出 {品种} {信号['建议数量']} 个")
+                                st.session_state.ai_signal = None
+                                st.rerun()
+                            else:
+                                st.error(f"卖出失败: {结果.get('error')}")
+                        else:
+                            st.error(f"没有持仓 {品种
