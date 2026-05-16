@@ -211,32 +211,54 @@ def get模拟价格(品种):
     }
     return 价格映射.get(品种, 100)
 
-def generate_ai_signal(策略名称, 当前价格):
-    种子 = int(hashlib.md5(策略名称.encode()).hexdigest()[:8], 16)
-    random.seed(种子)
-    随机值 = random.random()
+
+def generate_ai_signal(策略名称, 当前价格, 策略加载器=None, 品种=None):
+    """调用真实策略获取信号"""
+    try:
+        # 从策略加载器获取策略
+        策略信息 = None
+        if 策略加载器 and hasattr(策略加载器, '获取策略'):
+            所有策略 = 策略加载器.获取策略()
+            for s in 所有策略:
+                if s.get("名称") == 策略名称:
+                    策略信息 = s
+                    break
+        
+        if 策略信息 and 策略信息.get("类"):
+            # 创建策略实例
+            策略实例 = 策略信息["类"](策略名称, 品种 or "BTC-USD", 100000)
+            
+            # 构造行情数据
+            行情 = {'close': 当前价格, 'volume': 0, 'high': 当前价格, 'low': 当前价格, 'open': 当前价格}
+            
+            # 调用策略
+            信号 = 策略实例.处理行情(行情)
+            
+            # 根据信号返回结果
+            if 信号 == 'buy':
+                return {
+                    "信号": "买入", "置信度": 85,
+                    "建议数量": round(100000 * 0.05 / 当前价格, 4),
+                    "理由": f"{策略名称}策略发出买入信号"
+                }
+            elif 信号 == 'sell':
+                return {
+                    "信号": "卖出", "置信度": 75,
+                    "建议数量": round(100000 * 0.05 / 当前价格, 4),
+                    "理由": f"{策略名称}策略发出卖出信号"
+                }
+            else:
+                return {
+                    "信号": "持有", "置信度": 60,
+                    "建议数量": 0,
+                    "理由": f"{策略名称}策略建议观望"
+                }
+    except Exception as e:
+        print(f"生成AI信号失败: {e}")
     
-    if 随机值 > 0.6:
-        return {
-            "信号": "买入",
-            "置信度": random.randint(70, 95),
-            "建议数量": round(random.uniform(0.05, 0.2), 2),
-            "理由": f"{策略名称}策略检测到上涨趋势"
-        }
-    elif 随机值 > 0.3:
-        return {
-            "信号": "持有",
-            "置信度": random.randint(50, 70),
-            "建议数量": 0,
-            "理由": f"{策略名称}策略显示市场震荡"
-        }
-    else:
-        return {
-            "信号": "卖出",
-            "置信度": random.randint(40, 60),
-            "建议数量": round(random.uniform(0.05, 0.2), 2),
-            "理由": f"{策略名称}策略检测到下跌趋势"
-        }
+    # 默认返回持有
+    return {"信号": "持有", "置信度": 50, "建议数量": 0, "理由": "无法获取策略信号"}
+
 
 # ========== 初始化策略调度器 ==========
 def 初始化策略调度器():
@@ -520,7 +542,8 @@ with tabs[2]:
             # 生成信号按钮
             if st.button("🔍 生成AI信号", type="primary", use_container_width=True):
                 with st.spinner("AI正在分析市场..."):
-                    信号 = generate_ai_signal(选中策略.get('名称'), 当前价格)
+                    # 调用真实策略获取信号（传入策略加载器和品种）
+                    信号 = generate_ai_signal(选中策略.get('名称'), 当前价格, 策略加载器, 品种)
                     st.session_state.ai_signal = 信号
                     st.rerun()
             
