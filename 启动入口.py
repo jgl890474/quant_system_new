@@ -252,7 +252,6 @@ if '风控引擎' not in st.session_state:
 
 # ========== 辅助函数 ==========
 def get模拟价格(品种):
-    """获取模拟价格"""
     价格映射 = {
         "BTC-USD": 79586.70,
         "ETH-USD": 2219.12,
@@ -264,32 +263,30 @@ def get模拟价格(品种):
     return 价格映射.get(品种, 100)
 
 def generate_ai_signal(策略名称, 当前价格):
-    """根据策略名称生成AI信号"""
     种子 = int(hashlib.md5(策略名称.encode()).hexdigest()[:8], 16)
     random.seed(种子)
-    
     随机值 = random.random()
     
     if 随机值 > 0.6:
         return {
-            "信号": "买入 🟢",
+            "信号": "买入",
             "置信度": random.randint(70, 95),
             "建议数量": round(random.uniform(0.05, 0.2), 2),
-            "理由": f"{策略名称}策略检测到上涨趋势，RSI处于超卖区域"
+            "理由": f"{策略名称}策略检测到上涨趋势"
         }
     elif 随机值 > 0.3:
         return {
-            "信号": "持有 🟡",
+            "信号": "持有",
             "置信度": random.randint(50, 70),
             "建议数量": 0,
-            "理由": f"{策略名称}策略显示市场震荡，建议观望"
+            "理由": f"{策略名称}策略显示市场震荡"
         }
     else:
         return {
-            "信号": "卖出 🔴",
+            "信号": "卖出",
             "置信度": random.randint(40, 60),
             "建议数量": round(random.uniform(0.05, 0.2), 2),
-            "理由": f"{策略名称}策略检测到下跌趋势，建议止盈或止损"
+            "理由": f"{策略名称}策略检测到下跌趋势"
         }
 
 # ========== 初始化策略调度器 ==========
@@ -313,20 +310,13 @@ def 初始化策略调度器():
             
             if st.session_state.策略调度器:
                 print(f"✅ [DEBUG] 策略调度器创建成功")
-                print(f"   - 策略实例数量: {len(st.session_state.策略调度器.策略实例)}")
-                print(f"   - 策略配置数量: {len(st.session_state.策略调度器.策略配置)}")
-                print(f"   - 策略实例列表: {list(st.session_state.策略调度器.策略实例.keys())}")
-                
                 st.session_state.策略调度器.启动()
                 return True
             else:
-                print("❌ [DEBUG] 策略调度器创建失败（返回None）")
+                print("❌ [DEBUG] 策略调度器创建失败")
                 return False
-                
         except Exception as e:
-            print(f"❌ [DEBUG] 策略调度器初始化失败: {type(e).__name__}: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"❌ [DEBUG] 策略调度器初始化失败: {e}")
             return False
     else:
         print(f"ℹ️ [DEBUG] 策略调度器已存在")
@@ -335,7 +325,6 @@ def 初始化策略调度器():
 def 初始化自动交易器():
     if not 自动交易可用:
         return
-    
     if st.session_state.自动交易器 is None:
         try:
             st.session_state.自动交易器 = 获取机器人()
@@ -348,13 +337,10 @@ def 初始化自动交易器():
 def 启动后台调度器():
     if st.session_state.后台服务已启动:
         return
-    
     if not 定时任务可用:
         return
-    
     try:
         调度器 = 定时任务模块.获取调度器()
-        
         def 自动交易检查():
             try:
                 auto_trade = st.session_state.get("自动交易开关", False)
@@ -364,14 +350,12 @@ def 启动后台调度器():
                         auto_trader.止损止盈检查()
             except Exception as e:
                 print(f"自动交易检查失败: {e}")
-        
         def 发送心跳():
             try:
                 if st.session_state.get("自动交易开关", False):
                     print(f"💓 系统心跳: {datetime.now().strftime('%H:%M:%S')}")
             except Exception as e:
                 pass
-        
         调度器.注册函数("自动交易检查", 自动交易检查)
         调度器.注册函数("心跳", 发送心跳)
         调度器.添加间隔任务(自动交易检查, 60, 任务名称="自动交易检查")
@@ -379,13 +363,11 @@ def 启动后台调度器():
         调度器.启动后台()
         st.session_state.后台服务已启动 = True
         print("🚀 后台调度器已启动")
-        
         if 推送可用:
             try:
                 推送.发送系统启动通知("v5.0", "腾讯云")
             except:
                 pass
-                
     except Exception as e:
         print(f"后台调度器启动失败: {e}")
 
@@ -394,15 +376,12 @@ def 安全调用(模块, 默认信息="模块开发中"):
     if 模块 is None:
         st.info(默认信息)
         return
-    
     if not hasattr(模块, '显示'):
         st.info(默认信息)
         return
-    
     _引擎 = st.session_state.get('订单引擎', 引擎)
     _策略加载器 = st.session_state.get('策略加载器', None)
     _AI引擎 = st.session_state.get('AI引擎', None)
-    
     try:
         模块.显示(_引擎, _策略加载器, _AI引擎)
     except TypeError:
@@ -445,7 +424,6 @@ st.markdown("<br>", unsafe_allow_html=True)
 if st.session_state.成功消息:
     st.success(st.session_state.成功消息)
     st.session_state.成功消息 = None
-
 if st.session_state.错误消息:
     st.error(st.session_state.错误消息)
     st.session_state.错误消息 = None
@@ -453,7 +431,6 @@ if st.session_state.错误消息:
 # ========== 侧边栏 ==========
 with st.sidebar:
     st.markdown("### 🛠️ 系统工具")
-    
     if st.button("🗑️ 清空所有持仓数据", width="stretch"):
         try:
             数据库.清空所有持仓()
@@ -489,153 +466,35 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # 自动交易控制
     st.markdown("### 🤖 自动交易控制")
-    
     if 自动交易可用:
         初始化自动交易器()
-        
-        新开关状态 = st.checkbox(
-            "🔴 开启自动交易", 
-            value=st.session_state.自动交易开关,
-            help="开启后系统将自动执行交易信号"
-        )
-        
+        新开关状态 = st.checkbox("🔴 开启自动交易", value=st.session_state.自动交易开关)
         if 新开关状态 != st.session_state.自动交易开关:
             st.session_state.自动交易开关 = 新开关状态
             if st.session_state.自动交易器 and hasattr(st.session_state.自动交易器, '设置自动交易'):
                 st.session_state.自动交易器.设置自动交易(新开关状态)
-            if 推送可用:
-                try:
-                    推送.发送飞书消息(
-                        f"自动交易已{'开启' if 新开关状态 else '关闭'}",
-                        "info"
-                    )
-                except:
-                    pass
             st.rerun()
-        
         if st.session_state.自动交易器:
             状态 = st.session_state.自动交易器.获取状态() if hasattr(st.session_state.自动交易器, '获取状态') else {}
             st.caption(f"📊 今日交易: {状态.get('今日交易次数', 0)} 次")
             st.caption(f"💰 今日盈亏: ¥{状态.get('今日盈亏', 0):+,.2f}")
-        
         if not st.session_state.后台服务已启动:
             启动后台调度器()
     
     st.markdown("---")
     
-    # 策略调度器状态
-    st.markdown("### 🧠 策略调度器")
-    
-    if 策略调度器可用 and st.session_state.策略调度器:
-        调度器状态 = st.session_state.策略调度器.获取状态() if hasattr(st.session_state.策略调度器, '获取状态') else {}
-        st.caption(f"📋 运行中: {'🟢是' if 调度器状态.get('运行中') else '🔴否'}")
-        st.caption(f"🎯 策略数量: {调度器状态.get('策略数量', 0)}")
-        
-        if 调度器状态.get('策略数量', 0) > 0:
-            with st.expander("📋 运行中的策略"):
-                for s in 调度器状态.get('策略列表', []):
-                    st.write(f"  - {s}")
-    else:
-        st.caption("⚙️ 策略调度器未启动")
-        
-        with st.expander("🔧 调试信息", expanded=True):
-            st.write(f"策略调度器可用: {策略调度器可用}")
-            st.write(f"策略调度器实例: {st.session_state.策略调度器}")
-            
-            if st.button("🚀 手动启动策略调度器", key="manual_start_scheduler"):
-                with st.spinner("正在启动策略调度器..."):
-                    if 初始化策略调度器():
-                        st.success("✅ 策略调度器已成功启动！")
-                        st.rerun()
-                    else:
-                        st.error("❌ 策略调度器启动失败，请检查配置")
-            
-            st.markdown("---")
-            st.markdown("**📝 提示：**")
-            st.markdown("- 策略调度器需要配置文件 `配置/策略调度配置.json`")
-            st.markdown("- 需要至少一个启用(`启用: true`)的策略")
-            st.markdown("- 策略类名必须与配置文件中的名称匹配")
-    
-    st.markdown("---")
-    
-    # 持仓监控
     st.markdown("### 💼 持仓监控")
-    
     if hasattr(引擎, '持仓') and 引擎.持仓:
-        st.caption(f"📊 当前持仓数量: {len(引擎.持仓)}")
-        
-        实时总资产 = 引擎.获取可用资金() if hasattr(引擎, '获取可用资金') else getattr(引擎, '可用资金', INITIAL_CAPITAL)
-        
         for 品种, pos in 引擎.持仓.items():
             平均成本 = getattr(pos, '平均成本', 0)
             数量 = getattr(pos, '数量', 0)
-            
-            try:
-                if 行情获取:
-                    价格结果 = 行情获取.获取价格(品种)
-                    if 价格结果 and hasattr(价格结果, '价格'):
-                        现价 = 价格结果.价格
-                    else:
-                        现价 = 平均成本
-                else:
-                    现价 = 平均成本
-            except Exception:
-                现价 = 平均成本
-            
-            if hasattr(pos, '当前价格'):
-                pos.当前价格 = 现价
-            
-            盈亏 = (现价 - 平均成本) * 数量
-            实时总资产 += 数量 * 现价
-            
-            if 品种 in ["ETH-USD", "BTC-USD", "SOL-USD", "BNB-USD"]:
-                数量显示 = f"{数量:.4f}个"
-            else:
-                数量显示 = f"{int(数量)}股"
-            
-            st.metric(
-                label=f"{品种}",
-                value=数量显示,
-                delta=f"成本: ¥{平均成本:.2f} | 盈亏: ¥{盈亏:+.2f}"
-            )
-        
-        st.markdown("---")
-        st.metric("💰 总资产", f"¥{实时总资产:,.0f}")
-        st.metric("💵 可用资金", f"¥{引擎.获取可用资金():,.0f}" if hasattr(引擎, '获取可用资金') else f"¥{getattr(引擎, '可用资金', 0):,.0f}")
+            st.caption(f"{品种}: {数量:.4f}个 成本¥{平均成本:.2f}")
     else:
         st.info("暂无持仓")
-        if hasattr(引擎, '交易记录') and 引擎.交易记录:
-            with st.expander("📋 最近交易记录", expanded=False):
-                for t in 引擎.交易记录[-5:]:
-                    st.write(f"{t['时间']} - {t['动作']} {t['品种']} {t['数量']}股 @ {t['价格']}")
     
     st.markdown("---")
-    st.markdown("### 🛡️ 风控设置")
-    
-    if hasattr(风控, '止损比例'):
-        col1, col2 = st.columns(2)
-        with col1:
-            新止损 = st.number_input("止损%", value=风控.止损比例*100, step=1.0, format="%.0f")
-            if 新止损 != 风控.止损比例*100:
-                风控.止损比例 = 新止损 / 100
-        with col2:
-            新止盈 = st.number_input("止盈%", value=风控.止盈比例*100, step=1.0, format="%.0f")
-            if 新止盈 != 风控.止盈比例*100:
-                风控.止盈比例 = 新止盈 / 100
-        
-        st.caption(f"当前设置: 止损 {风控.止损比例*100:.0f}% | 止盈 {风控.止盈比例*100:.0f}%")
-    
-    st.markdown("---")
-    try:
-        st.caption(f"当前时间: {数据库.获取当前时间()}")
-    except:
-        st.caption(f"当前时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    
-    st.markdown("---")
-    st.caption(f"🤖 后台服务: {'🟢运行中' if st.session_state.后台服务已启动 else '🔴未启动'}")
-    st.caption(f"📊 自动交易: {'🟢开启' if st.session_state.自动交易开关 else '🔴关闭'}")
+    st.caption(f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 # ========== 页面刷新监听 ==========
 query_params = st.query_params
@@ -643,8 +502,6 @@ if query_params.get("refresh") == "true":
     if hasattr(引擎, '_恢复持仓'):
         引擎._恢复持仓()
         st.session_state.订单引擎 = 引擎
-        if st.session_state.自动交易器 and hasattr(st.session_state.自动交易器, '设置引擎'):
-            st.session_state.自动交易器.设置引擎(引擎)
     st.query_params.clear()
 
 # ========== Tab导航 ==========
@@ -657,25 +514,20 @@ with tabs[1]:
     安全调用(策略中心, "策略中心模块开发中")
 
 with tabs[2]:
-    # ========== AI智能交易 ==========
     st.markdown("### 🤖 AI 智能交易")
     st.caption("选择策略，系统会自动分析市场并给出买入/卖出信号")
     
-    # 获取策略列表
     策略数据 = []
     if 策略加载器 is not None:
         try:
             if hasattr(策略加载器, '获取策略'):
                 策略数据 = 策略加载器.获取策略()
-            elif hasattr(策略加载器, '获取策略列表'):
-                策略数据 = 策略加载器.获取策略列表()
         except Exception as e:
             st.warning(f"获取策略失败: {e}")
     
     if not 策略数据:
         st.warning("等待策略加载...")
     else:
-        # 按类别分组
         策略分组 = {}
         for s in 策略数据:
             类别 = s.get('类别', '其他')
@@ -683,7 +535,6 @@ with tabs[2]:
                 策略分组[类别] = []
             策略分组[类别].append(s)
         
-        # 选择策略
         选中策略 = None
         for 类别, 策略组 in 策略分组.items():
             st.markdown(f"**{类别}**")
@@ -703,7 +554,6 @@ with tabs[2]:
             
             品种 = 选中策略.get('品种', 'BTC-USD')
             
-            # 获取实时价格
             try:
                 if 行情获取:
                     价格结果 = 行情获取.获取价格(品种)
@@ -722,7 +572,6 @@ with tabs[2]:
             with col2:
                 st.metric("💰 可用资金", f"¥{引擎.获取可用资金():,.2f}")
             
-            # AI信号分析
             st.markdown("---")
             st.markdown("#### 🤖 AI信号分析")
             
@@ -732,7 +581,6 @@ with tabs[2]:
                 if st.button("🔍 生成AI信号", type="primary"):
                     with st.spinner("AI正在分析市场..."):
                         信号 = generate_ai_signal(选中策略.get('名称'), 当前价格)
-                        
                         st.markdown(f"""
                         <div style="border:1px solid #ddd; border-radius:10px; padding:15px; margin-top:10px;">
                             <h4>📈 AI分析结果</h4>
@@ -745,7 +593,6 @@ with tabs[2]:
                             <p><b>理由:</b> {信号['理由']}</p>
                         </div>
                         """, unsafe_allow_html=True)
-                        
                         st.session_state.ai_signal = 信号
             
             with col2:
@@ -785,12 +632,11 @@ with tabs[2]:
                         else:
                             st.error(f"❌ 没有持仓 {品种}")
             
-            # 显示AI信号结果
             if 'ai_signal' in st.session_state and st.session_state.ai_signal:
                 信号 = st.session_state.ai_signal
                 st.markdown("---")
                 st.markdown("#### 💡 AI建议执行")
-                if 信号['信号'] == "买入 🟢":
+                if 信号['信号'] == "买入":
                     if st.button("执行AI买入建议"):
                         可用资金 = 引擎.获取可用资金()
                         预计花费 = 当前价格 * 信号['建议数量']
@@ -804,7 +650,7 @@ with tabs[2]:
                                 st.error(f"买入失败: {结果.get('error')}")
                         else:
                             st.error(f"资金不足，需要 ¥{预计花费:,.2f}")
-                elif 信号['信号'] == "卖出 🔴":
+                elif 信号['信号'] == "卖出":
                     if st.button("执行AI卖出建议"):
                         if 品种 in 引擎.持仓:
                             结果 = 引擎.卖出(品种, None, 信号['建议数量'])
@@ -815,4 +661,55 @@ with tabs[2]:
                             else:
                                 st.error(f"卖出失败: {结果.get('error')}")
                         else:
-                            st.error(f"没有持仓 {品种
+                            st.error(f"没有持仓 {品种}")
+    
+    # 显示持仓
+    st.markdown("---")
+    st.markdown("#### 💼 当前持仓")
+    if 引擎.持仓:
+        for 品种名, pos in 引擎.持仓.items():
+            数量持仓 = getattr(pos, '数量', 0)
+            成本 = getattr(pos, '平均成本', 0)
+            st.caption(f"{品种名}: {数量持仓:.4f}个, 成本 ¥{成本:.2f}")
+    else:
+        st.info("暂无持仓")
+
+with tabs[3]:
+    安全调用(持仓管理, "持仓管理模块开发中")
+
+with tabs[4]:
+    安全调用(资金曲线, "资金曲线模块开发中")
+
+with tabs[5]:
+    安全调用(回测, "回测模块开发中")
+
+with tabs[6]:
+    安全调用(交易记录, "交易记录模块开发中")
+
+# ========== 底部风险提示 ==========
+st.markdown("---")
+st.caption("⚠️ 风险提示：量化交易存在风险，历史回测结果不代表未来收益。")
+
+# ========== 保存会话状态 ==========
+auto_save_session()
+
+# ========== 页面卸载时清理 ==========
+import atexit
+def 清理资源():
+    auto_trader = st.session_state.get("自动交易器", None)
+    if auto_trader and hasattr(auto_trader, '运行中'):
+        auto_trader.运行中 = False
+        print("🛑 资源已清理")
+    scheduler = st.session_state.get("策略调度器", None)
+    if scheduler and hasattr(scheduler, '停止'):
+        scheduler.停止()
+atexit.register(清理资源)
+
+# ========== 启动策略调度器 ==========
+print("=" * 50)
+print("🚀 系统启动，准备初始化策略调度器...")
+print("=" * 50)
+if 策略调度器可用 and st.session_state.策略调度器 is None:
+    初始化策略调度器()
+else:
+    print(f"策略调度器状态: 可用={策略调度器可用}, 实例={st.session_state.策略调度器}")
